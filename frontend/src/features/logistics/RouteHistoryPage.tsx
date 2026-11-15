@@ -1,17 +1,17 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { money } from '../../shared/lib/inventory';
 import { Badge, Btn, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
-import { FLEET, buildRouteHistory, fmtHours } from './fleet';
+import { buildRouteHistory, fleetOf, fmtHours } from './fleet';
 import '../../styles/logistics.css';
 
 export function RouteHistoryPage() {
   const { state } = useAppState();
   const navigate = useNavigate();
-  const [dateFrom, setDateFrom] = useState('2026-10-20');
-  const [dateTo, setDateTo] = useState('2026-10-27');
+  const [dateFrom, setDateFrom] = useState(() => new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10));
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [truckId, setTruckId] = useState('all');
   const [warehouseId, setWarehouseId] = useState('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -30,6 +30,7 @@ export function RouteHistoryPage() {
 
   if (!state) return null;
 
+  const fleet = fleetOf(state);
   const selected = filtered.find((h) => h.id === selectedId) ?? filtered[0] ?? null;
 
   const totalKm = filtered.reduce((n, h) => n + h.km, 0);
@@ -102,7 +103,7 @@ export function RouteHistoryPage() {
             Camión
             <select value={truckId} onChange={(e) => setTruckId(e.target.value)}>
               <option value="all">Todos los camiones</option>
-              {FLEET.map((t) => (
+              {fleet.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label} · {t.city}
                 </option>

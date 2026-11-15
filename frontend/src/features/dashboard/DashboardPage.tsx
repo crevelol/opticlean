@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
+import { useAuth } from '../../shared/hooks/AuthProvider';
+import { can } from '../../shared/auth/permissions';
 import {
   available,
   client,
@@ -18,6 +20,7 @@ import '../../styles/forecast.css';
 
 export function DashboardPage() {
   const { state, meta } = useAppState();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const forecast = useMemo(() => (state ? buildForecast(state) : null), [state]);
   if (!state || !meta || !forecast) return null;
@@ -34,11 +37,17 @@ export function DashboardPage() {
         eyebrow="Centro de operaciones"
         title="Todo conectado. Todo bajo control."
         desc="Una visión clara de tu inventario y los próximos pasos."
-        actions={<Btn variant="primary" icon="plus" onClick={() => navigate('/pedidos/nuevo')}>Nuevo pedido</Btn>}
+        actions={
+          can(user, 'dispatch') ? (
+            <Btn variant="primary" icon="plus" onClick={() => navigate('/pedidos/nuevo')}>
+              Nuevo pedido
+            </Btn>
+          ) : undefined
+        }
       />
       <section className="welcome">
         <div>
-          <div className="eyebrow">Bienvenida, {state.settings.operator.split(' ')[0]}</div>
+          <div className="eyebrow">Bienvenida, {(user?.name || state.settings.operator).split(' ')[0]}</div>
           <h2>La operación empieza aquí.</h2>
           <p>
             Tienes {pending.length} pedidos por preparar y {low.length} producto

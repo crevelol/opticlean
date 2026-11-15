@@ -14,10 +14,15 @@ export function ReceptionPage() {
   const { state, applyResponse, toast } = useAppState();
   const navigate = useNavigate();
   const location = useLocation();
-  const routeState = (location.state as { loc?: string; productId?: string } | null) ?? {};
+  const routeState =
+    (location.state as { loc?: string; productId?: string; purchaseId?: string; qty?: number } | null) ?? {};
   const prefillLoc = routeState.loc;
   const [productId, setProductId] = useState(routeState.productId ?? state?.products[0]?.id ?? '');
-  const [qty, setQty] = useState(12);
+  const [qty, setQty] = useState(routeState.qty && routeState.qty > 0 ? routeState.qty : 12);
+  const [purchaseId, setPurchaseId] = useState(routeState.purchaseId ?? '');
+  const openPurchases = (state?.purchases ?? []).filter(
+    (p) => p.productId === productId && (!p.status || p.status === 'Abierta' || p.status === 'Parcial'),
+  );
   const [supplier, setSupplier] = useState('');
   const [batch, setBatch] = useState('');
   const [expiry, setExpiry] = useState('');
@@ -107,9 +112,11 @@ export function ReceptionPage() {
           batch: batch.trim(),
           expiry,
           supplier,
+          purchaseId: purchaseId || undefined,
         }),
       );
-      toast('Recepción registrada.');
+      toast(purchaseId ? `Recepción registrada contra ${purchaseId}.` : 'Recepción registrada.');
+      setPurchaseId('');
       setBatch('');
       setExpiry('');
     } catch (err) {
@@ -144,10 +151,28 @@ export function ReceptionPage() {
               <div className="form-grid">
                 <div className="field full">
                   <label htmlFor="rec-product">Producto</label>
-                  <select id="rec-product" value={productId} onChange={(e) => setProductId(e.target.value)}>
+                  <select
+                    id="rec-product"
+                    value={productId}
+                    onChange={(e) => {
+                      setProductId(e.target.value);
+                      setPurchaseId('');
+                    }}
+                  >
                     {state.products.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.id} · {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field full">
+                  <label htmlFor="rec-po">Orden de compra</label>
+                  <select id="rec-po" value={purchaseId} onChange={(e) => setPurchaseId(e.target.value)}>
+                    <option value="">Sin orden de compra</option>
+                    {openPurchases.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.id} · pendiente {p.qty - (p.received ?? 0)} u.
                       </option>
                     ))}
                   </select>

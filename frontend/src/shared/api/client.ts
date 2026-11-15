@@ -1,4 +1,4 @@
-import type { AppState, Location, Meta, Metrics } from '../types';
+import type { AppState, Location, Meta, Metrics, Vehicle } from '../types';
 import { clearSession, getToken, type AuthUser } from '../auth/session';
 
 type StateResponse = { state: AppState; metrics: Metrics };
@@ -52,6 +52,27 @@ export const api = {
     request<StateResponse>('/api/moves', { method: 'POST', body: JSON.stringify(body) }),
   saveProduct: (body: Record<string, unknown>) =>
     request<StateResponse>('/api/products', { method: 'POST', body: JSON.stringify(body) }),
+  deleteProduct: (id: string) =>
+    request<StateResponse>(`/api/products/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  stageOrders: (orderIds: string[], plate: string) =>
+    request<StateResponse>('/api/logistics/stage', {
+      method: 'POST',
+      body: JSON.stringify({ orderIds, plate }),
+    }),
+  unstageOrders: (orderIds: string[]) =>
+    request<StateResponse>('/api/logistics/unstage', {
+      method: 'POST',
+      body: JSON.stringify({ orderIds }),
+    }),
+  saveBundle: (body: { id?: string; name: string; description?: string; lines: Array<{ productId: string; qty: number }> }) =>
+    body.id
+      ? request<StateResponse>(`/api/bundles/${encodeURIComponent(body.id)}`, {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+        })
+      : request<StateResponse>('/api/bundles', { method: 'POST', body: JSON.stringify(body) }),
+  deleteBundle: (id: string) =>
+    request<StateResponse>(`/api/bundles/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   createOrder: (body: Record<string, unknown>) =>
     request<StateResponse>('/api/orders', { method: 'POST', body: JSON.stringify(body) }),
   prepare: (orderId: string) =>
@@ -67,10 +88,27 @@ export const api = {
     request<StateResponse>('/api/delivery', { method: 'POST', body: JSON.stringify(body) }),
   incident: (body: { orderId: string; reason: string; notes?: string }) =>
     request<StateResponse>('/api/incidents', { method: 'POST', body: JSON.stringify(body) }),
+  cancelOrder: (orderId: string, reason: string) =>
+    request<StateResponse>(`/api/orders/${encodeURIComponent(orderId)}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
   addClient: (body: Record<string, unknown>) =>
     request<StateResponse>('/api/clients', { method: 'POST', body: JSON.stringify(body) }),
+  updateClient: (id: string, body: Record<string, unknown>) =>
+    request<StateResponse>(`/api/clients/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteClient: (id: string) =>
+    request<StateResponse>(`/api/clients/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   addPurchase: (body: Record<string, unknown>) =>
     request<StateResponse>('/api/purchases', { method: 'POST', body: JSON.stringify(body) }),
+  cancelPurchase: (id: string) =>
+    request<StateResponse>(`/api/purchases/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  saveVehicle: (body: Partial<Vehicle>) =>
+    body.id
+      ? request<StateResponse>(`/api/vehicles/${encodeURIComponent(body.id)}`, { method: 'PATCH', body: JSON.stringify(body) })
+      : request<StateResponse>('/api/vehicles', { method: 'POST', body: JSON.stringify(body) }),
+  deleteVehicle: (id: string) =>
+    request<StateResponse>(`/api/vehicles/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   assistant: (query: 'stock' | 'warehouse' | 'orders') =>
     request<{ lines: string[] }>(`/api/assistant/${query}`),
   addWarehouse: (body: Record<string, unknown>) =>
@@ -102,16 +140,6 @@ export const api = {
   logisticsAutoAssign: (body: {
     orderIds?: string[];
     stagedByTruck?: Record<string, string[]>;
-    fleet?: Array<{
-      id: string;
-      plate: string;
-      label: string;
-      city: string;
-      driver: string;
-      maxKg: number;
-      maxM3: number;
-      costPerKm: number;
-    }>;
   }) =>
     request<{
       openai: boolean;

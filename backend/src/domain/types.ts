@@ -103,11 +103,15 @@ export type Order = {
   lines: OrderLine[];
   priority: string;
   vehicle?: string;
+  /** Placa del camión donde está cargado, antes de despachar. */
+  stagedPlate?: string;
   picks?: OrderPick[];
   incident?: string;
   deliveredTo?: string;
   deliveryNotes?: string;
   deliveredAt?: string;
+  cancelledAt?: string;
+  cancelReason?: string;
 };
 
 export type TraceEvent = {
@@ -133,12 +137,36 @@ export type Receipt = {
   batch: string;
 };
 
+export type PurchaseStatus = 'Abierta' | 'Parcial' | 'Recibida' | 'Cancelada';
+
 export type Purchase = {
   id: string;
   productId: string;
   qty: number;
   date: string;
   notes?: string;
+  /** Unidades ya recibidas contra esta orden */
+  received?: number;
+  status?: PurchaseStatus;
+};
+
+export type Bundle = {
+  id: string;
+  name: string;
+  description: string;
+  lines: OrderLine[];
+};
+
+export type Vehicle = {
+  id: string;
+  plate: string;
+  label: string;
+  city: string;
+  driver: string;
+  maxKg: number;
+  maxM3: number;
+  costPerKm: number;
+  active: boolean;
 };
 
 export type Settings = {
@@ -161,6 +189,8 @@ export type AppState = {
   settings: Settings;
   /** Familias de bodega para reglas de ubicación */
   families?: WarehouseFamily[];
+  vehicles?: Vehicle[];
+  bundles?: Bundle[];
 };
 
 export type Location = {

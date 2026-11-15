@@ -1,4 +1,5 @@
 import type { AppState, Order } from './types.js';
+import { activeVehicles } from './fleet.service.js';
 
 export type FleetTruck = {
   id: string;
@@ -47,49 +48,6 @@ type TruckContext = FleetTruck & {
   freeM3: number;
   stopsOnRoute: number;
 };
-
-const DEFAULT_FLEET: FleetTruck[] = [
-  {
-    id: 'T01',
-    plate: 'GBA-2041',
-    label: 'Camión 01',
-    city: 'Quito',
-    driver: 'Carlos Sur',
-    maxKg: 5000,
-    maxM3: 20,
-    costPerKm: 0.85,
-  },
-  {
-    id: 'T02',
-    plate: 'GYE-1188',
-    label: 'Camión 02',
-    city: 'Guayaquil',
-    driver: 'María Costa',
-    maxKg: 4000,
-    maxM3: 16,
-    costPerKm: 0.8,
-  },
-  {
-    id: 'T03',
-    plate: 'CUE-3301',
-    label: 'Camión 03',
-    city: 'Cuenca',
-    driver: 'Luis Andes',
-    maxKg: 3000,
-    maxM3: 12,
-    costPerKm: 0.75,
-  },
-  {
-    id: 'T04',
-    plate: 'AMB-5520',
-    label: 'Camión 04',
-    city: 'Santo Domingo',
-    driver: 'Ana Rivera',
-    maxKg: 4500,
-    maxM3: 18,
-    costPerKm: 0.78,
-  },
-];
 
 function productOf(s: AppState, id: string) {
   return s.products.find((p) => p.id === id);
@@ -329,6 +287,7 @@ Responde SOLO JSON válido con esta forma:
 
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
+    signal: AbortSignal.timeout(Number(process.env.OPENAI_TIMEOUT_MS ?? 20000)),
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
@@ -371,11 +330,20 @@ export async function autoAssignLogistics(input: {
   stagedByTruck?: Record<string, string[]>;
   fleet?: FleetTruck[];
 }): Promise<AutoAssignPlan> {
-  const fleet = input.fleet?.length ? input.fleet : DEFAULT_FLEET;
+  const fleet = input.fleet?.length ? input.fleet : activeVehicles(input.state);
+  const stagedByTruck: Record<string, string[]> = {};
+  for (const truck of fleet) {
+    const fromState = input.state.orders
+      .filter((o) => o.status === 'Preparado' && o.stagedPlate === truck.plate)
+      .map((o) => o.id);
+    const extra = input.stagedByTruck?.[truck.id] ?? [];
+    const ids = [...new Set([...fromState, ...extra])];
+    if (ids.length) stagedByTruck[truck.id] = ids;
+  }
   const { readyOrders, trucks } = buildContext(
     input.state,
     input.orderIds,
-    input.stagedByTruck,
+    stagedByTruck,
     fleet,
   );
 

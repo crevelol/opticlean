@@ -60,7 +60,7 @@ test('Orders aggregate duplicate lines and reserve stock', () => {
 
 test('Picking uses earliest expiry', () => {
   const s = seed();
-  const o = s.orders.find((x) => x.id === 'PED-1048')!;
+  const o = createOrder(s, { clientId: 'CL001', lines: [{ productId: 'P001', qty: 2 }] });
   const plan = pickPlan(s, o);
   const first = plan.find((l) => l.productId === 'P001')!;
   const earliest = s.lots

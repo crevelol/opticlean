@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
+import { useAuth } from '../../shared/hooks/AuthProvider';
+import { can } from '../../shared/auth/permissions';
 import { api } from '../../shared/api/client';
 import { client, orderWeight, product } from '../../shared/lib/inventory';
 import { Badge, Btn, PageHead } from '../../shared/components/ui';
@@ -8,7 +10,7 @@ import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import { RouteMap } from './RouteMap';
 import {
-  FLEET,
+  fleetOf,
   activeOrders,
   cityOf,
   packagesOf,
@@ -20,6 +22,7 @@ import '../../styles/logistics.css';
 
 export function RoutesPage() {
   const { state, applyResponse, toast } = useAppState();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const initialTruck =
@@ -31,20 +34,30 @@ export function RoutesPage() {
   const [stopId, setStopId] = useState<string | null>(null);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [deliveryOpen, setDeliveryOpen] = useState(false);
+  const [incidentOpen, setIncidentOpen] = useState(false);
   const [error, setError] = useState('');
 
-  const truck = FLEET.find((t) => t.id === truckId) ?? FLEET[0];
+  const fleetAll = fleetOf(state);
+  const fleet =
+    user?.role === 'driver' && user.truckPlate
+      ? fleetAll.filter((t) => t.plate === user.truckPlate)
+      : fleetAll;
+  const truck = fleet.find((t) => t.id === truckId) ?? fleet[0];
   const stops = useMemo(
-    () => (state ? routeOrders(state, truck.plate) : []),
-    [state, truck.plate],
+    () => (state && truck ? routeOrders(state, truck.plate) : []),
+    [state, truck?.plate],
   );
 
   if (!state) return null;
+  if (!truck) return <PageHead eyebrow="Mi ruta" title="Sin vehículos activos" desc="Registra un vehículo en Configuración → Flota." />;
 
   const allActive = activeOrders(state);
   const current = stops.find((o) => o.id === stopId) ?? stops[0] ?? null;
   const load = truckLoad(state, truck, allActive);
-  const done = 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const done = state.orders.filter(
+    (o) => o.vehicle === truck.plate && o.status === 'Entregado' && (o.deliveredAt ?? '').slice(0, 10) === today,
+  ).length;
   const pending = stops.length;
   const currentClient = current ? client(state, current.clientId) : null;
   const lineKeys = current
@@ -74,6 +87,28 @@ export function RoutesPage() {
     }
   };
 
+  const submitIncident = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!current) return;
+    setError('');
+    const data = Object.fromEntries(new FormData(e.currentTarget));
+    try {
+      applyResponse(
+        await api.incident({
+          orderId: current.id,
+          reason: String(data.reason),
+          notes: String(data.notes ?? ''),
+        }),
+      );
+      toast('Incidencia registrada.');
+      setIncidentOpen(false);
+      setChecked({});
+      setStopId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error');
+    }
+  };
+
   return (
     <div className="log-page log-routes-page">
       <PageHead
@@ -85,15 +120,17 @@ export function RoutesPage() {
             <Btn icon="history" onClick={() => navigate('/logistica/historial')}>
               Historial
             </Btn>
-            <Btn icon="truck" onClick={() => navigate('/logistica')}>
-              Distribución
-            </Btn>
+            {can(user, 'dispatch') ? (
+              <Btn icon="truck" onClick={() => navigate('/logistica')}>
+                Distribución
+              </Btn>
+            ) : null}
           </>
         }
       />
 
       <div className="log-route-tabs" role="tablist" aria-label="Camiones">
-        {FLEET.map((t) => {
+        {fleet.map((t) => {
           const n = routeOrders(state, t.plate).length;
           return (
             <button
@@ -110,9 +147,7 @@ export function RoutesPage() {
             >
               {t.label} · {t.city}
               {n ? <span className="log-tab-pill">{n}</span> : null}
-              {t.baseOccupancy === 0 && n === 0 ? (
-                <span className="log-tab-badge">Despacho</span>
-              ) : null}
+              {n === 0 ? <span className="log-tab-badge">En bodega</span> : null}
             </button>
           );
         })}
@@ -127,10 +162,10 @@ export function RoutesPage() {
         <span>{Math.round(load.realKg || load.kg)} kg</span>
         <div className="log-route-progress">
           <div className="log-bar is-green">
-            <span style={{ width: `${stops.length ? Math.round((done / Math.max(1, stops.length)) * 100) : 0}%` }} />
+            <span style={{ width: `${done + pending ? Math.round((done / (done + pending)) * 100) : 0}%` }} />
           </div>
           <small>
-            {done} de {stops.length || pending} pedidos · {pending} por hacer
+            {done} entregados hoy · {pending} por hacer
           </small>
         </div>
       </div>
@@ -248,6 +283,15 @@ export function RoutesPage() {
                 >
                   Confirmar entrega
                 </Btn>
+                <Btn
+                  icon="alert"
+                  onClick={() => {
+                    setError('');
+                    setIncidentOpen(true);
+                  }}
+                >
+                  Registrar incidencia
+                </Btn>
               </div>
             </>
           ) : (
@@ -257,7 +301,7 @@ export function RoutesPage() {
       </div>
 
       <p className="log-route-footnote">
-        Las rutas con etiqueta Despacho se aprueban en Distribución. Historial de camiones anteriores en{' '}
+        Los camiones en bodega salen desde Distribución. Historial de camiones anteriores en{' '}
         <button type="button" className="linkish" onClick={() => navigate('/logistica/historial')}>
           Historial de rutas
         </button>
@@ -286,6 +330,39 @@ export function RoutesPage() {
             <div className="field">
               <label htmlFor="route-notes">Observaciones</label>
               <textarea id="route-notes" name="notes" />
+            </div>
+            {error ? <div className="form-error visible">{error}</div> : null}
+          </form>
+        </Modal>
+      ) : null}
+
+      {incidentOpen && current ? (
+        <Modal
+          title="Registrar incidencia"
+          subtitle={current.id}
+          onClose={() => setIncidentOpen(false)}
+          footer={
+            <ModalActions
+              onCancel={() => setIncidentOpen(false)}
+              submitLabel="Guardar incidencia"
+              formId="route-incident-form"
+              icon="alert"
+            />
+          }
+        >
+          <form id="route-incident-form" onSubmit={submitIncident}>
+            <div className="field">
+              <label htmlFor="route-incident-reason">Motivo</label>
+              <select id="route-incident-reason" name="reason" defaultValue="Cliente ausente">
+                <option>Cliente ausente</option>
+                <option>Dirección no localizada</option>
+                <option>Recepción no autorizada</option>
+                <option>Producto con novedad</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="route-incident-notes">Detalle</label>
+              <textarea id="route-incident-notes" name="notes" />
             </div>
             {error ? <div className="form-error visible">{error}</div> : null}
           </form>

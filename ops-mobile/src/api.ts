@@ -45,6 +45,7 @@ export const api = {
     batch: string;
     expiry: string;
     supplier: string;
+    purchaseId?: string;
   }) => request<{ state: AppState }>('/api/receptions', { method: 'POST', body: JSON.stringify(body) }),
   pickPlan: (orderId: string) =>
     request<PickStep[]>(`/api/orders/${encodeURIComponent(orderId)}/pick-plan`),
@@ -52,6 +53,21 @@ export const api = {
     request<{ state: AppState }>(`/api/orders/${encodeURIComponent(orderId)}/prepare`, {
       method: 'POST',
       body: JSON.stringify({}),
+    }),
+  cancelOrder: (orderId: string, reason: string) =>
+    request<{ state: AppState }>(`/api/orders/${encodeURIComponent(orderId)}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  stageOrders: (orderIds: string[], plate: string) =>
+    request<{ state: AppState }>('/api/logistics/stage', {
+      method: 'POST',
+      body: JSON.stringify({ orderIds, plate }),
+    }),
+  unstageOrders: (orderIds: string[]) =>
+    request<{ state: AppState }>('/api/logistics/unstage', {
+      method: 'POST',
+      body: JSON.stringify({ orderIds }),
     }),
   move: (body: { productId: string; qty: number; from: string; to: string; batch?: string }) =>
     request<{ state: AppState }>('/api/moves', { method: 'POST', body: JSON.stringify(body) }),

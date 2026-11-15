@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, rename, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { StateRepository } from '../../application/ports/StateRepository.js';
@@ -27,8 +27,12 @@ export class JsonStateRepository implements StateRepository {
         }
         return migrated;
       }
-    } catch {
-      /* seed on first run */
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        const backup = `${STATE_FILE}.corrupt-${Date.now()}`;
+        await rename(STATE_FILE, backup).catch(() => undefined);
+        console.error(`[state] state.json ilegible; respaldo en ${backup}`, err);
+      }
     }
     const initial = seed();
     await this.save(initial);
@@ -37,7 +41,9 @@ export class JsonStateRepository implements StateRepository {
 
   async save(state: AppState): Promise<void> {
     await this.ensureDir();
-    await writeFile(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
+    const tmp = `${STATE_FILE}.${process.pid}.tmp`;
+    await writeFile(tmp, JSON.stringify(state, null, 2), 'utf8');
+    await rename(tmp, STATE_FILE);
   }
 
   async reset(): Promise<AppState> {

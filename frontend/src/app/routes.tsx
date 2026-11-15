@@ -1,4 +1,6 @@
+import type { ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { can, type Permission } from '../shared/auth/permissions';
 import { AppLayout } from './AppLayout';
 import { useAppState } from '../shared/hooks/AppStateProvider';
 import { useAuth } from '../shared/hooks/AuthProvider';
@@ -28,6 +30,11 @@ function LoadingShell({ label = 'Cargando operación…' }: { label?: string }) 
   );
 }
 
+function Allowed({ to, children }: { to: Permission; children: ReactNode }) {
+  const { user } = useAuth();
+  return can(user, to) ? <>{children}</> : <Navigate to="/" replace />;
+}
+
 function ProtectedApp() {
   const { loading: authLoading, user } = useAuth();
   const { loading, error, refresh } = useAppState();
@@ -52,20 +59,20 @@ function ProtectedApp() {
       <Route element={<AppLayout />}>
         <Route index element={<DashboardPage />} />
         <Route path="inventario" element={<InventoryPage />} />
-        <Route path="recepcion" element={<ReceptionPage />} />
+        <Route path="recepcion" element={<Allowed to="warehouse"><ReceptionPage /></Allowed>} />
         <Route path="bodega" element={<WarehousePage />} />
-        <Route path="bodegas" element={<WarehousesAdminPage />} />
-        <Route path="familias" element={<FamiliesPage />} />
+        <Route path="bodegas" element={<Allowed to="admin"><WarehousesAdminPage /></Allowed>} />
+        <Route path="familias" element={<Allowed to="admin"><FamiliesPage /></Allowed>} />
         <Route path="pedidos" element={<OrdersPage />} />
-        <Route path="pedidos/nuevo" element={<NewOrderPage />} />
+        <Route path="pedidos/nuevo" element={<Allowed to="dispatch"><NewOrderPage /></Allowed>} />
         <Route path="compras" element={<PurchasesPage />} />
-        <Route path="logistica" element={<LogisticsPage />} />
-        <Route path="logistica/rutas" element={<RoutesPage />} />
+        <Route path="logistica" element={<Allowed to="dispatch"><LogisticsPage /></Allowed>} />
+        <Route path="logistica/rutas" element={<Allowed to="field"><RoutesPage /></Allowed>} />
         <Route path="logistica/historial" element={<RouteHistoryPage />} />
         <Route path="clientes" element={<ClientsPage />} />
         <Route path="trazabilidad" element={<TraceabilityPage />} />
         <Route path="reportes" element={<ReportsPage />} />
-        <Route path="configuracion" element={<SettingsPage />} />
+        <Route path="configuracion" element={<Allowed to="admin"><SettingsPage /></Allowed>} />
         <Route path="*" element={<Navigate to="/bodega" replace />} />
       </Route>
     </Routes>

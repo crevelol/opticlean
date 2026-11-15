@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
 import { available, client, money, orderValue, product } from '../../shared/lib/inventory';
+import type { Bundle } from '../../shared/types';
 import { Btn, Empty, PageHead, ProductCell } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 
@@ -18,6 +19,7 @@ export function NewOrderPage() {
   const [lines, setLines] = useState<Line[]>([]);
   const [search, setSearch] = useState('');
   const [catalogMode, setCatalogMode] = useState<'products' | 'bundles'>('products');
+  const [bundleDraft, setBundleDraft] = useState<Bundle | null>(null);
   const [error, setError] = useState('');
 
   if (!state || !meta) return null;
@@ -140,6 +142,11 @@ export function NewOrderPage() {
                 Paquetes
               </button>
             </div>
+            {catalogMode === 'bundles' ? (
+              <Btn icon="plus" onClick={() => setBundleDraft({ id: '', name: '', description: '', lines: [{ productId: state.products[0]?.id ?? '', qty: 1 }] })}>
+                Nuevo paquete
+              </Btn>
+            ) : null}
           </div>
           <div className="suggest-results">
             {catalogMode === 'products'
@@ -150,12 +157,94 @@ export function NewOrderPage() {
                   </button>
                 ))
               : bundleResults.map((b) => (
-                  <button key={b.id} type="button" className="suggest-product bundle-card" onClick={() => addBundle(b.id)}>
-                    <strong>{b.name}</strong>
-                    <small>{b.description}</small>
-                  </button>
+                  <div key={b.id} className="suggest-product bundle-card">
+                    <button type="button" onClick={() => addBundle(b.id)}>
+                      <strong>{b.name}</strong>
+                      <small>{b.description}</small>
+                    </button>
+                    <button type="button" className="btn ghost small" onClick={() => setBundleDraft({ ...b, lines: b.lines.map((l) => ({ ...l })) })}>
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="btn ghost small"
+                      onClick={() => {
+                        void api.deleteBundle(b.id).then((response) => {
+                          applyResponse(response);
+                          toast('Paquete eliminado.');
+                        }).catch((err: unknown) => toast(err instanceof Error ? err.message : 'No se pudo eliminar'));
+                      }}
+                    >
+                      Quitar
+                    </button>
+                  </div>
                 ))}
           </div>
+          {bundleDraft ? (
+            <section className="panel" style={{ marginTop: 12 }}>
+              <div className="panel-body">
+                <div className="form-grid">
+                  <div className="field">
+                    <label htmlFor="bundle-name">Nombre del paquete</label>
+                    <input id="bundle-name" value={bundleDraft.name} onChange={(e) => setBundleDraft({ ...bundleDraft, name: e.target.value })} />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="bundle-desc">Descripción</label>
+                    <input id="bundle-desc" value={bundleDraft.description} onChange={(e) => setBundleDraft({ ...bundleDraft, description: e.target.value })} />
+                  </div>
+                  {bundleDraft.lines.map((line, index) => (
+                    <div className="field full" key={`${line.productId}-${index}`}>
+                      <label>Producto {index + 1}</label>
+                      <div className="filter-group">
+                        <select
+                          value={line.productId}
+                          onChange={(e) => setBundleDraft({
+                            ...bundleDraft,
+                            lines: bundleDraft.lines.map((item, i) => i === index ? { ...item, productId: e.target.value } : item),
+                          })}
+                        >
+                          {state.products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                        <input
+                          type="number"
+                          min={1}
+                          value={line.qty}
+                          onChange={(e) => setBundleDraft({
+                            ...bundleDraft,
+                            lines: bundleDraft.lines.map((item, i) => i === index ? { ...item, qty: Number(e.target.value) } : item),
+                          })}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="form-footer">
+                  <Btn onClick={() => setBundleDraft({ ...bundleDraft, lines: [...bundleDraft.lines, { productId: state.products[0]?.id ?? '', qty: 1 }] })}>
+                    Añadir producto
+                  </Btn>
+                  <Btn
+                    variant="primary"
+                    onClick={() => {
+                      void api.saveBundle({
+                        id: bundleDraft.id || undefined,
+                        name: bundleDraft.name,
+                        description: bundleDraft.description,
+                        lines: bundleDraft.lines,
+                      }).then((response) => {
+                        applyResponse(response);
+                        setBundleDraft(null);
+                        toast('Paquete guardado.');
+                      }).catch((err: unknown) => setError(err instanceof Error ? err.message : 'No se pudo guardar el paquete'));
+                    }}
+                  >
+                    Guardar paquete
+                  </Btn>
+                  <Btn onClick={() => setBundleDraft(null)}>Cerrar</Btn>
+                </div>
+                {error ? <div className="form-error visible">{error}</div> : null}
+              </div>
+            </section>
+          ) : null}
           <section className="panel">
             {lines.length ? (
               <div className="table-scroll">

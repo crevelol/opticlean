@@ -1,13 +1,14 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { api } from '../api';
 import { clearSession, type AuthUser } from '../auth';
 import { Icon } from '../components/Icon';
 import { RouteMap } from '../components/RouteMap';
 import {
-  FLEET,
+  fleetOf,
   cityOf,
   clientOf,
   fmtHours,
+  measureRoute,
   orderWeight,
   packagesOf,
   routeOrders,
@@ -25,8 +26,18 @@ type Tab = 'pendientes' | 'listos' | 'camiones';
 
 export function DispatchPage({ state, user, onRefresh }: Props) {
   const [tab, setTab] = useState<Tab>('listos');
-  const [stagedByTruck, setStagedByTruck] = useState<Record<string, string[]>>({});
-  const [selectedTruck, setSelectedTruck] = useState(FLEET[0].id);
+  const fleet = useMemo(() => fleetOf(state), [state]);
+  const stagedByTruck = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const truck of fleet) {
+      const ids = state.orders
+        .filter((o) => o.status === 'Preparado' && o.stagedPlate === truck.plate)
+        .map((o) => o.id);
+      if (ids.length) map[truck.id] = ids;
+    }
+    return map;
+  }, [state.orders, fleet]);
+  const [selectedTruck, setSelectedTruck] = useState(fleet[0]?.id ?? '');
   const [busy, setBusy] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [msg, setMsg] = useState('');
@@ -46,7 +57,14 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
     [state.orders, stagedIds],
   );
 
-  const truck = FLEET.find((t) => t.id === selectedTruck) ?? FLEET[0];
+  const truck = fleet.find((t) => t.id === selectedTruck) ?? fleet[0];
+  if (!truck) {
+    return (
+      <div className="page">
+        <p className="subtle">No hay vehículos activos en la flota. Pide a administración que registre uno.</p>
+      </div>
+    );
+  }
   const stagedOrders = (stagedByTruck[truck.id] ?? [])
     .map((id) => state.orders.find((o) => o.id === id))
     .filter((o): o is Order => Boolean(o));
@@ -68,28 +86,39 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
     }
   };
 
-  const stageOrder = (truckId: string, orderId: string) => {
-    setStagedByTruck((prev) => {
-      const next: Record<string, string[]> = {};
-      for (const [tid, list] of Object.entries(prev)) {
-        next[tid] = list.filter((id) => id !== orderId);
-      }
-      next[truckId] = [...new Set([...(next[truckId] ?? []), orderId])];
-      return next;
-    });
-    setSelectedTruck(truckId);
-    setMsg('Pedido cargado en camión');
+  const stageOrder = async (truckId: string, orderId: string) => {
+    const target = fleet.find((t) => t.id === truckId);
+    if (!target) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api.stageOrders([orderId], target.plate);
+      await onRefresh();
+      setSelectedTruck(truckId);
+      setMsg('Pedido cargado en camión');
+      setTab('camiones');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo cargar');
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const unstage = (truckId: string, orderId: string) => {
-    setStagedByTruck((prev) => ({
-      ...prev,
-      [truckId]: (prev[truckId] ?? []).filter((id) => id !== orderId),
-    }));
+  const unstage = async (orderId: string) => {
+    setBusy(true);
+    setError('');
+    try {
+      await api.unstageOrders([orderId]);
+      await onRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo retirar');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const sendTruck = async (truckId: string) => {
-    const t = FLEET.find((x) => x.id === truckId);
+    const t = fleet.find((x) => x.id === truckId);
     const ids = stagedByTruck[truckId] ?? [];
     if (!t || !ids.length) return;
     setBusy(true);
@@ -97,7 +126,6 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
     try {
       await api.dispatch(ids, t.plate);
       await onRefresh();
-      setStagedByTruck((prev) => ({ ...prev, [truckId]: [] }));
       setMsg(`${t.label} enviado`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo enviar');
@@ -118,25 +146,13 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
       const res = await api.logisticsAutoAssign({
         orderIds: listos.map((o) => o.id),
         stagedByTruck,
-        fleet: FLEET.map((t) => ({
-          id: t.id,
-          plate: t.plate,
-          label: t.label,
-          city: t.city,
-          driver: t.driver,
-          maxKg: t.maxKg,
-          maxM3: t.maxM3,
-          costPerKm: t.costPerKm,
-        })),
       });
       const plan = res.plan;
-      setStagedByTruck((prev) => {
-        const next = { ...prev };
-        for (const [truckId, ids] of Object.entries(plan.byTruck)) {
-          next[truckId] = [...new Set([...(next[truckId] ?? []), ...ids])];
-        }
-        return next;
-      });
+      for (const [truckId, ids] of Object.entries(plan.byTruck)) {
+        const target = fleet.find((t) => t.id === truckId);
+        if (target && ids.length) await api.stageOrders(ids, target.plate);
+      }
+      await onRefresh();
       const first = Object.keys(plan.byTruck)[0];
       if (first) setSelectedTruck(first);
       setTab('camiones');
@@ -235,7 +251,7 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
           <label className="field">
             <span>Camión destino</span>
             <select value={selectedTruck} onChange={(e) => setSelectedTruck(e.target.value)}>
-              {FLEET.map((t) => (
+              {fleet.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label} · {t.city} · {t.plate}
                 </option>
@@ -268,7 +284,7 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
       {tab === 'camiones' ? (
         <>
           <section className="dsp-truck-pick">
-            {FLEET.map((t) => {
+            {fleet.map((t) => {
               const n = (stagedByTruck[t.id] ?? []).length + routeOrders(state, t.plate).length;
               return (
                 <button
@@ -292,7 +308,10 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
                 {truck.label} · {truck.plate}
               </h2>
               <small>
-                {truck.driver} · ETA {fmtHours(truck.etaHours)}
+                {truck.driver} · {(() => {
+                  const route = measureRoute(state, truck.city, [...onRoute, ...stagedOrders]);
+                  return route.km > 0 ? `ETA ${fmtHours(route.etaHours)} · ${route.km} km` : 'Sin paradas';
+                })()}
               </small>
             </div>
             <div className="drv-status card" style={{ margin: '0 0 12px', boxShadow: 'none' }}>
@@ -321,7 +340,7 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
                         {sectorOf(state, o)} · {orderWeight(state, o).toFixed(1)} kg
                       </small>
                     </div>
-                    <button type="button" className="btn ghost small" onClick={() => unstage(truck.id, o.id)}>
+                    <button type="button" className="btn ghost small" onClick={() => void unstage(o.id)}>
                       Quitar
                     </button>
                   </li>

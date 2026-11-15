@@ -13,6 +13,8 @@ export function OrdersPage({
 }) {
   const [selected, setSelected] = useState<Order | null>(null);
   const [steps, setSteps] = useState<PickStep[]>([]);
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [reason, setReason] = useState('Cliente desiste');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const orders = [...state.orders].sort((a, b) => {
@@ -24,6 +26,7 @@ export function OrdersPage({
     setSelected(order);
     setError('');
     setSteps([]);
+    setChecked({});
     try {
       const plan = await api.pickPlan(order.id);
       setSteps(Array.isArray(plan) ? plan : []);
@@ -41,12 +44,32 @@ export function OrdersPage({
       await onRefresh();
       setSelected(null);
       setSteps([]);
+      setChecked({});
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo preparar');
     } finally {
       setBusy(false);
     }
   };
+
+  const cancel = async () => {
+    if (!selected || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api.cancelOrder(selected.id, reason);
+      await onRefresh();
+      setSelected(null);
+      setSteps([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo cancelar');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const stepKey = (step: PickStep, index: number) => step.id ?? `${step.productId}-${step.loc ?? ''}-${index}`;
+  const allChecked = steps.length > 0 && steps.every((step, index) => checked[stepKey(step, index)]);
 
   if (selected) {
     return (
@@ -78,17 +101,25 @@ export function OrdersPage({
           <ul className="pick-list">
             {(steps.length ? steps : selected.lines).map((step, i) => {
               const p = state.products.find((x) => x.id === step.productId);
+              const key = stepKey(step, i);
               return (
-                <li key={`${step.productId}-${i}`}>
-                  <span className="pick-number">{i + 1}</span>
-                  <div>
-                    <strong>{p?.name ?? step.productId}</strong>
+                <li key={key}>
+                  <label className="drv-check">
+                    <input
+                      type="checkbox"
+                      checked={!!checked[key]}
+                      disabled={!steps.length}
+                      onChange={() => setChecked((prev) => ({ ...prev, [key]: !prev[key] }))}
+                    />
                     <span>
-                      {step.qty} u.
-                      {'loc' in step && step.loc ? ` · ${step.loc}` : ''}
-                      {'batch' in step && step.batch ? ` · ${step.batch}` : ''}
+                      <strong>{i + 1}. {p?.name ?? step.productId}</strong>
+                      <small>
+                        {step.qty} u.
+                        {'loc' in step && step.loc ? ` · ${step.loc}` : ''}
+                        {'batch' in step && step.batch ? ` · ${step.batch}` : ''}
+                      </small>
                     </span>
-                  </div>
+                  </label>
                 </li>
               );
             })}
@@ -98,10 +129,29 @@ export function OrdersPage({
         {error ? <p className="form-error visible">{error}</p> : null}
 
         {selected.status === 'Por preparar' ? (
-          <button type="button" className="btn primary full sticky-cta" disabled={busy} onClick={() => void prepare()}>
+          <button type="button" className="btn primary full sticky-cta" disabled={busy || !allChecked} onClick={() => void prepare()}>
             <Icon name="check" />
-            {busy ? 'Preparando…' : 'Marcar preparado'}
+            {busy ? 'Preparando…' : allChecked ? 'Marcar preparado' : 'Marca todas las posiciones'}
           </button>
+        ) : null}
+        {selected.status === 'Por preparar' || selected.status === 'Preparado' ? (
+          <section className="panel">
+            <div className="panel-body form-stack">
+              <label className="field">
+                <span>Cancelar pedido</span>
+                <select value={reason} onChange={(e) => setReason(e.target.value)}>
+                  <option>Cliente desiste</option>
+                  <option>Error en el pedido</option>
+                  <option>Sin stock suficiente</option>
+                  <option>Duplicado</option>
+                  <option>Otro</option>
+                </select>
+              </label>
+              <button type="button" className="btn full" disabled={busy} onClick={() => void cancel()}>
+                Cancelar pedido
+              </button>
+            </div>
+          </section>
         ) : null}
       </div>
     );

@@ -3,6 +3,8 @@ import type { AppState } from './types.js';
 import { DEFAULT_WAREHOUSE_ID } from './warehouse-admin.service.js';
 import { DEFAULT_LAYOUT, toDelanteraLocId } from './warehouse-layout.js';
 import { defaultFamilies } from './families.service.js';
+import { defaultVehicles } from './fleet.service.js';
+import { DEFAULT_BUNDLES } from './bundles.service.js';
 
 const QUITO_LAYOUT = { ...DEFAULT_LAYOUT, depthFaces: 2 as const };
 
@@ -196,15 +198,22 @@ export function seed(): AppState {
   });
 
   // Stock bajo a propósito en algunos insumos para demostrar alertas padre→hijo
-  const rawStock: Array<[string, number, string]> = [
-    ['MP-BASE', 18, 'F-01-01-D'],
-    ['MP-FRAG', 9, 'F-01-02-D'],
-    ['MP-CLORO', 22, 'F-01-03-D'],
-    ['MP-TENSIO', 12, 'F-02-01-D'],
-    ['MP-GEL', 8, 'F-02-02-D'],
-    ['MP-NITRILO', 15, 'F-02-03-D'],
+  const rawStock: Array<[string, number]> = [
+    ['MP-BASE', 18],
+    ['MP-FRAG', 9],
+    ['MP-CLORO', 22],
+    ['MP-TENSIO', 12],
+    ['MP-GEL', 8],
+    ['MP-NITRILO', 15],
   ];
-  rawStock.forEach(([productId, qty, loc], i) => {
+  const occupiedLocs = new Set(lots.map((l) => l.loc));
+  const freeLocs = locations
+    .map((l) => toDelanteraLocId(l.id))
+    .filter((id) => !occupiedLocs.has(id))
+    .reverse();
+  if (freeLocs.length < rawStock.length) throw new Error('Seed sin ubicaciones libres para insumos.');
+  rawStock.forEach(([productId, qty], i) => {
+    const loc = freeLocs[i];
     lots.push({
       id: `lot-raw-${i}`,
       productId,
@@ -551,6 +560,8 @@ export function seed(): AppState {
     events,
     purchases: [],
     families: defaultFamilies(),
+    vehicles: defaultVehicles(),
+    bundles: DEFAULT_BUNDLES.map((b) => ({ ...b, lines: b.lines.map((l) => ({ ...l })) })),
     receipts: [
       {
         id: 'REC-0083',

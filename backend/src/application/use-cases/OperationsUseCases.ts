@@ -1,5 +1,5 @@
 import type { StateRepository } from '../ports/StateRepository.js';
-import type { AppState, Client, Product, Settings } from '../../domain/types.js';
+import type { AppState, Bundle, Client, Product, Settings } from '../../domain/types.js';
 import { categories } from '../../domain/warehouse.js';
 import { getWarehouseGeometry } from '../../domain/warehouse-layout.js';
 import {
@@ -7,6 +7,7 @@ import {
   client,
   confirmDelivery,
   createOrder,
+  deleteProduct,
   dispatch,
   move,
   orderValue,
@@ -34,53 +35,36 @@ import {
   deleteWarehouse,
   upsertWarehouse,
 } from '../../domain/warehouse-admin.service.js';
-import type { WarehouseFamily, WarehouseSite } from '../../domain/types.js';
+import type { Vehicle, WarehouseFamily, WarehouseSite } from '../../domain/types.js';
+import {
+  cancelOrder,
+  cancelPurchase,
+  createClient,
+  createPurchase,
+  deleteClient,
+  stageOrders,
+  unstageOrders,
+  updateClient,
+} from '../../domain/commerce.service.js';
+import { deleteBundle, ensureBundles, saveBundle } from '../../domain/bundles.service.js';
+import { deleteVehicle, upsertVehicle } from '../../domain/fleet.service.js';
 
-export const BUNDLES = [
-  {
-    id: 'KIT01',
-    name: 'Kit Limpieza Básico',
-    description: 'Multiusos, limpiador de pisos y fundas',
-    lines: [
-      { productId: 'P001', qty: 4 },
-      { productId: 'P032', qty: 2 },
-      { productId: 'P078', qty: 2 },
-    ],
-  },
-  {
-    id: 'KIT02',
-    name: 'Kit Oficina',
-    description: 'Papel higiénico, toallas y jabón',
-    lines: [
-      { productId: 'P012', qty: 2 },
-      { productId: 'P025', qty: 2 },
-      { productId: 'P045', qty: 4 },
-    ],
-  },
-  {
-    id: 'KIT03',
-    name: 'Kit Hospitalario',
-    description: 'Desinfectante, guantes y jabón',
-    lines: [
-      { productId: 'P008', qty: 6 },
-      { productId: 'P052', qty: 2 },
-      { productId: 'P045', qty: 4 },
-    ],
-  },
-];
+/** Serializa las escrituras: cada mutación lee y guarda el estado completo. */
+let writeQueue: Promise<unknown> = Promise.resolve();
 
 export class OperationsUseCases {
   constructor(private readonly repo: StateRepository) {}
 
   async getMeta() {
     const s = await this.repo.load();
+    ensureBundles(s);
     const geo = getWarehouseGeometry(s);
     return {
       categories,
       racks: geo.racks,
       locations: geo.locations,
       layout: geo.layout,
-      bundles: BUNDLES,
+      bundles: s.bundles ?? [],
     };
   }
 
@@ -92,11 +76,28 @@ export class OperationsUseCases {
     return this.repo.reset();
   }
 
-  private async mutate(fn: (s: AppState) => void | Promise<void>) {
-    const state = await this.repo.load();
-    await fn(state);
-    await this.repo.save(state);
-    return state;
+  private actor: string | undefined;
+
+  /** Instancia con el nombre del usuario autenticado para firmar los eventos de trazabilidad. */
+  as(actor: string | undefined) {
+    const scoped = Object.create(this) as OperationsUseCases;
+    scoped.actor = actor;
+    return scoped;
+  }
+
+  private mutate(fn: (s: AppState) => void | Promise<void>) {
+    const run = writeQueue.then(async () => {
+      const state = await this.repo.load();
+      const eventsBefore = state.events.length;
+      await fn(state);
+      if (this.actor) {
+        for (const ev of state.events.slice(0, state.events.length - eventsBefore)) ev.by = this.actor;
+      }
+      await this.repo.save(state);
+      return state;
+    });
+    writeQueue = run.catch(() => undefined);
+    return run;
   }
 
   async updateSettings(settings: Partial<Settings>) {
@@ -121,6 +122,12 @@ export class OperationsUseCases {
     const { originalId, ...rest } = body;
     return this.mutate((s) => {
       upsertProduct(s, rest, originalId);
+    });
+  }
+
+  async removeProduct(id: string) {
+    return this.mutate((s) => {
+      deleteProduct(s, id);
     });
   }
 
@@ -166,6 +173,30 @@ export class OperationsUseCases {
     });
   }
 
+  async stageLoad(orderIds: string[], plate: string) {
+    return this.mutate((s) => {
+      stageOrders(s, orderIds, plate);
+    });
+  }
+
+  async clearStage(orderIds: string[]) {
+    return this.mutate((s) => {
+      unstageOrders(s, orderIds);
+    });
+  }
+
+  async upsertBundle(body: Partial<Bundle>) {
+    return this.mutate((s) => {
+      saveBundle(s, body);
+    });
+  }
+
+  async removeBundle(id: string) {
+    return this.mutate((s) => {
+      deleteBundle(s, id);
+    });
+  }
+
   async delivery(orderId: string, person: string, notes?: string) {
     return this.mutate((s) => {
       confirmDelivery(s, orderId, person, notes);
@@ -178,9 +209,45 @@ export class OperationsUseCases {
     });
   }
 
-  async addClient(body: Omit<Client, 'id'>) {
+  async cancelOrder(orderId: string, reason: string) {
     return this.mutate((s) => {
-      s.clients.push({ ...body, id: uid('CL') });
+      cancelOrder(s, orderId, reason);
+    });
+  }
+
+  async addClient(body: Partial<Client>) {
+    return this.mutate((s) => {
+      createClient(s, body);
+    });
+  }
+
+  async editClient(id: string, body: Partial<Client>) {
+    return this.mutate((s) => {
+      updateClient(s, id, body);
+    });
+  }
+
+  async removeClient(id: string) {
+    return this.mutate((s) => {
+      deleteClient(s, id);
+    });
+  }
+
+  async saveVehicle(body: Partial<Vehicle>) {
+    return this.mutate((s) => {
+      upsertVehicle(s, body);
+    });
+  }
+
+  async removeVehicle(id: string) {
+    return this.mutate((s) => {
+      deleteVehicle(s, id);
+    });
+  }
+
+  async voidPurchase(id: string) {
+    return this.mutate((s) => {
+      cancelPurchase(s, id);
     });
   }
 
@@ -208,17 +275,9 @@ export class OperationsUseCases {
     });
   }
 
-  async addPurchase(body: { productId: string; qty: number; date: string; notes?: string }) {
-    const qty = Number(body.qty);
-    if (!Number.isInteger(qty) || qty <= 0) {
-      throw new Error('La cantidad debe ser un entero mayor que cero.');
-    }
+  async addPurchase(body: { productId: string; qty: number; date?: string; notes?: string }) {
     return this.mutate((s) => {
-      s.purchases.unshift({
-        ...body,
-        qty,
-        id: `OC-${String(s.purchases.length + 1).padStart(4, '0')}`,
-      });
+      createPurchase(s, body);
     });
   }
 

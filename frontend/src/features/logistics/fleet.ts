@@ -15,60 +15,21 @@ export type Truck = {
   baseOccupancy: number;
 };
 
-export const FLEET: Truck[] = [
-  {
-    id: 'T01',
-    plate: 'GBA-2041',
-    label: 'Camión 01',
-    city: 'Quito',
-    driver: 'Carlos Sur',
-    maxKg: 5000,
-    maxM3: 20,
-    costPerKm: 0.85,
-    etaHours: 3.33,
-    routeKm: 62,
-    baseOccupancy: 0,
-  },
-  {
-    id: 'T02',
-    plate: 'GYE-1188',
-    label: 'Camión 02',
-    city: 'Guayaquil',
-    driver: 'María Costa',
-    maxKg: 4000,
-    maxM3: 16,
-    costPerKm: 0.8,
-    etaHours: 4.17,
-    routeKm: 65,
-    baseOccupancy: 60,
-  },
-  {
-    id: 'T03',
-    plate: 'CUE-3301',
-    label: 'Camión 03',
-    city: 'Cuenca',
-    driver: 'Luis Andes',
-    maxKg: 3000,
-    maxM3: 12,
-    costPerKm: 0.75,
-    etaHours: 3.83,
-    routeKm: 65,
-    baseOccupancy: 100,
-  },
-  {
-    id: 'T04',
-    plate: 'AMB-5520',
-    label: 'Camión 04',
-    city: 'Santo Domingo',
-    driver: 'Ana Rivera',
-    maxKg: 4500,
-    maxM3: 18,
-    costPerKm: 0.78,
-    etaHours: 4.08,
-    routeKm: 66,
-    baseOccupancy: 0,
-  },
-];
+/** Estimaciones de ruta por placa (hasta tener telemetría real). */
+const ROUTE_ESTIMATES: Record<string, Pick<Truck, 'etaHours' | 'routeKm' | 'baseOccupancy'>> = {
+  'GBA-2041': { etaHours: 3.33, routeKm: 62, baseOccupancy: 0 },
+  'GYE-1188': { etaHours: 4.17, routeKm: 65, baseOccupancy: 60 },
+  'CUE-3301': { etaHours: 3.83, routeKm: 65, baseOccupancy: 100 },
+  'AMB-5520': { etaHours: 4.08, routeKm: 66, baseOccupancy: 0 },
+};
+const DEFAULT_ESTIMATE = { etaHours: 4, routeKm: 60, baseOccupancy: 0 };
+
+/** Flota activa registrada en el backend, con estimaciones de ruta. */
+export function fleetOf(s: AppState | null | undefined): Truck[] {
+  return (s?.vehicles ?? [])
+    .filter((v) => v.active)
+    .map((v) => ({ ...DEFAULT_ESTIMATE, ...ROUTE_ESTIMATES[v.plate], ...v }));
+}
 
 export const ACTIVE_STATUSES = new Set(['Por preparar', 'Preparado', 'En ruta', 'Incidencia']);
 export const ROUTE_STATUSES = new Set(['En ruta', 'Incidencia']);
@@ -194,7 +155,8 @@ export function suggestAutoAssign(
     .sort((a, b) => b.kg - a.kg || b.m3 - a.m3);
 
   const used = new Map<string, { kg: number; m3: number; count: number }>();
-  for (const t of FLEET) {
+  const fleet = fleetOf(s);
+  for (const t of fleet) {
     const load = truckLoad(
       s,
       t,
@@ -213,7 +175,7 @@ export function suggestAutoAssign(
   for (const c of candidates) {
     let best: { truck: Truck; score: number; reason: string } | null = null;
 
-    for (const t of FLEET) {
+    for (const t of fleet) {
       const cur = used.get(t.id)!;
       const nextKg = cur.kg + c.kg;
       const nextM3 = cur.m3 + c.m3;
@@ -331,6 +293,33 @@ export function depotGeo(city: string) {
   return depots[city] ?? depots.Quito;
 }
 
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** Km y ETA a partir de las paradas reales: salida, cada entrega y regreso. */
+export function measureRoute(s: AppState, city: string, orders: Order[]) {
+  if (!orders.length) return { km: 0, etaHours: 0 };
+  const depot = depotGeo(city);
+  let km = 0;
+  let prev = depot;
+  orders.forEach((o, i) => {
+    const point = stopGeo(s, o, i);
+    km += haversineKm(prev, point);
+    prev = point;
+  });
+  km += haversineKm(prev, depot);
+  km = Math.round(km * 10) / 10;
+  const etaHours = Math.round((km / 22 + orders.length * 0.2) * 100) / 100;
+  return { km, etaHours };
+}
+
 export type RouteHistoryEntry = {
   id: string;
   date: string;
@@ -349,117 +338,49 @@ export type RouteHistoryEntry = {
   status: 'Completada' | 'Parcial' | 'Incidencia';
 };
 
+/**
+ * Historial derivado de pedidos cerrados: agrupa por camión y fecha de entrega.
+ * Pedidos sin vehículo registrado se atribuyen al camión de su ciudad.
+ */
 export function buildRouteHistory(s: AppState): RouteHistoryEntry[] {
-  const wh = s.warehouses[0];
-  const delivered = s.orders.filter((o) => o.status === 'Entregado' && !o.id.startsWith('PED-H'));
-  const demo: RouteHistoryEntry[] = [
-    {
-      id: 'RH-1027-T01',
-      date: '2026-10-27',
-      truckId: 'T01',
-      plate: 'GBA-2041',
-      label: 'Camión 01',
-      city: 'Quito',
-      warehouseId: wh?.id ?? 'WH-QT-01',
-      warehouseName: wh?.name ?? 'Bodega Quito',
-      stops: 4,
-      delivered: 4,
-      kg: 420,
-      km: 62,
-      cost: 52.7,
-      etaHours: 3.33,
-      status: 'Completada',
-    },
-    {
-      id: 'RH-1026-T02',
-      date: '2026-10-26',
-      truckId: 'T02',
-      plate: 'GYE-1188',
-      label: 'Camión 02',
-      city: 'Guayaquil',
-      warehouseId: s.warehouses.find((w) => w.city === 'Guayaquil')?.id ?? wh?.id ?? 'WH-QT-01',
-      warehouseName:
-        s.warehouses.find((w) => w.city === 'Guayaquil')?.name ?? wh?.name ?? 'Bodega Quito',
-      stops: 3,
-      delivered: 2,
-      kg: 380,
-      km: 58,
-      cost: 46.4,
-      etaHours: 4.1,
-      status: 'Parcial',
-    },
-    {
-      id: 'RH-1025-T03',
-      date: '2026-10-25',
-      truckId: 'T03',
-      plate: 'CUE-3301',
-      label: 'Camión 03',
-      city: 'Cuenca',
-      warehouseId: s.warehouses.find((w) => w.city === 'Cuenca')?.id ?? wh?.id ?? 'WH-QT-01',
-      warehouseName: s.warehouses.find((w) => w.city === 'Cuenca')?.name ?? wh?.name ?? 'Bodega Quito',
-      stops: 2,
-      delivered: 1,
-      kg: 510,
-      km: 48,
-      cost: 36.0,
-      etaHours: 3.5,
-      status: 'Incidencia',
-    },
-    {
-      id: 'RH-1024-T01',
-      date: '2026-10-24',
-      truckId: 'T01',
-      plate: 'GBA-2041',
-      label: 'Camión 01',
-      city: 'Quito',
-      warehouseId: wh?.id ?? 'WH-QT-01',
-      warehouseName: wh?.name ?? 'Bodega Quito',
-      stops: 5,
-      delivered: 5,
-      kg: 610,
-      km: 71,
-      cost: 60.35,
-      etaHours: 3.8,
-      status: 'Completada',
-    },
-    {
-      id: 'RH-1023-T04',
-      date: '2026-10-23',
-      truckId: 'T04',
-      plate: 'AMB-5520',
-      label: 'Camión 04',
-      city: 'Santo Domingo',
-      warehouseId: wh?.id ?? 'WH-QT-01',
-      warehouseName: wh?.name ?? 'Bodega Quito',
-      stops: 3,
-      delivered: 3,
-      kg: 290,
-      km: 54,
-      cost: 42.12,
-      etaHours: 3.2,
-      status: 'Completada',
-    },
-  ];
-
-  if (delivered.length) {
-    demo.unshift({
-      id: `RH-live-${delivered[0].id}`,
-      date: delivered[0].date,
-      truckId: 'T01',
-      plate: delivered[0].vehicle || 'GBA-2041',
-      label: 'Camión 01',
-      city: cityOf(s, delivered[0]),
-      warehouseId: wh?.id ?? 'WH-QT-01',
-      warehouseName: wh?.name ?? 'Bodega Quito',
-      stops: delivered.length,
-      delivered: delivered.length,
-      kg: Math.round(delivered.reduce((n, o) => n + orderWeight(s, o), 0)),
-      km: 40,
-      cost: 34,
-      etaHours: 2.5,
-      status: 'Completada',
-    });
+  const fleet = fleetOf(s);
+  const closed = s.orders.filter(
+    (o) => o.status === 'Entregado' || (o.status === 'Incidencia' && o.vehicle),
+  );
+  const groups = new Map<string, { truck: Truck; date: string; orders: Order[] }>();
+  for (const o of closed) {
+    const truck =
+      fleet.find((t) => t.plate === o.vehicle) ?? fleet.find((t) => t.city === cityOf(s, o)) ?? fleet[0];
+    if (!truck) continue;
+    const date = (o.deliveredAt ?? o.date).slice(0, 10);
+    const key = `${truck.id}|${date}`;
+    const g = groups.get(key) ?? { truck, date, orders: [] };
+    g.orders.push(o);
+    groups.set(key, g);
   }
-
-  return demo.sort((a, b) => b.date.localeCompare(a.date));
+  return [...groups.values()]
+    .map(({ truck, date, orders }) => {
+      const wh = s.warehouses.find((w) => w.city === truck.city) ?? s.warehouses[0];
+      const delivered = orders.filter((o) => o.status === 'Entregado').length;
+      const route = measureRoute(s, truck.city, orders);
+      return {
+        id: `RH-${date}-${truck.id}`,
+        date,
+        truckId: truck.id,
+        plate: truck.plate,
+        label: truck.label,
+        city: truck.city,
+        warehouseId: wh?.id ?? '',
+        warehouseName: wh?.name ?? 'Bodega',
+        stops: orders.length,
+        delivered,
+        kg: Math.round(orders.reduce((n, o) => n + orderWeight(s, o), 0)),
+        km: route.km,
+        cost: Math.round(route.km * truck.costPerKm * 100) / 100,
+        etaHours: route.etaHours,
+        status:
+          delivered === orders.length ? 'Completada' : delivered === 0 ? 'Incidencia' : 'Parcial',
+      } satisfies RouteHistoryEntry;
+    })
+    .sort((a, b) => b.date.localeCompare(a.date) || a.label.localeCompare(b.label));
 }

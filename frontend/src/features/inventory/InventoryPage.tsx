@@ -1,12 +1,15 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
+import { useAuth } from '../../shared/hooks/AuthProvider';
+import { can } from '../../shared/auth/permissions';
+import { api } from '../../shared/api/client';
 import { activeWarehouseId, num } from '../../shared/lib/inventory';
 import { childrenStatus, componentsOf, isRaw } from '../../shared/lib/bom';
 import { downloadCSV } from '../../shared/lib/csv';
 import { Btn, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
-import type { AppState } from '../../shared/types';
+import type { AppState, Metrics } from '../../shared/types';
 import { InventoryDetailPanel } from './InventoryDetailPanel';
 import { InventoryOverview } from './InventoryOverview';
 import { InventoryProductForm } from './InventoryProductForm';
@@ -49,16 +52,20 @@ const categoryStyle = (category: string) => {
 };
 
 export function InventoryPage() {
-  const { state, meta, toast } = useAppState();
+  const { state, meta, applyResponse, toast } = useAppState();
   if (!state || !meta) return null;
-  return <InventoryWorkspace state={state} categories={meta.categories} toast={toast} />;
+  return <InventoryWorkspace state={state} categories={meta.categories} toast={toast} applyResponse={applyResponse} />;
 }
 
-export function InventoryWorkspace({ state, categories, toast }: {
+export function InventoryWorkspace({ state, categories, toast, applyResponse }: {
   state: AppState;
   categories: string[];
   toast: (message: string) => void;
+  applyResponse: (r: { state: AppState; metrics: Metrics }) => void;
 }) {
+  const { user } = useAuth();
+  const canStock = can(user, 'warehouse');
+  const canAdmin = can(user, 'admin');
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [editProduct, setEditProduct] = useState<string | null>(null);
@@ -160,7 +167,7 @@ export function InventoryWorkspace({ state, categories, toast }: {
         desc="Productos e insumos ligados: ve qué falta y qué materia prima lo bloquea."
         actions={<>
           <Btn icon="download" disabled={!rows.length} onClick={exportRows}>Exportar vista</Btn>
-          <Btn variant="primary" icon="plus" onClick={() => setEditProduct('')}>Crear producto</Btn>
+          {canStock ? <Btn variant="primary" icon="plus" onClick={() => setEditProduct('')}>Crear producto</Btn> : null}
         </>}
       />
 
@@ -168,9 +175,11 @@ export function InventoryWorkspace({ state, categories, toast }: {
         <span className="inv-context-icon"><Icon name="warehouse" /></span>
         <div><span>Bodega activa</span><strong>{warehouseName}</strong></div>
         {warehouse?.code && <span className="inv-warehouse-code">{warehouse.code}</span>}
-        <button type="button" className="inv-text-button" onClick={() => navigate('/bodegas')}>
-          Cambiar bodega <Icon name="chevron" />
-        </button>
+        {canAdmin ? (
+          <button type="button" className="inv-text-button" onClick={() => navigate('/bodegas')}>
+            Cambiar bodega <Icon name="chevron" />
+          </button>
+        ) : null}
       </div>
 
       <section className="inv-metrics" aria-label="Resumen de la bodega activa">
@@ -541,9 +550,11 @@ export function InventoryWorkspace({ state, categories, toast }: {
                   ? 'Prueba otro nombre, código o ubicación, o limpia los filtros para ver el catálogo completo.'
                   : 'Crea tu primer producto y registra una entrada para asignarle stock y ubicación.'}
               </p>
-              <Btn variant="primary" icon={allRows.length ? 'refresh' : 'plus'} onClick={allRows.length ? resetFilters : () => setEditProduct('')}>
-                {allRows.length ? 'Limpiar filtros' : 'Crear primer producto'}
-              </Btn>
+              {allRows.length || canStock ? (
+                <Btn variant="primary" icon={allRows.length ? 'refresh' : 'plus'} onClick={allRows.length ? resetFilters : () => setEditProduct('')}>
+                  {allRows.length ? 'Limpiar filtros' : 'Crear primer producto'}
+                </Btn>
+              ) : null}
             </div>
           )}
         </section>
@@ -555,7 +566,18 @@ export function InventoryWorkspace({ state, categories, toast }: {
               state={state}
               row={selected}
               onClose={() => setSelectedId(null)}
-              onEdit={() => setEditProduct(selected.product.id)}
+              onEdit={canStock ? () => setEditProduct(selected.product.id) : undefined}
+              onDelete={canStock ? () => {
+                const name = selected.product.name;
+                if (!window.confirm(`¿Eliminar ${name}? Solo procede si no tiene stock, pedidos abiertos ni paquetes.`)) return;
+                void api.deleteProduct(selected.product.id)
+                  .then((response) => {
+                    applyResponse(response);
+                    setSelectedId(null);
+                    toast('Producto eliminado.');
+                  })
+                  .catch((err: unknown) => toast(err instanceof Error ? err.message : 'No se pudo eliminar'));
+              } : undefined}
               onReceive={() => receive(selected.product.id)}
               onPurchase={() => purchase(selected.product.id, selected.shortage || selected.product.min)}
               onLocate={(loc) => locate(selected.product.id, loc)}

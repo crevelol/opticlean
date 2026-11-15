@@ -1,5 +1,7 @@
 import { seed } from './seed.js';
 import { ensureFamilies } from './families.service.js';
+import { ensureVehicles } from './fleet.service.js';
+import { ensureBundles } from './bundles.service.js';
 import type { AppState } from './types.js';
 import { DEFAULT_WAREHOUSE_ID, syncSettingsWarehouseLabel } from './warehouse-admin.service.js';
 import {
@@ -91,6 +93,12 @@ export function migrateState(raw: AppState): AppState {
   }
 
   ensureFamilies(base);
+  ensureVehicles(base);
+  ensureBundles(base);
+  for (const po of base.purchases ?? []) {
+    po.received ??= 0;
+    po.status ??= po.received >= po.qty ? 'Recibida' : po.received > 0 ? 'Parcial' : 'Abierta';
+  }
   for (const p of base.products) {
     if (p.fragile === undefined) {
       p.fragile = p.category === 'Hospitalaria' || p.kind === 'raw';

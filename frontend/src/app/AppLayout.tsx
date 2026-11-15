@@ -1,4 +1,5 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { can, roleLabel, type Permission } from '../shared/auth/permissions';
 import { useState } from 'react';
 import { Icon, Logo } from '../shared/components/Icon';
 import { useAppState } from '../shared/hooks/AppStateProvider';
@@ -30,6 +31,7 @@ export function AppLayout() {
   const { state } = useAppState();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantAnswer, setAssistantAnswer] = useState<string[]>([]);
@@ -44,12 +46,13 @@ export function AppLayout() {
     .map((p) => p[0]?.toUpperCase() ?? '')
     .join('') || 'OC';
 
-  const path = window.location.pathname;
-  const title = titles[path] ?? 'Bodega visual';
+  const title = titles[location.pathname] ?? 'Bodega visual';
   const pending = state.orders.filter((o) => o.status === 'Por preparar').length;
   const low = state.products.filter((p) => available(state, p.id) < p.min);
+  const today = new Date().toLocaleDateString('es-EC', { day: 'numeric', month: 'short', year: 'numeric' });
 
-  const nav = (to: string, label: string, icon: string, pill?: string | number) => (
+  const nav = (to: string, label: string, icon: string, pill?: string | number, permission?: Permission) =>
+    permission && !can(user, permission) ? null : (
     <NavLink
       to={to}
       className={({ isActive }) => (isActive ? 'active' : '')}
@@ -79,14 +82,14 @@ export function AppLayout() {
         <nav className="nav">
           {nav('/', 'Inicio', 'home')}
           {nav('/inventario', 'Inventario', 'box')}
-          {nav('/recepcion', 'Recepción', 'receive')}
+          {nav('/recepcion', 'Recepción', 'receive', undefined, 'warehouse')}
           {nav('/bodega', 'Bodega visual', 'warehouse', 'NUEVO')}
-          {nav('/bodegas', 'Bodegas', 'building')}
-          {nav('/familias', 'Familias', 'layers')}
+          {nav('/bodegas', 'Bodegas', 'building', undefined, 'admin')}
+          {nav('/familias', 'Familias', 'layers', undefined, 'admin')}
           {nav('/pedidos', 'Pedidos', 'orders', pending || '')}
           {nav('/compras', 'Abastecimiento', 'cart')}
-          {nav('/logistica', 'Logística', 'truck')}
-          {nav('/logistica/rutas', 'Mi ruta', 'route')}
+          {nav('/logistica', 'Logística', 'truck', undefined, 'dispatch')}
+          {nav('/logistica/rutas', 'Mi ruta', 'route', undefined, 'field')}
           {nav('/logistica/historial', 'Historial rutas', 'history')}
         </nav>
         <div className="nav-heading spaced">Gestión</div>
@@ -94,7 +97,7 @@ export function AppLayout() {
           {nav('/clientes', 'Clientes', 'users')}
           {nav('/trazabilidad', 'Trazabilidad', 'route')}
           {nav('/reportes', 'Reportes', 'chart')}
-          {nav('/configuracion', 'Configuración', 'settings')}
+          {nav('/configuracion', 'Configuración', 'settings', undefined, 'admin')}
         </nav>
         <div className="sidebar-bottom">
           <div className="upgrade">
@@ -111,7 +114,7 @@ export function AppLayout() {
             <div className="avatar">{initials}</div>
             <div>
               <strong>{user?.name || state.settings.operator}</strong>
-              <span>{user?.email || 'Coordinación de operaciones'}</span>
+              <span>{user ? `${roleLabel[user.role]} · ${user.email}` : 'Coordinación de operaciones'}</span>
               <button
                 type="button"
                 className="btn ghost small"
@@ -156,7 +159,7 @@ export function AppLayout() {
             </form>
             <span className="date-label">
               <Icon name="calendar" />
-              27 oct. 2026
+              {today}
             </span>
             <button
               type="button"
@@ -167,8 +170,8 @@ export function AppLayout() {
               <Icon name="bell" />
               <span className="notification-dot" />
             </button>
-            <div className="avatar" style={{ background: '#e9f3fc', color: '#4687b9' }}>
-              ER
+            <div className="avatar" style={{ background: '#e9f3fc', color: '#4687b9' }} title={user?.name}>
+              {initials}
             </div>
           </div>
         </header>

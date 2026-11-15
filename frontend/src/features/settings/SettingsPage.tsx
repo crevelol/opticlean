@@ -4,6 +4,7 @@ import { api } from '../../shared/api/client';
 import { Btn, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal } from '../../shared/components/Modal';
+import { FleetPanel } from './FleetPanel';
 
 export function SettingsPage() {
   const { state, applyResponse, toast } = useAppState();
@@ -78,6 +79,7 @@ export function SettingsPage() {
           </div>
         </section>
       </div>
+      <FleetPanel />
 
       {resetOpen ? (
         <Modal title="Restablecer demo" subtitle="Borra cambios en el servidor." onClose={() => setResetOpen(false)}>

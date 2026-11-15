@@ -2,6 +2,7 @@ import type { AppState, Lot, Order, OrderLine, OrderPick, Product } from './type
 import { activeWarehouseId, lotsForActiveWarehouse } from './warehouse-admin.service.js';
 import { getWarehouseGeometry } from './warehouse-layout.js';
 import { normalizeProductBom, validateComponents } from './bom.service.js';
+import { vehicleByPlate } from './fleet.service.js';
 
 export const uid = (prefix: string) =>
   `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -72,9 +73,20 @@ export function receive(
     batch: string;
     expiry: string;
     supplier: string;
+    purchaseId?: string;
   },
 ) {
   const qty = Number(data.qty);
+  const purchase = data.purchaseId ? s.purchases.find((p) => p.id === data.purchaseId) : undefined;
+  if (data.purchaseId) {
+    if (!purchase) throw new Error('Orden de compra no encontrada.');
+    if (purchase.productId !== data.productId) {
+      throw new Error('La orden de compra corresponde a otro producto.');
+    }
+    if (purchase.status === 'Cancelada' || purchase.status === 'Recibida') {
+      throw new Error(`La orden ${purchase.id} ya está ${purchase.status.toLowerCase()}.`);
+    }
+  }
   const target = getWarehouseGeometry(s).locations.find((l) => l.id === data.loc);
   if (!product(s, data.productId) || !Number.isInteger(qty) || qty <= 0 || !target) {
     throw new Error('Selecciona un producto, una ubicación y una cantidad entera mayor a cero.');
@@ -112,6 +124,10 @@ export function receive(
     supplier: data.supplier,
     date: new Date().toISOString().slice(0, 10),
   });
+  if (purchase) {
+    purchase.received = (purchase.received ?? 0) + qty;
+    purchase.status = purchase.received >= purchase.qty ? 'Recibida' : 'Parcial';
+  }
   addEvent(s, 'Recepción', data.productId, qty, data.supplier, data.loc, id, data.batch.trim());
   return id;
 }
@@ -225,30 +241,37 @@ export function prepare(s: AppState, orderId: string) {
   return o;
 }
 
-export function dispatch(s: AppState, ids: string[], vehicle: string) {
+export function assertFitsVehicle(s: AppState, plate: string, orders: Order[]) {
+  const vehicle = vehicleByPlate(s, plate ?? '');
+  if (!vehicle) throw new Error('El vehículo no está registrado en la flota.');
+  if (!vehicle.active) throw new Error(`El vehículo ${vehicle.plate} está inactivo.`);
+  if (orders.reduce((n, o) => n + orderWeight(s, o), 0) > vehicle.maxKg) {
+    throw new Error(`La carga supera la capacidad de ${vehicle.maxKg} kg del vehículo.`);
+  }
+  const liters = orders.reduce(
+    (n, o) => n + o.lines.reduce((v, l) => v + l.qty * (product(s, l.productId)?.volume ?? 0), 0),
+    0,
+  );
+  if (liters > vehicle.maxM3 * 1000) {
+    throw new Error(`La carga supera la capacidad de ${vehicle.maxM3} m³ del vehículo.`);
+  }
+  return vehicle;
+}
+
+export function dispatch(s: AppState, ids: string[], plate: string) {
   const orders = s.orders.filter((o) => ids.includes(o.id));
   if (!orders.length || orders.some((o) => o.status !== 'Preparado')) {
     throw new Error('Selecciona pedidos preparados.');
   }
+  const known = vehicleByPlate(s, plate ?? '');
   const current = s.orders.filter(
-    (o) => o.vehicle === vehicle && ['En ruta', 'Incidencia'].includes(o.status),
+    (o) => o.vehicle === known?.plate && ['En ruta', 'Incidencia'].includes(o.status),
   );
-  const all = [...current, ...orders];
-  if (all.reduce((n, o) => n + orderWeight(s, o), 0) > 650) {
-    throw new Error('La carga supera la capacidad de 650 kg del vehículo.');
-  }
-  if (
-    all.reduce(
-      (n, o) =>
-        n + o.lines.reduce((v, l) => v + l.qty * (product(s, l.productId)?.volume ?? 0), 0),
-      0,
-    ) > 8000
-  ) {
-    throw new Error('La carga supera la capacidad de 8 m³ del vehículo.');
-  }
+  const vehicle = assertFitsVehicle(s, known?.plate ?? plate, [...current, ...orders]);
   for (const o of orders) {
     o.status = 'En ruta';
-    o.vehicle = vehicle;
+    o.vehicle = vehicle.plate;
+    o.stagedPlate = undefined;
     const lines: OrderPick[] = o.picks ?? o.lines;
     for (const line of lines) {
       addEvent(
@@ -283,6 +306,36 @@ export function upsertProduct(s: AppState, p: Product, originalId?: string) {
   }
   s.products.push(normalized);
   return normalized;
+}
+
+export function deleteProduct(s: AppState, id: string) {
+  const existing = product(s, id);
+  if (!existing) throw new Error('Producto no encontrado.');
+  if (s.lots.some((l) => l.productId === id && l.qty > 0)) {
+    throw new Error('Tiene stock en bodega. No se puede eliminar.');
+  }
+  if (
+    s.orders.some(
+      (o) => !['Cancelado', 'Entregado'].includes(o.status) && o.lines.some((l) => l.productId === id),
+    )
+  ) {
+    throw new Error('Hay pedidos abiertos con este producto.');
+  }
+  if (
+    (s.purchases ?? []).some(
+      (po) => po.productId === id && po.status !== 'Cancelada' && po.status !== 'Recibida',
+    )
+  ) {
+    throw new Error('Hay una orden de compra abierta de este producto.');
+  }
+  if (s.products.some((other) => other.id !== id && (other.components ?? []).some((c) => c.productId === id))) {
+    throw new Error('Otro producto lo usa como insumo.');
+  }
+  if ((s.bundles ?? []).some((b) => b.lines.some((l) => l.productId === id))) {
+    throw new Error('Está incluido en un paquete. Quítalo del paquete antes de eliminarlo.');
+  }
+  s.products = s.products.filter((p) => p.id !== id);
+  s.lots = s.lots.filter((l) => l.productId !== id);
 }
 
 export function confirmDelivery(

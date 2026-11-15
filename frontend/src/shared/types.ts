@@ -92,11 +92,14 @@ export type Order = {
   lines: OrderLine[];
   priority: string;
   vehicle?: string;
+  stagedPlate?: string;
   picks?: OrderPick[];
   incident?: string;
   deliveredTo?: string;
   deliveryNotes?: string;
   deliveredAt?: string;
+  cancelledAt?: string;
+  cancelReason?: string;
 };
 
 export type TraceEvent = {
@@ -122,12 +125,28 @@ export type Receipt = {
   batch: string;
 };
 
+export type PurchaseStatus = 'Abierta' | 'Parcial' | 'Recibida' | 'Cancelada';
+
 export type Purchase = {
   id: string;
   productId: string;
   qty: number;
   date: string;
   notes?: string;
+  received?: number;
+  status?: PurchaseStatus;
+};
+
+export type Vehicle = {
+  id: string;
+  plate: string;
+  label: string;
+  city: string;
+  driver: string;
+  maxKg: number;
+  maxM3: number;
+  costPerKm: number;
+  active: boolean;
 };
 
 export type Settings = {
@@ -149,6 +168,7 @@ export type AppState = {
   receipts: Receipt[];
   settings: Settings;
   families?: WarehouseFamily[];
+  vehicles?: Vehicle[];
 };
 
 export type Location = {

@@ -178,8 +178,11 @@ function demoUsers(): AuthUser[] {
   ];
 }
 
+let usersCache: UsersFile | null = null;
+
 /** Upsert usuarios demo por id (actualiza email/rol/placa/password demo). */
 function ensureUsers(): UsersFile {
+  if (usersCache) return usersCache;
   mkdirSync(DATA_DIR, { recursive: true });
   const desired = demoUsers();
   let raw: UsersFile = { version: 1, users: [] };
@@ -199,6 +202,7 @@ function ensureUsers(): UsersFile {
   }
   const next: UsersFile = { version: 1, users: [...byId.values()] };
   writeFileSync(USERS_PATH, JSON.stringify(next, null, 2));
+  usersCache = next;
   return next;
 }
 
@@ -230,4 +234,19 @@ export function authRequired(req: Request, res: Response, next: NextFunction) {
 
 export function publicUserFromRequest(req: Request) {
   return req.user ?? null;
+}
+
+/** admin siempre pasa; el resto solo si su rol está en la lista. */
+export function requireRole(...roles: AuthRole[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const role = req.user?.role;
+    if (role && (role === 'admin' || roles.includes(role))) return next();
+    res.status(403).json({ error: 'Tu rol no tiene permiso para esta acción.' });
+  };
+}
+
+export function warnInsecureSecret() {
+  if (!process.env.OPTICLEAN_JWT_SECRET?.trim() || process.env.OPTICLEAN_JWT_SECRET === 'cambia-este-secreto') {
+    console.warn('[auth] OPTICLEAN_JWT_SECRET no está configurado: los tokens usan un secreto inseguro.');
+  }
 }

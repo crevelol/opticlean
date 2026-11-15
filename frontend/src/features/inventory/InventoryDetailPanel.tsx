@@ -11,7 +11,8 @@ type InventoryDetailPanelProps = {
   state: AppState;
   row: InventoryRow;
   onClose: () => void;
-  onEdit: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
   onReceive: () => void;
   onPurchase: () => void;
   onLocate: (loc?: string) => void;
@@ -43,7 +44,7 @@ function expiryLabel(expiry: string) {
 }
 
 export function InventoryDetailPanel({
-  state, row, onClose, onEdit, onReceive, onPurchase, onLocate, onTrace, onSelectRelated,
+  state, row, onClose, onEdit, onDelete, onReceive, onPurchase, onLocate, onTrace, onSelectRelated,
 }: InventoryDetailPanelProps) {
   const [tab, setTab] = useState<DetailTab>('locations');
   const id = useId();
@@ -237,7 +238,8 @@ export function InventoryDetailPanel({
         <div><dt>Valor del stock físico</dt><dd>{money(row.stockValue)}</dd></div>
       </dl>
       <div className="inv-detail-footer">
-        <button type="button" onClick={onEdit}><Icon name="edit" />Editar ficha</button>
+        {onEdit ? <button type="button" onClick={onEdit}><Icon name="edit" />Editar ficha</button> : null}
+        {onDelete ? <button type="button" onClick={onDelete}><Icon name="trash" />Eliminar</button> : null}
         <button type="button" onClick={onTrace}><Icon name="history" />Trazabilidad</button>
       </div>
     </aside>

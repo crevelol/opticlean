@@ -63,4 +63,7 @@ export const statusColor = (s: string) =>
     Entregado: 'green',
     Incidencia: 'red',
     Solicitada: 'blue',
+    Abierta: 'blue',
+    Parcial: 'amber',
+    Recibida: 'green',
   })[s] ?? '';

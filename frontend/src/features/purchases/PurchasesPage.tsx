@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
-import { product } from '../../shared/lib/inventory';
+import { product, statusColor } from '../../shared/lib/inventory';
+import { useAuth } from '../../shared/hooks/AuthProvider';
+import { can } from '../../shared/auth/permissions';
 import { isRaw } from '../../shared/lib/bom';
 import { buildForecast, suggestedPurchaseQty, type ConfidenceLevel } from '../../shared/lib/forecast';
 import { Badge, Btn, Empty, Kpi, PageHead, ProductCell } from '../../shared/components/ui';
@@ -19,6 +21,7 @@ const confidenceLabel: Record<ConfidenceLevel, string> = {
 
 export function PurchasesPage() {
   const { state, applyResponse, toast } = useAppState();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [modalOpen, setModalOpen] = useState(false);
@@ -40,6 +43,7 @@ export function PurchasesPage() {
 
   if (!state || !forecast) return null;
 
+  const canManage = can(user, 'warehouse');
   const urgent = forecast.recommendations.filter((r) => r.urgency === 'now' || r.productionRisk);
   const soon = forecast.recommendations.filter((r) => r.urgency === 'soon' && !r.productionRisk);
 
@@ -63,6 +67,16 @@ export function PurchasesPage() {
     }
   };
 
+  const cancel = async (id: string) => {
+    if (!window.confirm(`¿Cancelar la orden ${id}? Lo ya recibido se mantiene en bodega.`)) return;
+    try {
+      applyResponse(await api.cancelPurchase(id));
+      toast(`Orden ${id} cancelada.`);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'No se pudo cancelar la orden.');
+    }
+  };
+
   const openNew = (productId?: string, qty?: number) => {
     const id = productId ?? state.products[0]?.id ?? '';
     setPrefillProduct(id);
@@ -78,9 +92,11 @@ export function PurchasesPage() {
         title="Órdenes de compra"
         desc="La previsión mejora con cada pedido y despacho para anticipar faltantes y proteger la producción."
         actions={
-          <Btn variant="primary" icon="plus" onClick={() => openNew()}>
-            Nueva solicitud
-          </Btn>
+          canManage ? (
+            <Btn variant="primary" icon="plus" onClick={() => openNew()}>
+              Nueva solicitud
+            </Btn>
+          ) : null
         }
       />
 
@@ -161,9 +177,11 @@ export function PurchasesPage() {
                     </td>
                     <td className="fc-reason">{row.reason}</td>
                     <td>
-                      <Btn variant="small" icon="plus" onClick={() => openNew(row.productId, row.suggestedQty || undefined)}>
-                        Solicitar
-                      </Btn>
+                      {canManage ? (
+                        <Btn variant="small" icon="plus" onClick={() => openNew(row.productId, row.suggestedQty || undefined)}>
+                          Solicitar
+                        </Btn>
+                      ) : null}
                     </td>
                   </tr>
                 ))}
@@ -182,26 +200,55 @@ export function PurchasesPage() {
         {state.purchases.length ? (
           <div className="table-scroll">
             <table>
+              <thead>
+                <tr>
+                  <th>Orden</th>
+                  <th>Producto</th>
+                  <th>Recibido</th>
+                  <th>Estado</th>
+                  <th />
+                </tr>
+              </thead>
               <tbody>
-                {state.purchases.map((o) => (
-                  <tr key={o.id}>
-                    <td>
-                      <strong>{o.id}</strong>
-                      <span className="sub">{dateShort(o.date)}</span>
-                    </td>
-                    <td>{product(state, o.productId)?.name}</td>
-                    <td>{o.qty} u.</td>
-                    <td>
-                      <Btn
-                        variant="small"
-                        icon="receive"
-                        onClick={() => navigate('/recepcion', { state: { productId: o.productId } })}
-                      >
-                        Ir a recepción
-                      </Btn>
-                    </td>
-                  </tr>
-                ))}
+                {state.purchases.map((o) => {
+                  const status = o.status ?? 'Abierta';
+                  const open = status === 'Abierta' || status === 'Parcial';
+                  return (
+                    <tr key={o.id}>
+                      <td>
+                        <strong>{o.id}</strong>
+                        <span className="sub">{dateShort(o.date)}</span>
+                      </td>
+                      <td>{product(state, o.productId)?.name}</td>
+                      <td>
+                        {o.received ?? 0} / {o.qty} u.
+                      </td>
+                      <td>
+                        <Badge text={status} color={statusColor(status)} />
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        {open && canManage ? (
+                          <>
+                            <Btn
+                              variant="small"
+                              icon="receive"
+                              onClick={() =>
+                                navigate('/recepcion', {
+                                  state: { productId: o.productId, purchaseId: o.id, qty: o.qty - (o.received ?? 0) },
+                                })
+                              }
+                            >
+                              Recibir
+                            </Btn>{' '}
+                            <Btn variant="small" icon="close" onClick={() => void cancel(o.id)}>
+                              Cancelar
+                            </Btn>
+                          </>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

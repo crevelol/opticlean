@@ -3,10 +3,6 @@ import { Icon } from '../components/Icon';
 import { productOf } from '../lib/inventory';
 import type { AppState, WarehouseFamily } from '../types';
 
-const EMBED_SRC = '/control-embed/index.html?embed=1&mobile=1&v=20261109a#bodega';
-
-type Mode = 'mapa' | 'lista';
-
 type LocRow = {
   loc: string;
   rack: string;
@@ -29,15 +25,17 @@ function familyOfProduct(state: AppState, productId: string): WarehouseFamily | 
   return families.find((f) => f.productCategories.includes(p.category));
 }
 
-function WarehouseList({ state }: { state: AppState }) {
+export function WarehousePage({ state }: { state: AppState }) {
   const [query, setQuery] = useState('');
   const [rack, setRack] = useState('all');
   const [familyId, setFamilyId] = useState('all');
 
   const occupied = useMemo<LocRow[]>(() => {
     const map = new Map<string, LocRow>();
+    const activeId = state.settings.activeWarehouseId;
     for (const lot of state.lots) {
       if (lot.qty <= 0) continue;
+      if (activeId && (lot.warehouseId ?? 'WH-QT-01') !== activeId) continue;
       const p = productOf(state, lot.productId);
       const fam = familyOfProduct(state, lot.productId);
       const prev = map.get(lot.loc);
@@ -104,7 +102,7 @@ function WarehouseList({ state }: { state: AppState }) {
   const selectedFamily = families.find((f) => f.id === familyId);
 
   return (
-    <>
+    <div className="page wh-page">
       <header className="page-head wh-head">
         <div>
           <div className="eyebrow">Operación</div>
@@ -244,50 +242,6 @@ function WarehouseList({ state }: { state: AppState }) {
             </section>
           ))}
         </div>
-      )}
-    </>
-  );
-}
-
-export function WarehousePage({ state }: { state: AppState }) {
-  const [mode, setMode] = useState<Mode>('mapa');
-
-  return (
-    <div className={`page wh-page ${mode === 'mapa' ? 'wh-page--map' : ''}`}>
-      <div className="wh-mode" role="tablist" aria-label="Vista de bodega">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'mapa'}
-          className={mode === 'mapa' ? 'is-active' : ''}
-          onClick={() => setMode('mapa')}
-        >
-          <Icon name="warehouse" />
-          Mapa visual
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'lista'}
-          className={mode === 'lista' ? 'is-active' : ''}
-          onClick={() => setMode('lista')}
-        >
-          <Icon name="box" />
-          Lista
-        </button>
-      </div>
-
-      {mode === 'mapa' ? (
-        <div className="wh-embed">
-          <iframe
-            className="wh-embed__frame"
-            title="Bodega visual OPTICLEAN"
-            src={EMBED_SRC}
-            allow="clipboard-write"
-          />
-        </div>
-      ) : (
-        <WarehouseList state={state} />
       )}
     </div>
   );

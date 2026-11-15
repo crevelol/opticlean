@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
@@ -9,12 +9,13 @@ import { Modal, ModalActions } from '../../shared/components/Modal';
 import type { Order } from '../../shared/types';
 import { RouteMap } from './RouteMap';
 import {
-  FLEET,
+  fleetOf,
   activeOrders as getActiveOrders,
   cityOf,
   fmtHours,
   orderVolume,
   packagesOf,
+  measureRoute,
   routeOrders,
   sectorOf,
   statusLabel,
@@ -37,7 +38,17 @@ export function LogisticsPage() {
   const [selectedTruck, setSelectedTruck] = useState('T01');
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
   const [listTab, setListTab] = useState<'pendientes' | 'listos' | 'en_ruta'>('listos');
-  const [stagedByTruck, setStagedByTruck] = useState<Record<string, string[]>>({});
+  const stagedByTruck = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    if (!state) return map;
+    for (const truck of fleetOf(state)) {
+      const ids = state.orders
+        .filter((o) => o.status === 'Preparado' && o.stagedPlate === truck.plate)
+        .map((o) => o.id);
+      if (ids.length) map[truck.id] = ids;
+    }
+    return map;
+  }, [state]);
   const [pedidosTruckId, setPedidosTruckId] = useState<string | null>(null);
   const [expandedRoute, setExpandedRoute] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -67,7 +78,7 @@ export function LogisticsPage() {
 
   const deliveryDate = useMemo(
     () =>
-      new Date('2026-10-07T12:00:00').toLocaleDateString('es-EC', {
+      new Date().toLocaleDateString('es-EC', {
         weekday: 'short',
         day: 'numeric',
         month: 'short',
@@ -113,27 +124,36 @@ export function LogisticsPage() {
 
   if (!state) return null;
 
+  const fleet = fleetOf(state);
+  if (!fleet.length) {
+    return (
+      <div className="log-page">
+        <PageHead eyebrow="Logística" title="Sin vehículos activos" desc="Registra o activa un vehículo en Configuración → Flota." />
+      </div>
+    );
+  }
   const detail = detailId ? state.orders.find((o) => o.id === detailId) : null;
   const detailClient = detail ? client(state, detail.clientId) : null;
-  const detailTruck = detail?.vehicle ? FLEET.find((t) => t.plate === detail.vehicle) : null;
+  const detailTruck = detail?.vehicle ? fleet.find((t) => t.plate === detail.vehicle) : null;
 
   const totalVolume = activeOrders.reduce((n, o) => n + orderVolume(state, o), 0);
   const totalWeight = activeOrders.reduce((n, o) => n + orderWeight(state, o), 0);
-  const fleetMaxVolume = 120;
-  const fleetMaxWeight = 10000;
-  const trucksInUse = FLEET.filter((t) => activeOrders.some((o) => o.vehicle === t.plate));
-  const avgEta = trucksInUse.length
-    ? trucksInUse.reduce((n, t) => n + t.etaHours, 0) / trucksInUse.length
-    : 4.5;
+  const fleetMaxVolume = fleet.reduce((n, t) => n + t.maxM3, 0);
+  const fleetMaxWeight = fleet.reduce((n, t) => n + t.maxKg, 0);
+  const trucksInUse = fleet.filter((t) => activeOrders.some((o) => o.vehicle === t.plate));
+  const liveEtas = trucksInUse
+    .map((t) => measureRoute(state, t.city, routeOrders(state, t.plate)).etaHours)
+    .filter((n) => n > 0);
+  const avgEta = liveEtas.length ? liveEtas.reduce((n, h) => n + h, 0) / liveEtas.length : 0;
 
-  const truck = FLEET.find((t) => t.id === selectedTruck) ?? FLEET[0];
+  const truck = fleet.find((t) => t.id === selectedTruck) ?? fleet[0];
 
   const stagedOrdersOf = (truckId: string) =>
     (stagedByTruck[truckId] ?? [])
       .map((id) => activeOrders.find((o) => o.id === id && o.status === 'Preparado'))
       .filter((o): o is Order => Boolean(o));
 
-  const truckLoad = (t: (typeof FLEET)[number]) =>
+  const truckLoad = (t: (typeof fleet)[number]) =>
     calcTruckLoad(state, t, activeOrders, stagedOrdersOf(t.id));
 
   const selectedLoad = truckLoad(truck);
@@ -150,32 +170,39 @@ export function LogisticsPage() {
     activeOrders.some((o) => o.id === id && o.status === 'Preparado' && !stagedIds.has(id)),
   );
 
-  const stageToTruck = (truckId: string, orderIds: string[]) => {
+  const stageToTruck = async (truckId: string, orderIds: string[]) => {
     const ids = [...new Set(orderIds)].filter((id) =>
       activeOrders.some((o) => o.id === id && o.status === 'Preparado' && !stagedIds.has(id)),
     );
-    if (!ids.length) return;
-    setStagedByTruck((prev) => {
-      const next: Record<string, string[]> = {};
-      for (const [tid, list] of Object.entries(prev)) {
-        next[tid] = list.filter((id) => !ids.includes(id));
-      }
-      next[truckId] = [...new Set([...(next[truckId] ?? []), ...ids])];
-      return next;
-    });
-    setSelectedOrders((prev) => prev.filter((id) => !ids.includes(id)));
-    setSelectedTruck(truckId);
-    setDraggingId(null);
-    setDropTarget(null);
-    const name = FLEET.find((t) => t.id === truckId)?.label ?? truckId;
-    toast(`${ids.length} pedido(s) cargado(s) en ${name}. Revisa Pedidos o Enviar camión.`);
+    const target = fleet.find((t) => t.id === truckId);
+    if (!ids.length || !target || assigning) return;
+    setAssigning(true);
+    setError('');
+    try {
+      applyResponse(await api.stageOrders(ids, target.plate));
+      setSelectedOrders((prev) => prev.filter((id) => !ids.includes(id)));
+      setSelectedTruck(truckId);
+      toast(`${ids.length} pedido(s) cargado(s) en ${target.label}. Revisa Pedidos o Enviar camión.`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'No se pudo cargar el camión';
+      setError(msg);
+      toast(msg);
+    } finally {
+      setAssigning(false);
+      setDraggingId(null);
+      setDropTarget(null);
+    }
   };
 
-  const unstageOrder = (truckId: string, orderId: string) => {
-    setStagedByTruck((prev) => ({
-      ...prev,
-      [truckId]: (prev[truckId] ?? []).filter((id) => id !== orderId),
-    }));
+  const unstageOrder = async (orderId: string) => {
+    setError('');
+    try {
+      applyResponse(await api.unstageOrders([orderId]));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'No se pudo retirar el pedido';
+      setError(msg);
+      toast(msg);
+    }
   };
 
   const markReady = async (orderId: string) => {
@@ -197,7 +224,7 @@ export function LogisticsPage() {
   };
 
   const sendTruck = async (truckId: string) => {
-    const t = FLEET.find((x) => x.id === truckId);
+    const t = fleet.find((x) => x.id === truckId);
     const ids = stagedByTruck[truckId] ?? [];
     if (!t || !ids.length || assigning) return;
     setAssigning(true);
@@ -205,7 +232,6 @@ export function LogisticsPage() {
     try {
       applyResponse(await api.dispatch(ids, t.plate));
       toast(`${t.label} enviado con ${ids.length} pedido(s).`);
-      setStagedByTruck((prev) => ({ ...prev, [truckId]: [] }));
       setPedidosTruckId(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error');
@@ -231,16 +257,6 @@ export function LogisticsPage() {
         const res = await api.logisticsAutoAssign({
           orderIds: ready.map((o) => o.id),
           stagedByTruck,
-          fleet: FLEET.map((t) => ({
-            id: t.id,
-            plate: t.plate,
-            label: t.label,
-            city: t.city,
-            driver: t.driver,
-            maxKg: t.maxKg,
-            maxM3: t.maxM3,
-            costPerKm: t.costPerKm,
-          })),
         });
         plan = res.plan;
       } catch {
@@ -250,13 +266,14 @@ export function LogisticsPage() {
       }
 
       if (plan.assignments.length) {
-        setStagedByTruck((prev) => {
-          const next: Record<string, string[]> = { ...prev };
-          for (const [truckId, ids] of Object.entries(plan.byTruck)) {
-            next[truckId] = [...new Set([...(next[truckId] ?? []), ...ids])];
-          }
-          return next;
-        });
+        let latest = state;
+        for (const [truckId, ids] of Object.entries(plan.byTruck)) {
+          const target = fleetOf(latest).find((t) => t.id === truckId);
+          if (!target || !ids.length) continue;
+          const saved = await api.stageOrders(ids, target.plate);
+          applyResponse(saved);
+          latest = saved.state;
+        }
         const firstTruck = Object.keys(plan.byTruck)[0];
         if (firstTruck) setSelectedTruck(firstTruck);
         setSelectedOrders([]);
@@ -363,8 +380,8 @@ export function LogisticsPage() {
           <div className="log-metric-label">
             Tiempo estimado <Icon name="route" />
           </div>
-          <strong>{fmtHours(avgEta)}</strong>
-          <span>promedio de entrega</span>
+          <strong>{avgEta ? fmtHours(avgEta) : '—'}</strong>
+          <span>{avgEta ? 'promedio de las rutas en curso' : 'sin camiones en ruta'}</span>
         </article>
       </section>
 
@@ -563,7 +580,7 @@ export function LogisticsPage() {
               </button>
             </div>
             <ul className="log-truck-list">
-              {FLEET.map((t) => {
+              {fleet.map((t) => {
                 const load = truckLoad(t);
                 const active = selectedTruck === t.id;
                 const tone = load.status === 'full' ? 'red' : load.status === 'partial' ? 'amber' : 'green';
@@ -598,7 +615,7 @@ export function LogisticsPage() {
                           : dropped
                             ? [...readySelected, dropped]
                             : readySelected;
-                        stageToTruck(t.id, ids);
+                        void stageToTruck(t.id, ids);
                       }}
                     >
                       <div className="log-truck-top">
@@ -650,7 +667,7 @@ export function LogisticsPage() {
                           {readySelected.length ? (
                             <Btn
                               icon="plus"
-                              onClick={() => stageToTruck(t.id, readySelected)}
+                              onClick={() => void stageToTruck(t.id, readySelected)}
                             >
                               Cargar seleccionados
                             </Btn>
@@ -726,12 +743,15 @@ export function LogisticsPage() {
               </div>
             </div>
             <ul className="log-route-list">
-              {FLEET.map((t, index) => {
+              {fleet.map((t, index) => {
                 const load = truckLoad(t);
                 const tone = load.status === 'full' ? 'red' : load.status === 'partial' ? 'amber' : 'green';
                 const open = expandedRoute === t.id;
                 const stops = routeOrders(state, t.plate);
                 const showStops = stops.length ? stops : load.orders.slice(0, 4);
+                const measured = measureRoute(state, t.city, showStops);
+                const etaLabel = measured.km > 0 ? fmtHours(measured.etaHours) : 'Sin ruta';
+                const costLabel = measured.km > 0 ? moneyFmt(measured.km * t.costPerKm) : '—';
                 return (
                   <li key={t.id} className={`log-route-card ${open ? 'is-open' : ''}`}>
                     <button
@@ -748,10 +768,10 @@ export function LogisticsPage() {
                           {t.label} - {t.city}
                         </strong>
                         <small>
-                          {fmtHours(t.etaHours)} | {moneyFmt(t.routeKm * t.costPerKm)}
+                          {etaLabel} | {costLabel}
                         </small>
                       </span>
-                      <span className="log-route-eta">{fmtHours(t.etaHours)}</span>
+                      <span className="log-route-eta">{etaLabel}</span>
                       <Icon name="chevron" className={`log-route-chevron ${open ? 'is-open' : ''}`} />
                     </button>
 
@@ -771,19 +791,19 @@ export function LogisticsPage() {
                               <li>
                                 <Icon name="history" />
                                 <span>
-                                  Tiempo estimado: <strong>{fmtHours(t.etaHours)}</strong>
+                                  Tiempo estimado: <strong>{etaLabel}</strong>
                                 </span>
                               </li>
                               <li>
                                 <Icon name="spark" />
                                 <span>
-                                  Costo estimado: <strong>{moneyFmt(t.routeKm * t.costPerKm)}</strong>
+                                  Costo estimado: <strong>{costLabel}</strong>
                                 </span>
                               </li>
                               <li>
                                 <Icon name="route" />
                                 <span>
-                                  Distancia total: <strong>{t.routeKm} km</strong>
+                                  Distancia total: <strong>{measured.km > 0 ? `${measured.km} km` : '—'}</strong>
                                 </span>
                               </li>
                             </ul>
@@ -850,7 +870,7 @@ export function LogisticsPage() {
                   variant="primary"
                   icon="truck"
                   onClick={() => {
-                    stageToTruck(selectedTruck, [detail.id]);
+                    void stageToTruck(selectedTruck, [detail.id]);
                     setDetailId(null);
                   }}
                 >
@@ -965,7 +985,7 @@ export function LogisticsPage() {
       ) : null}
 
       {pedidosTruckId ? (() => {
-        const pt = FLEET.find((t) => t.id === pedidosTruckId) ?? truck;
+        const pt = fleet.find((t) => t.id === pedidosTruckId) ?? truck;
         const staged = stagedOrdersOf(pt.id);
         const onRoute = activeOrders.filter((o) => o.vehicle === pt.plate);
         return (
@@ -1005,7 +1025,7 @@ export function LogisticsPage() {
                       <Btn
                         variant="danger"
                         icon="close"
-                        onClick={() => unstageOrder(pt.id, o.id)}
+                        onClick={() => void unstageOrder(o.id)}
                       >
                         Sacar
                       </Btn>
@@ -1121,7 +1141,7 @@ export function LogisticsPage() {
               <strong>Enviar camión</strong> para despachar.
             </p>
             {Object.entries(aiPlan.byTruck).map(([truckId, ids]) => {
-              const t = FLEET.find((x) => x.id === truckId);
+              const t = fleet.find((x) => x.id === truckId);
               const items = aiPlan.assignments.filter((a) => a.truckId === truckId);
               return (
                 <div key={truckId} className="log-ai-truck">

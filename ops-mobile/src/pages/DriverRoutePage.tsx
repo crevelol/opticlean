@@ -6,6 +6,7 @@ import { Icon } from '../components/Icon';
 import {
   clientOf,
   fmtHours,
+  measureRoute,
   orderWeight,
   packagesOf,
   productOf,
@@ -22,14 +23,16 @@ type Props = {
 };
 
 export function DriverRoutePage({ state, user, onRefresh }: Props) {
-  const truck = truckByPlate(user.truckPlate);
-  const stops = useMemo(() => routeOrders(state, truck.plate), [state, truck.plate]);
+  const assigned = truckByPlate(state, user.truckPlate);
+  const plate = assigned?.plate ?? '';
+  const stops = useMemo(() => (plate ? routeOrders(state, plate) : []), [state, plate]);
   const [stopId, setStopId] = useState<string | null>(null);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [person, setPerson] = useState('');
   const [notes, setNotes] = useState('');
+  const [incidentReason, setIncidentReason] = useState('Cliente ausente');
 
   const current = stops.find((o) => o.id === stopId) ?? stops[0] ?? null;
   const currentClient = current ? clientOf(state, current.clientId) : null;
@@ -54,6 +57,55 @@ export function DriverRoutePage({ state, user, onRefresh }: Props) {
       setBusy(false);
     }
   };
+
+  const reportIncident = async () => {
+    if (!current || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api.incident({ orderId: current.id, reason: incidentReason, notes });
+      await onRefresh();
+      setChecked({});
+      setNotes('');
+      setStopId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo registrar la incidencia');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!assigned) {
+    return (
+      <div className="page drv-page">
+        <header className="drv-top">
+          <div>
+            <div className="eyebrow">Conductor · Mi ruta</div>
+            <h1>Sin camión asignado</h1>
+            <p>
+              {user.truckPlate
+                ? `La placa ${user.truckPlate} no está registrada en la flota.`
+                : 'Tu usuario no tiene una placa asignada.'}{' '}
+              Pide a administración que revise la flota.
+            </p>
+          </div>
+          <div className="drv-top-actions">
+            <button
+              type="button"
+              className="btn ghost small"
+              onClick={() => {
+                clearSession();
+                window.location.assign('/login');
+              }}
+            >
+              Salir
+            </button>
+          </div>
+        </header>
+      </div>
+    );
+  }
+  const truck = assigned;
 
   return (
     <div className="page drv-page">
@@ -92,7 +144,10 @@ export function DriverRoutePage({ state, user, onRefresh }: Props) {
           <small>paradas</small>
         </div>
         <div>
-          <strong>{fmtHours(truck.etaHours)}</strong>
+          <strong>{(() => {
+            const route = measureRoute(state, truck.city, stops);
+            return route.km > 0 ? fmtHours(route.etaHours) : '—';
+          })()}</strong>
           <small>ETA</small>
         </div>
       </section>
@@ -217,6 +272,18 @@ export function DriverRoutePage({ state, user, onRefresh }: Props) {
           >
             <Icon name="check" />
             {busy ? 'Confirmando…' : 'Confirmar entrega'}
+          </button>
+          <label className="field" style={{ marginTop: 12 }}>
+            <span>Incidencia</span>
+            <select value={incidentReason} onChange={(e) => setIncidentReason(e.target.value)}>
+              <option>Cliente ausente</option>
+              <option>Dirección no localizada</option>
+              <option>Recepción no autorizada</option>
+              <option>Producto con novedad</option>
+            </select>
+          </label>
+          <button type="button" className="btn full" disabled={busy} onClick={() => void reportIncident()}>
+            Registrar incidencia
           </button>
           <p className="subtle" style={{ marginTop: 8 }}>
             Marca todos los productos y escribe quién recibe para habilitar la entrega.
