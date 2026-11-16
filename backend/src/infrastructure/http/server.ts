@@ -6,7 +6,58 @@ import { JsonStateRepository } from '../persistence/JsonStateRepository.js';
 import { OperationsUseCases } from '../../application/use-cases/OperationsUseCases.js';
 import { suggest, suggestPlacement } from '../../domain/placement.service.js';
 import { autoAssignLogistics, openaiConfigured } from '../../domain/logistics-ai.service.js';
-import { authRequired, login, publicUserFromRequest } from '../auth/auth.js';
+import { adminRequired, authRequired, login, publicUserFromRequest } from '../auth/auth.js';
+import {
+  companyMobileRoleIds,
+  companyModuleIds,
+  createCompany,
+  createVehicle,
+  deleteVehicle,
+  fleetForCompany,
+  getVehicle,
+  listAllModules,
+  listCompanies,
+  listMenuItems,
+  listMobileRoles,
+  listModules,
+  listVehicles,
+  menuForCompany,
+  mobileConfigForCompany,
+  parseAllowedSectors,
+  setCompanyMobileRoles,
+  setCompanyModules,
+  updateCompany,
+  updateMenuItem,
+  updateVehicle,
+} from '../../domain/admin.service.js';
+import { getAdminDb } from '../db/adminDb.js';
+
+function companyIdOf(req: express.Request) {
+  return String(req.user?.companyId || 'co-innovamf');
+}
+
+function assertVehicleOfCompany(vehicleId: string, companyId: string) {
+  const vehicle = getVehicle(vehicleId);
+  if (!vehicle) throw new Error('Vehículo no encontrado');
+  if (vehicle.company_id !== companyId) throw new Error('Vehículo de otra empresa');
+  return vehicle;
+}
+
+function sectorsFromBody(body: unknown): string[] | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  const raw = (body as { allowedSectors?: unknown }).allowedSectors;
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((x) => String(x)).filter((x) => x.trim());
+}
+
+function vehicleDto(v: ReturnType<typeof getVehicle>) {
+  if (!v) return null;
+  return {
+    ...v,
+    allowed_sectors_list: parseAllowedSectors(v.allowed_sectors),
+  };
+}
 
 /** Carga backend/.env sin dependencia extra (no pisa vars ya definidas, p.ej. systemd). */
 function loadEnvFile() {
@@ -179,6 +230,22 @@ app.post('/api/orders', async (req, res, next) => {
   }
 });
 
+/** Importa factura XML: crea cliente/productos si faltan y genera el pedido */
+app.post('/api/orders/from-xml', async (req, res, next) => {
+  try {
+    const xml = String(req.body?.xml ?? '');
+    const importResult = await ops.importInvoiceXml(xml);
+    const state = await ops.getState();
+    res.status(201).json({
+      state,
+      metrics: ops.metricsSnapshot(state),
+      import: importResult,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
 app.post('/api/orders/:id/prepare', async (req, res, next) => {
   try {
     const state = await ops.confirmPrepare(req.params.id);
@@ -191,7 +258,15 @@ app.post('/api/orders/:id/prepare', async (req, res, next) => {
 app.post('/api/dispatch', async (req, res, next) => {
   try {
     const { orderIds, vehicle } = req.body as { orderIds: string[]; vehicle?: string };
-    const state = await ops.confirmDispatch(orderIds, vehicle);
+    const plate = String(vehicle || 'GBA-2041').trim().toUpperCase();
+    const truck = fleetForCompany(companyIdOf(req)).find(
+      (t) => t.plate.toUpperCase() === plate,
+    );
+    const state = await ops.confirmDispatch(
+      orderIds,
+      plate,
+      truck ? { maxKg: truck.maxKg, maxM3: truck.maxM3 } : undefined,
+    );
     res.json({ state, metrics: ops.metricsSnapshot(state) });
   } catch (e) {
     next(e);
@@ -210,6 +285,7 @@ app.post('/api/logistics/auto-assign', authRequired, async (req, res, next) => {
         label: string;
         city: string;
         driver: string;
+        allowedSectors?: string[];
         maxKg: number;
         maxM3: number;
         costPerKm: number;
@@ -257,6 +333,15 @@ app.post('/api/incidents', async (req, res, next) => {
 app.post('/api/clients', async (req, res, next) => {
   try {
     const state = await ops.addClient(req.body);
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.patch('/api/clients/:id', async (req, res, next) => {
+  try {
+    const state = await ops.updateClient(req.params.id, req.body ?? {});
     res.json({ state, metrics: ops.metricsSnapshot(state) });
   } catch (e) {
     next(e);
@@ -335,10 +420,289 @@ app.get('/api/assistant/:query', async (req, res, next) => {
   }
 });
 
+/** Menú dinámico según módulos de la empresa del usuario */
+app.get('/api/menu', authRequired, (req, res, next) => {
+  try {
+    const companyId = String(req.query.companyId || req.user?.companyId || 'co-innovamf');
+    res.json(menuForCompany(companyId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Flota activa de la empresa (web + ops-mobile) */
+app.get('/api/fleet', authRequired, (req, res, next) => {
+  try {
+    const companyId = String(req.query.companyId || req.user?.companyId || companyIdOf(req));
+    res.json({ trucks: fleetForCompany(companyId) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Gestión de flota de la empresa del usuario (incluye inactivos) */
+app.get('/api/fleet/manage', authRequired, (req, res, next) => {
+  try {
+    res.json({
+      vehicles: listVehicles(companyIdOf(req)).map((v) => vehicleDto(v)),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/fleet', authRequired, (req, res, next) => {
+  try {
+    const vehicle = createVehicle(companyIdOf(req), {
+      plate: String(req.body?.plate ?? ''),
+      label: String(req.body?.label ?? ''),
+      vehicleType: req.body?.vehicleType ? String(req.body.vehicleType) : undefined,
+      city: req.body?.city ? String(req.body.city) : undefined,
+      driver: req.body?.driver ? String(req.body.driver) : undefined,
+      maxKg: typeof req.body?.maxKg === 'number' ? req.body.maxKg : undefined,
+      maxM3: typeof req.body?.maxM3 === 'number' ? req.body.maxM3 : undefined,
+      costPerKm: typeof req.body?.costPerKm === 'number' ? req.body.costPerKm : undefined,
+      etaHours: typeof req.body?.etaHours === 'number' ? req.body.etaHours : undefined,
+      routeKm: typeof req.body?.routeKm === 'number' ? req.body.routeKm : undefined,
+      allowedSectors: sectorsFromBody(req.body),
+    });
+    res.status(201).json({
+      vehicle: vehicleDto(vehicle),
+      trucks: fleetForCompany(companyIdOf(req)),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.patch('/api/fleet/:id', authRequired, (req, res, next) => {
+  try {
+    assertVehicleOfCompany(req.params.id, companyIdOf(req));
+    const vehicle = updateVehicle(req.params.id, {
+      plate: req.body?.plate ? String(req.body.plate) : undefined,
+      label: req.body?.label ? String(req.body.label) : undefined,
+      vehicleType: req.body?.vehicleType ? String(req.body.vehicleType) : undefined,
+      city: req.body?.city !== undefined ? String(req.body.city) : undefined,
+      driver: req.body?.driver !== undefined ? String(req.body.driver) : undefined,
+      maxKg: typeof req.body?.maxKg === 'number' ? req.body.maxKg : undefined,
+      maxM3: typeof req.body?.maxM3 === 'number' ? req.body.maxM3 : undefined,
+      costPerKm: typeof req.body?.costPerKm === 'number' ? req.body.costPerKm : undefined,
+      etaHours: typeof req.body?.etaHours === 'number' ? req.body.etaHours : undefined,
+      routeKm: typeof req.body?.routeKm === 'number' ? req.body.routeKm : undefined,
+      allowedSectors: sectorsFromBody(req.body),
+      active: typeof req.body?.active === 'boolean' ? req.body.active : undefined,
+    });
+    res.json({ vehicle: vehicleDto(vehicle), trucks: fleetForCompany(companyIdOf(req)) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.delete('/api/fleet/:id', authRequired, (req, res, next) => {
+  try {
+    assertVehicleOfCompany(req.params.id, companyIdOf(req));
+    deleteVehicle(req.params.id);
+    res.json({ ok: true, trucks: fleetForCompany(companyIdOf(req)) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Roles móviles habilitados para la empresa */
+app.get('/api/mobile/config', authRequired, (req, res, next) => {
+  try {
+    const companyId = String(req.query.companyId || req.user?.companyId || companyIdOf(req));
+    res.json(mobileConfigForCompany(companyId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/admin/companies', adminRequired, (_req, res, next) => {
+  try {
+    res.json({ companies: listCompanies() });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/admin/companies', adminRequired, (req, res, next) => {
+  try {
+    const company = createCompany({
+      name: String(req.body?.name ?? ''),
+      slug: req.body?.slug ? String(req.body.slug) : undefined,
+    });
+    res.status(201).json({ company });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.patch('/api/admin/companies/:id', adminRequired, (req, res, next) => {
+  try {
+    const company = updateCompany(req.params.id, {
+      name: req.body?.name ? String(req.body.name) : undefined,
+      active: typeof req.body?.active === 'boolean' ? req.body.active : undefined,
+    });
+    res.json({ company });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/admin/companies/:id/modules', adminRequired, (req, res, next) => {
+  try {
+    res.json({
+      moduleIds: companyModuleIds(req.params.id),
+      modules: listAllModules(),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.put('/api/admin/companies/:id/modules', adminRequired, (req, res, next) => {
+  try {
+    const moduleIds = Array.isArray(req.body?.moduleIds)
+      ? req.body.moduleIds.map((x: unknown) => String(x))
+      : [];
+    const saved = setCompanyModules(req.params.id, moduleIds);
+    res.json({ moduleIds: saved, menu: menuForCompany(req.params.id) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/admin/companies/:id/mobile-roles', adminRequired, (req, res, next) => {
+  try {
+    res.json({
+      roleIds: companyMobileRoleIds(req.params.id),
+      roles: listMobileRoles(),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.put('/api/admin/companies/:id/mobile-roles', adminRequired, (req, res, next) => {
+  try {
+    const roleIds = Array.isArray(req.body?.roleIds)
+      ? req.body.roleIds.map((x: unknown) => String(x))
+      : [];
+    const saved = setCompanyMobileRoles(req.params.id, roleIds);
+    res.json({ roleIds: saved, config: mobileConfigForCompany(req.params.id) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/admin/companies/:id/vehicles', adminRequired, (req, res, next) => {
+  try {
+    res.json({ vehicles: listVehicles(req.params.id).map((v) => vehicleDto(v)) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/admin/companies/:id/vehicles', adminRequired, (req, res, next) => {
+  try {
+    const vehicle = createVehicle(req.params.id, {
+      plate: String(req.body?.plate ?? ''),
+      label: String(req.body?.label ?? ''),
+      vehicleType: req.body?.vehicleType ? String(req.body.vehicleType) : undefined,
+      city: req.body?.city ? String(req.body.city) : undefined,
+      driver: req.body?.driver ? String(req.body.driver) : undefined,
+      maxKg: typeof req.body?.maxKg === 'number' ? req.body.maxKg : undefined,
+      maxM3: typeof req.body?.maxM3 === 'number' ? req.body.maxM3 : undefined,
+      costPerKm: typeof req.body?.costPerKm === 'number' ? req.body.costPerKm : undefined,
+      etaHours: typeof req.body?.etaHours === 'number' ? req.body.etaHours : undefined,
+      routeKm: typeof req.body?.routeKm === 'number' ? req.body.routeKm : undefined,
+      allowedSectors: sectorsFromBody(req.body),
+    });
+    res.status(201).json({ vehicle: vehicleDto(vehicle) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.patch('/api/admin/vehicles/:id', adminRequired, (req, res, next) => {
+  try {
+    const vehicle = updateVehicle(req.params.id, {
+      plate: req.body?.plate ? String(req.body.plate) : undefined,
+      label: req.body?.label ? String(req.body.label) : undefined,
+      vehicleType: req.body?.vehicleType ? String(req.body.vehicleType) : undefined,
+      city: req.body?.city !== undefined ? String(req.body.city) : undefined,
+      driver: req.body?.driver !== undefined ? String(req.body.driver) : undefined,
+      maxKg: typeof req.body?.maxKg === 'number' ? req.body.maxKg : undefined,
+      maxM3: typeof req.body?.maxM3 === 'number' ? req.body.maxM3 : undefined,
+      costPerKm: typeof req.body?.costPerKm === 'number' ? req.body.costPerKm : undefined,
+      etaHours: typeof req.body?.etaHours === 'number' ? req.body.etaHours : undefined,
+      allowedSectors: sectorsFromBody(req.body),
+      routeKm: typeof req.body?.routeKm === 'number' ? req.body.routeKm : undefined,
+      active: typeof req.body?.active === 'boolean' ? req.body.active : undefined,
+    });
+    res.json({ vehicle: vehicleDto(vehicle) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.delete('/api/admin/vehicles/:id', adminRequired, (req, res, next) => {
+  try {
+    res.json(deleteVehicle(req.params.id));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/admin/modules', adminRequired, (_req, res, next) => {
+  try {
+    res.json({ modules: listModules() });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/admin/mobile-roles', adminRequired, (_req, res, next) => {
+  try {
+    res.json({ roles: listMobileRoles() });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/admin/menu', adminRequired, (_req, res, next) => {
+  try {
+    res.json({ items: listMenuItems() });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.patch('/api/admin/menu/:id', adminRequired, (req, res, next) => {
+  try {
+    const item = updateMenuItem(req.params.id, {
+      label: req.body?.label ? String(req.body.label) : undefined,
+      path: req.body?.path ? String(req.body.path) : undefined,
+      icon: req.body?.icon ? String(req.body.icon) : undefined,
+      section: req.body?.section ? String(req.body.section) : undefined,
+      sort_order: typeof req.body?.sort_order === 'number' ? req.body.sort_order : undefined,
+      badge: req.body?.badge === null ? null : req.body?.badge ? String(req.body.badge) : undefined,
+      active: typeof req.body?.active === 'boolean' ? req.body.active : undefined,
+    });
+    res.json({ item });
+  } catch (e) {
+    next(e);
+  }
+});
+
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const message = err instanceof Error ? err.message : 'Error interno';
   res.status(400).json({ error: message });
 });
+
+// Inicializa SQLite (menú / módulos / empresas)
+getAdminDb();
 
 const PORT = Number(process.env.PORT ?? 3001);
 app.listen(PORT, () => {

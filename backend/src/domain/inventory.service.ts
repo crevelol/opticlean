@@ -144,7 +144,7 @@ export function move(
 
 export function createOrder(
   s: AppState,
-  data: { clientId: string; lines: OrderLine[]; priority?: string },
+  data: { clientId: string; lines: OrderLine[]; priority?: string; notes?: string },
 ) {
   if (!client(s, data.clientId) || !data.lines.length) {
     throw new Error('Selecciona un cliente y al menos un producto.');
@@ -166,7 +166,10 @@ export function createOrder(
       );
     }
   }
-  const n = Math.max(1048, ...s.orders.map((o) => Number(o.id.split('-')[1]))) + 1;
+  const numericIds = s.orders
+    .map((o) => Number(String(o.id).replace(/^PED-H?/, '')))
+    .filter((n) => Number.isFinite(n));
+  const n = Math.max(1048, ...numericIds, 0) + 1;
   const o: Order = {
     id: `PED-${n}`,
     clientId: data.clientId,
@@ -174,6 +177,7 @@ export function createOrder(
     priority: data.priority ?? 'Normal',
     status: 'Por preparar',
     date: new Date().toISOString().slice(0, 10),
+    notes: data.notes?.trim() || undefined,
   };
   s.orders.unshift(o);
   return o;
@@ -225,7 +229,12 @@ export function prepare(s: AppState, orderId: string) {
   return o;
 }
 
-export function dispatch(s: AppState, ids: string[], vehicle: string) {
+export function dispatch(
+  s: AppState,
+  ids: string[],
+  vehicle: string,
+  limits?: { maxKg?: number; maxM3?: number },
+) {
   const orders = s.orders.filter((o) => ids.includes(o.id));
   if (!orders.length || orders.some((o) => o.status !== 'Preparado')) {
     throw new Error('Selecciona pedidos preparados.');
@@ -234,17 +243,20 @@ export function dispatch(s: AppState, ids: string[], vehicle: string) {
     (o) => o.vehicle === vehicle && ['En ruta', 'Incidencia'].includes(o.status),
   );
   const all = [...current, ...orders];
-  if (all.reduce((n, o) => n + orderWeight(s, o), 0) > 650) {
-    throw new Error('La carga supera la capacidad de 650 kg del vehículo.');
-  }
-  if (
+  const maxKg = Number.isFinite(limits?.maxKg) && (limits?.maxKg ?? 0) > 0 ? Number(limits!.maxKg) : 650;
+  const maxM3 = Number.isFinite(limits?.maxM3) && (limits?.maxM3 ?? 0) > 0 ? Number(limits!.maxM3) : 8;
+  const totalKg = all.reduce((n, o) => n + orderWeight(s, o), 0);
+  const totalM3 =
     all.reduce(
       (n, o) =>
         n + o.lines.reduce((v, l) => v + l.qty * (product(s, l.productId)?.volume ?? 0), 0),
       0,
-    ) > 8000
-  ) {
-    throw new Error('La carga supera la capacidad de 8 m³ del vehículo.');
+    ) / 1000;
+  if (totalKg > maxKg + 0.01) {
+    throw new Error(`La carga supera la capacidad de ${Math.round(maxKg)} kg del vehículo.`);
+  }
+  if (totalM3 > maxM3 + 0.01) {
+    throw new Error(`La carga supera la capacidad de ${maxM3} m³ del vehículo.`);
   }
   for (const o of orders) {
     o.status = 'En ruta';

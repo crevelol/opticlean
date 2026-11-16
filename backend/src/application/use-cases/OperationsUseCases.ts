@@ -22,6 +22,10 @@ import {
   upsertProduct,
 } from '../../domain/inventory.service.js';
 import { uid } from '../../domain/inventory.service.js';
+import {
+  applyParsedInvoice,
+  parseFacturaXml,
+} from '../../domain/invoice-xml.service.js';
 import { suggest } from '../../domain/placement.service.js';
 import {
   deleteFamily,
@@ -147,6 +151,16 @@ export class OperationsUseCases {
     return createdId;
   }
 
+  async importInvoiceXml(xml: string) {
+    const invoice = await parseFacturaXml(xml);
+    let result: ReturnType<typeof applyParsedInvoice> | null = null;
+    await this.mutate((s) => {
+      result = applyParsedInvoice(s, invoice);
+    });
+    if (!result) throw new Error('No se pudo importar la factura.');
+    return result;
+  }
+
   async getPickPlan(orderId: string) {
     const s = await this.repo.load();
     const order = s.orders.find((o) => o.id === orderId);
@@ -160,9 +174,13 @@ export class OperationsUseCases {
     });
   }
 
-  async confirmDispatch(orderIds: string[], vehicle = 'GBA-2041') {
+  async confirmDispatch(
+    orderIds: string[],
+    vehicle = 'GBA-2041',
+    limits?: { maxKg?: number; maxM3?: number },
+  ) {
     return this.mutate((s) => {
-      dispatch(s, orderIds, vehicle);
+      dispatch(s, orderIds, vehicle, limits);
     });
   }
 
@@ -178,9 +196,36 @@ export class OperationsUseCases {
     });
   }
 
-  async addClient(body: Omit<Client, 'id'>) {
+  async addClient(body: Omit<Client, 'id'> & { creditLimit?: number | string }) {
     return this.mutate((s) => {
-      s.clients.push({ ...body, id: uid('CL') });
+      const creditLimit = Number(body.creditLimit);
+      s.clients.push({
+        ...body,
+        id: uid('CL'),
+        creditLimit: Number.isFinite(creditLimit) && creditLimit >= 0 ? creditLimit : 3000,
+      });
+    });
+  }
+
+  async updateClient(
+    id: string,
+    body: Partial<Omit<Client, 'id'>> & { creditLimit?: number | string },
+  ) {
+    return this.mutate((s) => {
+      const c = s.clients.find((x) => x.id === id);
+      if (!c) throw new Error('Cliente no encontrado.');
+      if (body.name !== undefined) c.name = String(body.name).trim() || c.name;
+      if (body.contact !== undefined) c.contact = String(body.contact).trim() || c.contact;
+      if (body.address !== undefined) c.address = String(body.address).trim() || c.address;
+      if (body.email !== undefined) c.email = String(body.email).trim() || c.email;
+      if (body.type !== undefined) c.type = String(body.type).trim() || c.type;
+      if (body.city !== undefined) c.city = String(body.city).trim();
+      if (body.sector !== undefined) c.sector = String(body.sector).trim();
+      if (body.creditLimit !== undefined) {
+        const n = Number(body.creditLimit);
+        if (!Number.isFinite(n) || n < 0) throw new Error('Límite de crédito inválido.');
+        c.creditLimit = n;
+      }
     });
   }
 

@@ -1,11 +1,16 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Icon, Logo } from '../shared/components/Icon';
 import { useAppState } from '../shared/hooks/AppStateProvider';
 import { useAuth } from '../shared/hooks/AuthProvider';
 import { api } from '../shared/api/client';
 import { available } from '../shared/lib/inventory';
 import { Modal } from '../shared/components/Modal';
+
+type MenuSection = {
+  section: string;
+  items: Array<{ id: string; label: string; path: string; icon: string; badge: string | null }>;
+};
 
 const titles: Record<string, string> = {
   '/': 'Resumen de operaciones',
@@ -26,6 +31,27 @@ const titles: Record<string, string> = {
   '/trazabilidad': 'Trazabilidad',
 };
 
+const fallbackMenu: MenuSection[] = [
+  {
+    section: 'Operación',
+    items: [
+      { id: 'f-home', label: 'Inicio', path: '/', icon: 'home', badge: null },
+      { id: 'f-inv', label: 'Inventario', path: '/inventario', icon: 'box', badge: null },
+      { id: 'f-rec', label: 'Recepción', path: '/recepcion', icon: 'receive', badge: null },
+      { id: 'f-bod', label: 'Bodega visual', path: '/bodega', icon: 'warehouse', badge: 'NUEVO' },
+      { id: 'f-ped', label: 'Pedidos', path: '/pedidos', icon: 'orders', badge: null },
+      { id: 'f-log', label: 'Logística', path: '/logistica', icon: 'truck', badge: null },
+    ],
+  },
+  {
+    section: 'Gestión',
+    items: [
+      { id: 'f-cli', label: 'Clientes', path: '/clientes', icon: 'users', badge: null },
+      { id: 'f-cfg', label: 'Configuración', path: '/configuracion', icon: 'settings', badge: null },
+    ],
+  },
+];
+
 export function AppLayout() {
   const { state } = useAppState();
   const { user, logout } = useAuth();
@@ -34,6 +60,46 @@ export function AppLayout() {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantAnswer, setAssistantAnswer] = useState<string[]>([]);
   const [notifyOpen, setNotifyOpen] = useState(false);
+  const [menuSections, setMenuSections] = useState<MenuSection[]>(fallbackMenu);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .menu(user?.companyId)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.sections?.length) {
+          setMenuSections(
+            res.sections.map((s) => ({
+              section: s.section,
+              items: s.items.map((i) => ({
+                id: i.id,
+                label: i.label,
+                path: i.path,
+                icon: i.icon,
+                badge: i.badge,
+              })),
+            })),
+          );
+        }
+      })
+      .catch(() => {
+        /* mantiene menú fallback */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.companyId]);
+
+  const path = typeof window !== 'undefined' ? window.location.pathname : '/';
+  const title = useMemo(() => {
+    if (titles[path]) return titles[path];
+    for (const sec of menuSections) {
+      const hit = sec.items.find((i) => i.path === path);
+      if (hit) return hit.label;
+    }
+    return 'Operación';
+  }, [path, menuSections]);
 
   if (!state) return null;
 
@@ -44,14 +110,13 @@ export function AppLayout() {
     .map((p) => p[0]?.toUpperCase() ?? '')
     .join('') || 'OC';
 
-  const path = window.location.pathname;
-  const title = titles[path] ?? 'Bodega visual';
   const pending = state.orders.filter((o) => o.status === 'Por preparar').length;
   const low = state.products.filter((p) => available(state, p.id) < p.min);
 
   const nav = (to: string, label: string, icon: string, pill?: string | number) => (
     <NavLink
       to={to}
+      end={to === '/'}
       className={({ isActive }) => (isActive ? 'active' : '')}
       onClick={() => setMenuOpen(false)}
     >
@@ -74,28 +139,21 @@ export function AppLayout() {
             OPTI<span style={{ fontWeight: 500 }}>CLEAN</span> <em>AI</em>
           </span>
         </NavLink>
-        <div className="brand-tag">Operación conectada</div>
-        <div className="nav-heading">Operación</div>
-        <nav className="nav">
-          {nav('/', 'Inicio', 'home')}
-          {nav('/inventario', 'Inventario', 'box')}
-          {nav('/recepcion', 'Recepción', 'receive')}
-          {nav('/bodega', 'Bodega visual', 'warehouse', 'NUEVO')}
-          {nav('/bodegas', 'Bodegas', 'building')}
-          {nav('/familias', 'Familias', 'layers')}
-          {nav('/pedidos', 'Pedidos', 'orders', pending || '')}
-          {nav('/compras', 'Abastecimiento', 'cart')}
-          {nav('/logistica', 'Logística', 'truck')}
-          {nav('/logistica/rutas', 'Mi ruta', 'route')}
-          {nav('/logistica/historial', 'Historial rutas', 'history')}
-        </nav>
-        <div className="nav-heading spaced">Gestión</div>
-        <nav className="nav">
-          {nav('/clientes', 'Clientes', 'users')}
-          {nav('/trazabilidad', 'Trazabilidad', 'route')}
-          {nav('/reportes', 'Reportes', 'chart')}
-          {nav('/configuracion', 'Configuración', 'settings')}
-        </nav>
+        {menuSections.map((sec, idx) => (
+          <div key={sec.section}>
+            <div className={`nav-heading${idx > 0 ? ' spaced' : ''}`}>{sec.section}</div>
+            <nav className="nav">
+              {sec.items.map((item) =>
+                nav(
+                  item.path,
+                  item.label,
+                  item.icon,
+                  item.path === '/pedidos' ? pending || item.badge || '' : item.badge || '',
+                ),
+              )}
+            </nav>
+          </div>
+        ))}
         <div className="sidebar-bottom">
           <div className="upgrade">
             <div className="upgrade-label">
@@ -138,8 +196,6 @@ export function AppLayout() {
             >
               <Icon name="menu" />
             </button>
-            <span>{state.settings.company}</span>
-            <Icon name="chevron" />
             <strong>{title}</strong>
           </div>
           <div className="top-tools">
@@ -152,7 +208,7 @@ export function AppLayout() {
               }}
             >
               <Icon name="search" />
-              <input name="query" placeholder="Buscar producto o código…" autoComplete="off" />
+              <input name="query" placeholder="Buscar producto, pedido o cliente…" autoComplete="off" />
             </form>
             <span className="date-label">
               <Icon name="calendar" />

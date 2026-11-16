@@ -39,6 +39,20 @@ export const orderWeight = (s: AppState, o: Order) =>
 export const money = (n: number) =>
   new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD' }).format(n);
 
+const CREDIT_STATUSES = new Set(['Por preparar', 'Preparado', 'En ruta', 'Incidencia']);
+
+/** Crédito usado = valor de pedidos abiertos (no entregados). */
+export const creditUsed = (s: AppState, clientId: string) =>
+  s.orders
+    .filter((o) => o.clientId === clientId && CREDIT_STATUSES.has(o.status) && !o.id.startsWith('PED-H'))
+    .reduce((n, o) => n + orderValue(s, o), 0);
+
+export const creditLimitOf = (s: AppState, clientId: string) =>
+  client(s, clientId)?.creditLimit ?? 0;
+
+export const creditAvailable = (s: AppState, clientId: string) =>
+  Math.max(0, creditLimitOf(s, clientId) - creditUsed(s, clientId));
+
 export const num = (n: number) => new Intl.NumberFormat('es-EC').format(n);
 
 export const dateShort = (d: string) =>

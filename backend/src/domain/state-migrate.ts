@@ -97,6 +97,27 @@ export function migrateState(raw: AppState): AppState {
     }
   }
 
+  // Límite de crédito por cliente (default según tipo si falta)
+  const defaultCreditByType: Record<string, number> = {
+    Hotelería: 5000,
+    Salud: 8000,
+    Corporativo: 12000,
+    Restauración: 2500,
+    Institucional: 6000,
+    Retail: 10000,
+    Industrial: 9000,
+    Mayorista: 4000,
+  };
+  const seededCredits = new Map(seed().clients.map((c) => [c.id, c.creditLimit ?? 0]));
+  for (const c of base.clients) {
+    if (c.creditLimit == null || !Number.isFinite(c.creditLimit)) {
+      c.creditLimit =
+        seededCredits.get(c.id) ??
+        defaultCreditByType[c.type] ??
+        3000;
+    }
+  }
+
   syncSettingsWarehouseLabel(base);
   return base;
 }

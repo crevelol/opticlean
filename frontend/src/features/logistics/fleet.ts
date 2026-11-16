@@ -1,10 +1,14 @@
 import { client, orderWeight, product } from '../../shared/lib/inventory';
 import type { AppState, Order } from '../../shared/types';
 
+export type VehicleKind = 'carro' | 'camion' | 'motocicleta';
+
 export type Truck = {
   id: string;
   plate: string;
   label: string;
+  vehicleType?: VehicleKind;
+  vehicleTypeLabel?: string;
   city: string;
   driver: string;
   maxKg: number;
@@ -12,14 +16,45 @@ export type Truck = {
   costPerKm: number;
   etaHours: number;
   routeKm: number;
+  /** Vacío = sin restricción de sectores */
+  allowedSectors?: string[];
   baseOccupancy: number;
 };
 
+/** Sin sectores configurados = sin reglas. */
+export function vehicleAllowsSector(t: Pick<Truck, 'allowedSectors'>, sector: string) {
+  const allowed = t.allowedSectors ?? [];
+  if (!allowed.length) return true;
+  const target = sector.trim().toLowerCase();
+  if (!target) return true;
+  return allowed.some((s) => {
+    const a = s.toLowerCase();
+    return a === target || a.includes(target) || target.includes(a);
+  });
+}
+
+export function vehicleKindLabel(t: Truck) {
+  if (t.vehicleTypeLabel) return t.vehicleTypeLabel;
+  if (t.vehicleType === 'motocicleta') return 'Motocicleta';
+  if (t.vehicleType === 'carro') return 'Carro';
+  return 'Camión';
+}
+
+export function vehicleIconName(t: Pick<Truck, 'vehicleType'> | VehicleKind | undefined) {
+  const kind = typeof t === 'string' ? t : t?.vehicleType;
+  if (kind === 'motocicleta') return 'motorcycle';
+  if (kind === 'carro') return 'car';
+  return 'truck';
+}
+
+/** Fallback si la API de flota no responde; la fuente de verdad es /api/fleet. */
 export const FLEET: Truck[] = [
   {
-    id: 'T01',
+    id: 'veh-t01',
     plate: 'GBA-2041',
     label: 'Camión 01',
+    vehicleType: 'camion',
+    vehicleTypeLabel: 'Camión',
     city: 'Quito',
     driver: 'Carlos Sur',
     maxKg: 5000,
@@ -30,9 +65,11 @@ export const FLEET: Truck[] = [
     baseOccupancy: 0,
   },
   {
-    id: 'T02',
+    id: 'veh-t02',
     plate: 'GYE-1188',
     label: 'Camión 02',
+    vehicleType: 'camion',
+    vehicleTypeLabel: 'Camión',
     city: 'Guayaquil',
     driver: 'María Costa',
     maxKg: 4000,
@@ -40,12 +77,14 @@ export const FLEET: Truck[] = [
     costPerKm: 0.8,
     etaHours: 4.17,
     routeKm: 65,
-    baseOccupancy: 60,
+    baseOccupancy: 0,
   },
   {
-    id: 'T03',
+    id: 'veh-t03',
     plate: 'CUE-3301',
     label: 'Camión 03',
+    vehicleType: 'camion',
+    vehicleTypeLabel: 'Camión',
     city: 'Cuenca',
     driver: 'Luis Andes',
     maxKg: 3000,
@@ -53,12 +92,14 @@ export const FLEET: Truck[] = [
     costPerKm: 0.75,
     etaHours: 3.83,
     routeKm: 65,
-    baseOccupancy: 100,
+    baseOccupancy: 0,
   },
   {
-    id: 'T04',
+    id: 'veh-t04',
     plate: 'AMB-5520',
     label: 'Camión 04',
+    vehicleType: 'camion',
+    vehicleTypeLabel: 'Camión',
     city: 'Santo Domingo',
     driver: 'Ana Rivera',
     maxKg: 4500,
@@ -180,6 +221,7 @@ export function suggestAutoAssign(
   s: AppState,
   ready: Order[],
   alreadyStaged: Record<string, string[]> = {},
+  fleet: Truck[] = FLEET,
 ): AutoAssignPlan {
   const stagedSet = new Set(Object.values(alreadyStaged).flat());
   const candidates = ready
@@ -194,7 +236,7 @@ export function suggestAutoAssign(
     .sort((a, b) => b.kg - a.kg || b.m3 - a.m3);
 
   const used = new Map<string, { kg: number; m3: number; count: number }>();
-  for (const t of FLEET) {
+  for (const t of fleet) {
     const load = truckLoad(
       s,
       t,
@@ -213,11 +255,12 @@ export function suggestAutoAssign(
   for (const c of candidates) {
     let best: { truck: Truck; score: number; reason: string } | null = null;
 
-    for (const t of FLEET) {
+    for (const t of fleet) {
       const cur = used.get(t.id)!;
       const nextKg = cur.kg + c.kg;
       const nextM3 = cur.m3 + c.m3;
       if (nextKg > t.maxKg + 0.01 || nextM3 > t.maxM3 + 0.01) continue;
+      if (!vehicleAllowsSector(t, c.sector)) continue;
 
       const kgFill = nextKg / t.maxKg;
       const m3Fill = nextM3 / t.maxM3;
@@ -225,13 +268,15 @@ export function suggestAutoAssign(
       // Preferir llenado útil sin saturar
       const fillScore = fill <= 0.85 ? fill * 40 : fill <= 0.95 ? 28 : 10;
       const cityScore = t.city === c.city ? 100 : t.city.includes(c.city) || c.city.includes(t.city) ? 40 : 0;
+      const sectorBonus = t.allowedSectors?.length ? 35 : 0;
       const costScore = (1.2 - t.costPerKm) * 25;
       const balanceScore = Math.max(0, 18 - cur.count * 2);
       const spareScore = ((t.maxKg - nextKg) / t.maxKg) * 8;
-      const score = cityScore + fillScore + costScore + balanceScore + spareScore;
+      const score = cityScore + fillScore + costScore + balanceScore + spareScore + sectorBonus;
 
       const reasonParts = [
         cityScore >= 100 ? `misma ciudad (${t.city})` : cityScore > 0 ? `ciudad cercana` : `capacidad libre`,
+        t.allowedSectors?.length ? `sector ${c.sector}` : 'sin regla de sector',
         `${Math.round(c.kg)} kg / ${c.m3.toFixed(1)} m³ caben`,
         `costo $${t.costPerKm}/km`,
         `ocupación → ${Math.round(fill * 100)}%`,
@@ -248,7 +293,7 @@ export function suggestAutoAssign(
         kg: Math.round(c.kg),
         m3: Math.round(c.m3 * 10) / 10,
         city: c.city,
-        reason: 'Sin capacidad kg/m³ en la flota disponible',
+        reason: 'Sin capacidad o sector permitido en la flota disponible',
       });
       continue;
     }
@@ -342,124 +387,127 @@ export type RouteHistoryEntry = {
   warehouseName: string;
   stops: number;
   delivered: number;
+  incidents: number;
+  pending: number;
   kg: number;
   km: number;
   cost: number;
   etaHours: number;
-  status: 'Completada' | 'Parcial' | 'Incidencia';
+  status: 'Completada' | 'Parcial' | 'En ruta' | 'Incidencia';
+  orderIds: string[];
 };
 
-export function buildRouteHistory(s: AppState): RouteHistoryEntry[] {
-  const wh = s.warehouses[0];
-  const delivered = s.orders.filter((o) => o.status === 'Entregado' && !o.id.startsWith('PED-H'));
-  const demo: RouteHistoryEntry[] = [
-    {
-      id: 'RH-1027-T01',
-      date: '2026-10-27',
-      truckId: 'T01',
-      plate: 'GBA-2041',
-      label: 'Camión 01',
-      city: 'Quito',
-      warehouseId: wh?.id ?? 'WH-QT-01',
-      warehouseName: wh?.name ?? 'Bodega Quito',
-      stops: 4,
-      delivered: 4,
-      kg: 420,
-      km: 62,
-      cost: 52.7,
-      etaHours: 3.33,
-      status: 'Completada',
-    },
-    {
-      id: 'RH-1026-T02',
-      date: '2026-10-26',
-      truckId: 'T02',
-      plate: 'GYE-1188',
-      label: 'Camión 02',
-      city: 'Guayaquil',
-      warehouseId: s.warehouses.find((w) => w.city === 'Guayaquil')?.id ?? wh?.id ?? 'WH-QT-01',
-      warehouseName:
-        s.warehouses.find((w) => w.city === 'Guayaquil')?.name ?? wh?.name ?? 'Bodega Quito',
-      stops: 3,
-      delivered: 2,
-      kg: 380,
-      km: 58,
-      cost: 46.4,
-      etaHours: 4.1,
-      status: 'Parcial',
-    },
-    {
-      id: 'RH-1025-T03',
-      date: '2026-10-25',
-      truckId: 'T03',
-      plate: 'CUE-3301',
-      label: 'Camión 03',
-      city: 'Cuenca',
-      warehouseId: s.warehouses.find((w) => w.city === 'Cuenca')?.id ?? wh?.id ?? 'WH-QT-01',
-      warehouseName: s.warehouses.find((w) => w.city === 'Cuenca')?.name ?? wh?.name ?? 'Bodega Quito',
-      stops: 2,
-      delivered: 1,
-      kg: 510,
-      km: 48,
-      cost: 36.0,
-      etaHours: 3.5,
-      status: 'Incidencia',
-    },
-    {
-      id: 'RH-1024-T01',
-      date: '2026-10-24',
-      truckId: 'T01',
-      plate: 'GBA-2041',
-      label: 'Camión 01',
-      city: 'Quito',
-      warehouseId: wh?.id ?? 'WH-QT-01',
-      warehouseName: wh?.name ?? 'Bodega Quito',
-      stops: 5,
-      delivered: 5,
-      kg: 610,
-      km: 71,
-      cost: 60.35,
-      etaHours: 3.8,
-      status: 'Completada',
-    },
-    {
-      id: 'RH-1023-T04',
-      date: '2026-10-23',
-      truckId: 'T04',
-      plate: 'AMB-5520',
-      label: 'Camión 04',
-      city: 'Santo Domingo',
-      warehouseId: wh?.id ?? 'WH-QT-01',
-      warehouseName: wh?.name ?? 'Bodega Quito',
-      stops: 3,
-      delivered: 3,
-      kg: 290,
-      km: 54,
-      cost: 42.12,
-      etaHours: 3.2,
-      status: 'Completada',
-    },
-  ];
+/** Fecha operativa YYYY-MM-DD (local). */
+export function opsDate(iso?: string) {
+  const d = iso ? new Date(iso) : new Date();
+  if (Number.isNaN(d.getTime())) return new Date().toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
-  if (delivered.length) {
-    demo.unshift({
-      id: `RH-live-${delivered[0].id}`,
-      date: delivered[0].date,
-      truckId: 'T01',
-      plate: delivered[0].vehicle || 'GBA-2041',
-      label: 'Camión 01',
-      city: cityOf(s, delivered[0]),
-      warehouseId: wh?.id ?? 'WH-QT-01',
-      warehouseName: wh?.name ?? 'Bodega Quito',
-      stops: delivered.length,
-      delivered: delivered.length,
-      kg: Math.round(delivered.reduce((n, o) => n + orderWeight(s, o), 0)),
-      km: 40,
-      cost: 34,
-      etaHours: 2.5,
-      status: 'Completada',
+export function orderOpsDate(o: Order) {
+  if (o.deliveredAt) return opsDate(o.deliveredAt);
+  return o.date?.slice(0, 10) || opsDate();
+}
+
+/** Pedidos entregados hoy para una placa. */
+export function deliveredToday(s: AppState, plate: string, day = opsDate()) {
+  return s.orders.filter(
+    (o) =>
+      o.status === 'Entregado' &&
+      o.vehicle === plate &&
+      !o.id.startsWith('PED-H') &&
+      orderOpsDate(o) === day,
+  );
+}
+
+function resolveTruck(fleet: Truck[], plate: string, sample?: Order, s?: AppState): Truck {
+  const found = fleet.find((t) => t.plate === plate);
+  if (found) return found;
+  const city = sample && s ? cityOf(s, sample) : 'Quito';
+  return {
+    id: `plate-${plate}`,
+    plate,
+    label: plate,
+    city,
+    driver: '—',
+    maxKg: 3500,
+    maxM3: 14,
+    costPerKm: 0.8,
+    etaHours: 3,
+    routeKm: 40,
+    baseOccupancy: 0,
+  };
+}
+
+/**
+ * Historial real: agrupa pedidos despachados (en ruta / incidencia / entregado)
+ * por placa + fecha operativa.
+ */
+export function buildRouteHistory(s: AppState, fleet: Truck[] = FLEET): RouteHistoryEntry[] {
+  const wh = s.warehouses[0];
+  const relevant = s.orders.filter(
+    (o) =>
+      !o.id.startsWith('PED-H') &&
+      Boolean(o.vehicle) &&
+      ['Entregado', 'En ruta', 'Incidencia'].includes(o.status),
+  );
+
+  type Bucket = { plate: string; date: string; orders: Order[] };
+  const buckets = new Map<string, Bucket>();
+  for (const o of relevant) {
+    const plate = o.vehicle!;
+    const date = orderOpsDate(o);
+    const key = `${plate}|${date}`;
+    const cur = buckets.get(key) ?? { plate, date, orders: [] };
+    cur.orders.push(o);
+    buckets.set(key, cur);
+  }
+
+  const entries: RouteHistoryEntry[] = [];
+  for (const b of buckets.values()) {
+    const truck = resolveTruck(fleet, b.plate, b.orders[0], s);
+    const warehouse =
+      s.warehouses.find((w) => w.city === truck.city) ??
+      s.warehouses.find((w) => w.id === s.settings.activeWarehouseId) ??
+      wh;
+    const delivered = b.orders.filter((o) => o.status === 'Entregado').length;
+    const incidents = b.orders.filter((o) => o.status === 'Incidencia').length;
+    const pending = b.orders.filter((o) => o.status === 'En ruta').length;
+    const stops = b.orders.length;
+    const kg = Math.round(b.orders.reduce((n, o) => n + orderWeight(s, o), 0));
+    const km = Math.max(8, Math.round(truck.routeKm * (stops / Math.max(3, stops))));
+    const cost = Math.round(km * truck.costPerKm * 100) / 100;
+    const etaHours = Math.round(truck.etaHours * (0.55 + stops * 0.12) * 100) / 100;
+    let status: RouteHistoryEntry['status'] = 'Parcial';
+    if (pending > 0) status = 'En ruta';
+    else if (incidents > 0 && delivered + incidents === stops) status = 'Incidencia';
+    else if (delivered === stops) status = 'Completada';
+    else if (incidents > 0) status = 'Incidencia';
+
+    entries.push({
+      id: `RH-${b.date.replace(/-/g, '')}-${b.plate}`,
+      date: b.date,
+      truckId: truck.id,
+      plate: truck.plate,
+      label: truck.label,
+      city: truck.city,
+      warehouseId: warehouse?.id ?? 'WH-QT-01',
+      warehouseName: warehouse?.name ?? 'Bodega',
+      stops,
+      delivered,
+      incidents,
+      pending,
+      kg,
+      km,
+      cost,
+      etaHours,
+      status,
+      orderIds: b.orders.map((o) => o.id).sort(),
     });
   }
 
-  return demo.sort((a, b) => b.date.localeCompare(a.date));
+  return entries.sort((a, b) => b.date.localeCompare(a.date) || a.plate.localeCompare(b.plate));
 }

@@ -9,6 +9,8 @@ export type FleetTruck = {
   maxKg: number;
   maxM3: number;
   costPerKm: number;
+  /** Vacío = sin restricción de sectores */
+  allowedSectors?: string[];
 };
 
 export type AutoAssignItem = {
@@ -170,6 +172,17 @@ function buildContext(
   return { readyOrders, trucks };
 }
 
+function allowsSector(t: FleetTruck, sector: string) {
+  const allowed = t.allowedSectors ?? [];
+  if (!allowed.length) return true;
+  const target = sector.trim().toLowerCase();
+  if (!target) return true;
+  return allowed.some((s) => {
+    const a = s.toLowerCase();
+    return a === target || a.includes(target) || target.includes(a);
+  });
+}
+
 function heuristicAssign(ready: ReadyOrder[], trucks: TruckContext[]): AutoAssignPlan {
   const used = new Map(trucks.map((t) => [t.id, { kg: t.usedKg, m3: t.usedM3, count: t.stopsOnRoute }]));
   const sorted = [...ready].sort((a, b) => b.kg - a.kg || b.m3 - a.m3);
@@ -184,14 +197,17 @@ function heuristicAssign(ready: ReadyOrder[], trucks: TruckContext[]): AutoAssig
       const nextKg = cur.kg + o.kg;
       const nextM3 = cur.m3 + o.m3;
       if (nextKg > t.maxKg + 0.01 || nextM3 > t.maxM3 + 0.01) continue;
+      if (!allowsSector(t, o.sector)) continue;
       const fill = Math.max(nextKg / t.maxKg, nextM3 / t.maxM3);
       const fillScore = fill <= 0.85 ? fill * 40 : fill <= 0.95 ? 28 : 10;
       const cityScore = t.city === o.city ? 100 : 0;
+      const sectorBonus = t.allowedSectors?.length ? 35 : 0;
       const costScore = (1.2 - t.costPerKm) * 25;
       const balanceScore = Math.max(0, 18 - cur.count * 2);
-      const score = cityScore + fillScore + costScore + balanceScore;
+      const score = cityScore + fillScore + costScore + balanceScore + sectorBonus;
       const reason = [
         cityScore ? `misma ciudad (${t.city})` : 'capacidad libre',
+        t.allowedSectors?.length ? `sector ${o.sector}` : 'sin regla de sector',
         `${o.kg} kg / ${o.m3} m³ caben`,
         `costo $${t.costPerKm}/km`,
         `ocupación → ${Math.round(fill * 100)}%`,
@@ -204,7 +220,7 @@ function heuristicAssign(ready: ReadyOrder[], trucks: TruckContext[]): AutoAssig
         kg: Math.round(o.kg),
         m3: o.m3,
         city: o.city,
-        reason: 'Sin capacidad kg/m³ en la flota disponible',
+        reason: 'Sin capacidad o sector permitido en la flota disponible',
       });
       continue;
     }
@@ -320,8 +336,9 @@ async function callOpenAi(ready: ReadyOrder[], trucks: TruckContext[]): Promise<
 Asigna pedidos LISTOS a camiones respetando:
 1) Capacidad kg y m³ (no superar freeKg/freeM3 + used).
 2) Preferir misma ciudad del camión.
-3) Equilibrar carga y minimizar costo/km cuando haya empate.
-4) Cada pedido a un solo camión.
+3) Si el camión tiene allowedSectors (lista no vacía), SOLO puede recibir pedidos cuyo sector esté en esa lista. Si allowedSectors está vacío o ausente, no hay restricción de sector.
+4) Equilibrar carga y minimizar costo/km cuando haya empate.
+5) Cada pedido a un solo camión.
 Responde SOLO JSON válido con esta forma:
 {"assignments":[{"orderId":"PED-xxx","truckId":"T01","reason":"..."}],"unassigned":[{"orderId":"PED-yyy","reason":"..."}],"summary":"..."}`;
 

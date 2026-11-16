@@ -226,6 +226,7 @@ export function seed(): AppState {
       type: 'Hotelería',
       city: 'Quito',
       sector: 'Centro Histórico',
+      creditLimit: 5000,
     },
     {
       id: 'CL002',
@@ -236,6 +237,7 @@ export function seed(): AppState {
       type: 'Salud',
       city: 'Quito',
       sector: 'La Mariscal',
+      creditLimit: 8000,
     },
     {
       id: 'CL003',
@@ -246,6 +248,7 @@ export function seed(): AppState {
       type: 'Corporativo',
       city: 'Quito',
       sector: 'Cumbayá',
+      creditLimit: 15000,
     },
     {
       id: 'CL004',
@@ -256,6 +259,7 @@ export function seed(): AppState {
       type: 'Restauración',
       city: 'Quito',
       sector: 'Tumbaco',
+      creditLimit: 2500,
     },
     {
       id: 'CL005',
@@ -266,6 +270,7 @@ export function seed(): AppState {
       type: 'Salud',
       city: 'Quito',
       sector: 'Carcelén',
+      creditLimit: 12000,
     },
     {
       id: 'CL006',
@@ -276,6 +281,7 @@ export function seed(): AppState {
       type: 'Institucional',
       city: 'Quito',
       sector: 'La Floresta',
+      creditLimit: 6000,
     },
     {
       id: 'CL007',
@@ -286,6 +292,7 @@ export function seed(): AppState {
       type: 'Hotelería',
       city: 'Guayaquil',
       sector: 'Centro',
+      creditLimit: 7000,
     },
     {
       id: 'CL008',
@@ -296,6 +303,7 @@ export function seed(): AppState {
       type: 'Salud',
       city: 'Guayaquil',
       sector: 'Urdesa',
+      creditLimit: 9000,
     },
     {
       id: 'CL009',
@@ -306,6 +314,7 @@ export function seed(): AppState {
       type: 'Retail',
       city: 'Guayaquil',
       sector: 'Norte',
+      creditLimit: 10000,
     },
     {
       id: 'CL010',
@@ -316,6 +325,7 @@ export function seed(): AppState {
       type: 'Hotelería',
       city: 'Cuenca',
       sector: 'El Centro',
+      creditLimit: 4500,
     },
     {
       id: 'CL011',
@@ -326,13 +336,77 @@ export function seed(): AppState {
       type: 'Institucional',
       city: 'Cuenca',
       sector: 'Yanuncay',
+      creditLimit: 5500,
+    },
+    {
+      id: 'CL012',
+      name: 'Hospital Santo Domingo',
+      contact: 'Paola Mena',
+      address: 'Av. Quito y Río Baba',
+      email: 'compras@hsd.example',
+      type: 'Salud',
+      city: 'Santo Domingo',
+      sector: 'Centro',
+      creditLimit: 8000,
     },
   ];
 
+  /**
+   * Demo Distribución (limpia):
+   * - Pendientes (Por preparar): 4
+   * - Listos (Preparado sin camión): 6
+   * - En ruta: 6 (repartidos en flota)
+   */
   const orders: AppState['orders'] = [
-    // Quito · Camión 01 (GBA-2041)
+    // —— Pendientes (bodega aún no preparó) ——
     {
       id: 'PED-001',
+      clientId: 'CL002',
+      status: 'Por preparar',
+      date: '2026-10-27',
+      lines: [
+        { productId: 'P008', qty: 10 },
+        { productId: 'P045', qty: 8 },
+      ],
+      priority: 'Alta',
+    },
+    {
+      id: 'PED-002',
+      clientId: 'CL006',
+      status: 'Por preparar',
+      date: '2026-10-27',
+      lines: [
+        { productId: 'P012', qty: 14 },
+        { productId: 'P025', qty: 10 },
+      ],
+      priority: 'Normal',
+    },
+    {
+      id: 'PED-003',
+      clientId: 'CL008',
+      status: 'Por preparar',
+      date: '2026-10-27',
+      lines: [
+        { productId: 'P052', qty: 12 },
+        { productId: 'P008', qty: 6 },
+      ],
+      priority: 'Normal',
+    },
+    {
+      id: 'PED-004',
+      clientId: 'CL011',
+      status: 'Por preparar',
+      date: '2026-10-27',
+      lines: [
+        { productId: 'P061', qty: 8 },
+        { productId: 'P078', qty: 20 },
+      ],
+      priority: 'Normal',
+    },
+
+    // —— Listos (listos para arrastrar / IA autoasignar) ——
+    {
+      id: 'PED-005',
       clientId: 'CL001',
       status: 'Preparado',
       date: '2026-10-27',
@@ -347,27 +421,18 @@ export function seed(): AppState {
       ],
     },
     {
-      id: 'PED-002',
-      clientId: 'CL002',
-      status: 'Preparado',
-      date: '2026-10-27',
-      lines: [{ productId: 'P008', qty: 10 }],
-      priority: 'Normal',
-      picks: [{ productId: 'P008', qty: 10, batch: 'L-DES-01', loc: 'B-01-01-D' }],
-    },
-    {
-      id: 'PED-003',
+      id: 'PED-006',
       clientId: 'CL003',
-      status: 'En ruta',
+      status: 'Preparado',
       date: '2026-10-27',
       lines: [{ productId: 'P012', qty: 16 }],
       priority: 'Normal',
-      vehicle: 'GBA-2041',
+      picks: [{ productId: 'P012', qty: 16, batch: 'L-PAP-01', loc: 'D-01-01-D' }],
     },
     {
-      id: 'PED-004',
+      id: 'PED-007',
       clientId: 'CL004',
-      status: 'En ruta',
+      status: 'Preparado',
       date: '2026-10-27',
       lines: [
         { productId: 'P005', qty: 4 },
@@ -375,10 +440,14 @@ export function seed(): AppState {
         { productId: 'P032', qty: 5 },
       ],
       priority: 'Normal',
-      vehicle: 'GBA-2041',
+      picks: [
+        { productId: 'P005', qty: 4, batch: 'L-DES-01', loc: 'B-01-01-D' },
+        { productId: 'P018', qty: 6, batch: 'L-CLO-01', loc: 'C-01-01-D' },
+        { productId: 'P032', qty: 5, batch: 'L-PIS-01', loc: 'A-01-02-D' },
+      ],
     },
     {
-      id: 'PED-005',
+      id: 'PED-008',
       clientId: 'CL005',
       status: 'Preparado',
       date: '2026-10-27',
@@ -392,101 +461,110 @@ export function seed(): AppState {
         { productId: 'P052', qty: 8, batch: 'L-GUA-01', loc: 'B-02-01-D' },
       ],
     },
-    // Guayaquil · Camión 02 (GYE-1188)
     {
-      id: 'PED-006',
+      id: 'PED-009',
+      clientId: 'CL007',
+      status: 'Preparado',
+      date: '2026-10-27',
+      lines: [
+        { productId: 'P001', qty: 18 },
+        { productId: 'P015', qty: 8 },
+      ],
+      priority: 'Alta',
+      picks: [
+        { productId: 'P001', qty: 18, batch: 'L-MUL-02', loc: 'A-02-01-D' },
+        { productId: 'P015', qty: 8, batch: 'L-VID-01', loc: 'A-01-01-D' },
+      ],
+    },
+    {
+      id: 'PED-010',
+      clientId: 'CL009',
+      status: 'Preparado',
+      date: '2026-10-27',
+      lines: [
+        { productId: 'P045', qty: 16 },
+        { productId: 'P078', qty: 12 },
+      ],
+      priority: 'Normal',
+      picks: [
+        { productId: 'P045', qty: 16, batch: 'L-JAB-01', loc: 'B-01-02-D' },
+        { productId: 'P078', qty: 12, batch: 'L-FUN-01', loc: 'D-02-01-D' },
+      ],
+    },
+
+    // —— En ruta (ya despachados) ——
+    {
+      id: 'PED-011',
+      clientId: 'CL001',
+      status: 'En ruta',
+      date: '2026-10-27',
+      lines: [
+        { productId: 'P001', qty: 10 },
+        { productId: 'P025', qty: 6 },
+      ],
+      priority: 'Normal',
+      vehicle: 'GBA-2041',
+    },
+    {
+      id: 'PED-012',
+      clientId: 'CL003',
+      status: 'En ruta',
+      date: '2026-10-27',
+      lines: [{ productId: 'P032', qty: 8 }],
+      priority: 'Normal',
+      vehicle: 'GBA-2041',
+    },
+    {
+      id: 'PED-013',
       clientId: 'CL007',
       status: 'En ruta',
       date: '2026-10-27',
       lines: [
-        { productId: 'P001', qty: 20 },
-        { productId: 'P015', qty: 8 },
+        { productId: 'P018', qty: 10 },
+        { productId: 'P061', qty: 6 },
       ],
       priority: 'Alta',
       vehicle: 'GYE-1188',
     },
     {
-      id: 'PED-007',
+      id: 'PED-014',
       clientId: 'CL008',
-      status: 'Preparado',
-      date: '2026-10-27',
-      lines: [
-        { productId: 'P045', qty: 18 },
-        { productId: 'P052', qty: 12 },
-      ],
-      priority: 'Normal',
-      picks: [
-        { productId: 'P045', qty: 18, batch: 'L-JAB-01', loc: 'B-01-02-D' },
-        { productId: 'P052', qty: 12, batch: 'L-GUA-02', loc: 'B-02-01-D' },
-      ],
-    },
-    {
-      id: 'PED-008',
-      clientId: 'CL009',
       status: 'En ruta',
       date: '2026-10-27',
       lines: [
-        { productId: 'P061', qty: 10 },
-        { productId: 'P078', qty: 15 },
-        { productId: 'P018', qty: 8 },
+        { productId: 'P008', qty: 12 },
+        { productId: 'P052', qty: 10 },
       ],
       priority: 'Normal',
       vehicle: 'GYE-1188',
     },
-    // Cuenca · Camión 03 (CUE-3301) — casi lleno
     {
-      id: 'PED-009',
+      id: 'PED-015',
       clientId: 'CL010',
       status: 'En ruta',
       date: '2026-10-27',
       lines: [
-        { productId: 'P012', qty: 50 },
-        { productId: 'P025', qty: 40 },
-        { productId: 'P078', qty: 20 },
+        { productId: 'P012', qty: 20 },
+        { productId: 'P025', qty: 15 },
       ],
-      priority: 'Alta',
+      priority: 'Normal',
       vehicle: 'CUE-3301',
     },
     {
-      id: 'PED-010',
-      clientId: 'CL011',
+      id: 'PED-016',
+      clientId: 'CL012',
       status: 'En ruta',
       date: '2026-10-27',
       lines: [
-        { productId: 'P005', qty: 30 },
-        { productId: 'P061', qty: 25 },
-        { productId: 'P018', qty: 20 },
+        { productId: 'P008', qty: 10 },
+        { productId: 'P045', qty: 8 },
+        { productId: 'P052', qty: 6 },
       ],
-      priority: 'Normal',
-      vehicle: 'CUE-3301',
+      priority: 'Alta',
+      vehicle: 'AMB-5520',
     },
-    // Pendientes sin camión
-    {
-      id: 'PED-011',
-      clientId: 'CL006',
-      status: 'Preparado',
-      date: '2026-10-27',
-      lines: [
-        { productId: 'P012', qty: 12 },
-        { productId: 'P025', qty: 10 },
-      ],
-      priority: 'Normal',
-      picks: [
-        { productId: 'P012', qty: 12, batch: 'L-PAP-01', loc: 'D-01-01-D' },
-        { productId: 'P025', qty: 10, batch: 'L-TOA-01', loc: 'D-01-02-D' },
-      ],
-    },
-    {
-      id: 'PED-012',
-      clientId: 'CL002',
-      status: 'Por preparar',
-      date: '2026-10-27',
-      lines: [
-        { productId: 'P008', qty: 8 },
-        { productId: 'P045', qty: 6 },
-      ],
-      priority: 'Normal',
-    },
+
+    // Entregado reciente (historial / Mi ruta)
     {
       id: 'PED-000',
       clientId: 'CL001',
@@ -497,6 +575,7 @@ export function seed(): AppState {
         { productId: 'P025', qty: 6 },
       ],
       priority: 'Normal',
+      vehicle: 'GBA-2041',
       deliveredAt: '2026-10-26T18:10:00Z',
       deliveredTo: 'María Torres',
     },

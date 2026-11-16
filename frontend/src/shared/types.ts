@@ -79,6 +79,8 @@ export type Client = {
   type: string;
   city?: string;
   sector?: string;
+  /** Límite de crédito autorizado (USD) */
+  creditLimit?: number;
 };
 
 export type OrderLine = { productId: string; qty: number };
@@ -94,6 +96,7 @@ export type Order = {
   vehicle?: string;
   picks?: OrderPick[];
   incident?: string;
+  notes?: string;
   deliveredTo?: string;
   deliveryNotes?: string;
   deliveredAt?: string;

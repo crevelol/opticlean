@@ -1,8 +1,14 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { api } from '../api';
 import { Icon } from '../components/Icon';
 import { clientName, statusTone } from '../lib/inventory';
 import type { AppState, Order, PickStep } from '../types';
+
+type OrdersTab = 'pendientes' | 'preparados' | 'en_ruta';
+
+function isActiveOrder(o: Order) {
+  return !o.id.startsWith('PED-H');
+}
 
 export function OrdersPage({
   state,
@@ -15,10 +21,27 @@ export function OrdersPage({
   const [steps, setSteps] = useState<PickStep[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const orders = [...state.orders].sort((a, b) => {
-    const rank = (s: string) => (s === 'Por preparar' ? 0 : s === 'Preparado' ? 1 : 2);
-    return rank(a.status) - rank(b.status) || b.date.localeCompare(a.date);
-  });
+  const [tab, setTab] = useState<OrdersTab>('pendientes');
+
+  const counts = useMemo(() => {
+    const active = state.orders.filter(isActiveOrder);
+    return {
+      pendientes: active.filter((o) => o.status === 'Por preparar').length,
+      preparados: active.filter((o) => o.status === 'Preparado').length,
+      enRuta: active.filter((o) => o.status === 'En ruta' || o.status === 'Incidencia').length,
+    };
+  }, [state.orders]);
+
+  const orders = useMemo(() => {
+    return state.orders
+      .filter((o) => {
+        if (!isActiveOrder(o)) return false;
+        if (tab === 'pendientes') return o.status === 'Por preparar';
+        if (tab === 'preparados') return o.status === 'Preparado';
+        return o.status === 'En ruta' || o.status === 'Incidencia';
+      })
+      .sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
+  }, [state.orders, tab]);
 
   const openOrder = async (order: Order) => {
     setSelected(order);
@@ -41,6 +64,7 @@ export function OrdersPage({
       await onRefresh();
       setSelected(null);
       setSteps([]);
+      setTab('preparados');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo preparar');
     } finally {
@@ -107,6 +131,13 @@ export function OrdersPage({
     );
   }
 
+  const emptyCopy =
+    tab === 'pendientes'
+      ? 'No hay pedidos por preparar.'
+      : tab === 'preparados'
+        ? 'No hay pedidos preparados.'
+        : 'No hay pedidos en ruta.';
+
   return (
     <div className="page">
       <header className="page-head">
@@ -114,6 +145,36 @@ export function OrdersPage({
         <h1>Pedidos</h1>
         <p>Prepara picking con la ruta sugerida por ubicación.</p>
       </header>
+
+      <div className="dsp-tabs" role="tablist" aria-label="Estado de pedidos">
+        <button
+          type="button"
+          role="tab"
+          className={tab === 'pendientes' ? 'is-active' : ''}
+          aria-selected={tab === 'pendientes'}
+          onClick={() => setTab('pendientes')}
+        >
+          Por preparar <span>{counts.pendientes}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          className={tab === 'preparados' ? 'is-active' : ''}
+          aria-selected={tab === 'preparados'}
+          onClick={() => setTab('preparados')}
+        >
+          Preparados <span>{counts.preparados}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          className={tab === 'en_ruta' ? 'is-active' : ''}
+          aria-selected={tab === 'en_ruta'}
+          onClick={() => setTab('en_ruta')}
+        >
+          En ruta <span>{counts.enRuta}</span>
+        </button>
+      </div>
 
       <section className="panel">
         <ul className="data-list">
@@ -131,7 +192,7 @@ export function OrdersPage({
             </li>
           ))}
         </ul>
-        {!orders.length ? <p className="empty-copy">No hay pedidos.</p> : null}
+        {!orders.length ? <p className="empty-copy">{emptyCopy}</p> : null}
       </section>
     </div>
   );

@@ -3,15 +3,17 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
 import { activeWarehouseId, available, dateShort, product, qtyAt, stock } from '../../shared/lib/inventory';
-import { faceLabel, normalizeLayout } from '../../shared/lib/warehouseLayout';
+import { buildWarehouseGeometry, faceLabel, normalizeLayout } from '../../shared/lib/warehouseLayout';
 import { Btn, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
+import { Modal } from '../../shared/components/Modal';
+import { WarehouseEmbed } from '../warehouse/WarehouseEmbed';
 import type { Location } from '../../shared/types';
 import '../../styles/warehouse-positioning.css';
 import '../../styles/reception.css';
 
 export function ReceptionPage() {
-  const { state, applyResponse, toast } = useAppState();
+  const { state, meta, applyResponse, toast } = useAppState();
   const navigate = useNavigate();
   const location = useLocation();
   const routeState = (location.state as { loc?: string; productId?: string } | null) ?? {};
@@ -28,12 +30,20 @@ export function ReceptionPage() {
   const [lookupError, setLookupError] = useState('');
   const [saving, setSaving] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [mapPick, setMapPick] = useState('');
   const saveLock = useRef(false);
 
-  const selected = suggestions.find((item) => item.id === selectedLoc);
   const warehouseId = state ? activeWarehouseId(state) : '';
   const warehouse = state?.warehouses.find((item) => item.id === warehouseId);
-  const capacity = normalizeLayout(warehouse?.layout).capacityPerCell;
+  const layout = useMemo(() => normalizeLayout(warehouse?.layout), [warehouse?.layout]);
+  const geo = useMemo(() => buildWarehouseGeometry(layout), [layout]);
+  const mapLocations = meta?.locations?.length ? meta.locations : geo.locations;
+  const mapFocus = mapPick || selectedLoc;
+  const selected =
+    suggestions.find((item) => item.id === selectedLoc) ??
+    mapLocations.find((item) => item.id === selectedLoc);
+  const capacity = layout.capacityPerCell;
   const validQty = Number.isInteger(qty) && qty > 0 && qty <= capacity;
   const [suggestionKey, setSuggestionKey] = useState('');
   const currentKey = `${warehouseId}:${productId}:${qty}`;
@@ -363,7 +373,14 @@ export function ReceptionPage() {
                   {saving ? 'Registrando…' : 'Confirmar recepción'}
                 </button>
                 {selected ? (
-                  <Btn variant="ghost" icon="warehouse" onClick={() => navigate('/bodega', { state: { loc: selected.id } })}>
+                  <Btn
+                    variant="ghost"
+                    icon="warehouse"
+                    onClick={() => {
+                      setMapPick(selected.id);
+                      setMapOpen(true);
+                    }}
+                  >
                     Ver ubicación en mapa
                   </Btn>
                 ) : null}
@@ -407,6 +424,49 @@ export function ReceptionPage() {
           </section>
         </aside>
       </form>
+
+      {mapOpen && selected ? (
+        <Modal
+          wide
+          title="Ubicación en bodega"
+          subtitle={`${mapFocus} · ${warehouse?.name ?? 'Bodega activa'}`}
+          onClose={() => setMapOpen(false)}
+          footer={
+            <>
+              <Btn onClick={() => setMapOpen(false)}>Cerrar</Btn>
+              <Btn
+                variant="primary"
+                icon="check"
+                onClick={() => {
+                  if (mapFocus) setSelectedLoc(mapFocus);
+                  setMapOpen(false);
+                }}
+              >
+                Usar esta ubicación
+              </Btn>
+            </>
+          }
+        >
+          <div className="reception-map-modal">
+            <WarehouseEmbed
+              key={mapFocus}
+              compact
+              mapOnly
+              height={500}
+              title={`Bodega · ${mapFocus}`}
+              focusLoc={mapFocus}
+              mode="plan"
+              onSelectLoc={(loc) => setMapPick(loc)}
+            />
+            <p className="reception-map-selected">
+              Seleccionada: <strong>{mapFocus}</strong>
+              {suggestions.some((s) => s.id === mapFocus) ? (
+                <em> · sugerida para este ingreso</em>
+              ) : null}
+            </p>
+          </div>
+        </Modal>
+      ) : null}
     </div>
   );
 }

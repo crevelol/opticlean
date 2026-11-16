@@ -1,0 +1,141 @@
+.ord-page .tabs {
+  margin-bottom: 12px;
+}
+
+.ord-table td small {
+  display: block;
+  margin-top: 3px;
+  color: #6b8298;
+  font-size: 11px;
+}
+
+.ord-detail {
+  display: grid;
+  gap: 14px;
+}
+
+.ord-detail-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.ord-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ord-meta article {
+  padding: 10px 12px;
+  border: 1px solid #e2eaf2;
+  border-radius: 10px;
+  background: #f8fbfe;
+}
+
+.ord-meta span {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.35px;
+  text-transform: uppercase;
+  color: #6b8298;
+  margin-bottom: 3px;
+}
+
+.ord-meta strong {
+  font-size: 12px;
+  color: #17324f;
+  line-height: 1.35;
+}
+
+.ord-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #e2eaf2;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.ord-lines li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 11px 12px;
+  border-bottom: 1px solid #eef3f8;
+  background: #fff;
+}
+
+.ord-lines li:last-child {
+  border-bottom: 0;
+}
+
+.ord-lines strong {
+  display: block;
+  font-size: 13px;
+}
+
+.ord-lines small {
+  display: block;
+  margin-top: 2px;
+  color: #6b8298;
+  font-size: 11px;
+}
+
+.ord-lines em {
+  font-style: normal;
+  font-weight: 700;
+  font-size: 13px;
+  color: #17324f;
+  white-space: nowrap;
+}
+
+.ord-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #17324f;
+  color: #fff;
+}
+
+.ord-total span {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.ord-total strong {
+  font-size: 20px;
+  letter-spacing: -0.4px;
+}
+
+.ord-notes {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff8ef;
+  border: 1px solid #f0d9b8;
+  font-size: 12px;
+  color: #7a5a20;
+  line-height: 1.4;
+}
+
+.ord-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ord-actions .btn {
+  flex: 1;
+  justify-content: center;
+  min-width: 120px;
+}
+
+@media (max-width: 700px) {
+  .ord-meta {
+    grid-template-columns: 1fr;
+  }
+}

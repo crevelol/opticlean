@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
@@ -8,8 +8,9 @@ import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import type { Order } from '../../shared/types';
 import { RouteMap } from './RouteMap';
+import { FleetConfigModal } from './FleetConfigModal';
 import {
-  FLEET,
+  FLEET as DEFAULT_FLEET,
   activeOrders as getActiveOrders,
   cityOf,
   fmtHours,
@@ -21,20 +22,25 @@ import {
   statusTone,
   suggestAutoAssign,
   truckLoad as calcTruckLoad,
+  vehicleAllowsSector,
+  vehicleIconName,
+  vehicleKindLabel,
   type AutoAssignPlan,
+  type Truck,
 } from './fleet';
 import '../../styles/logistics.css';
 
 export function LogisticsPage() {
   const { state, applyResponse, toast } = useAppState();
   const navigate = useNavigate();
+  const [fleet, setFleet] = useState<Truck[]>(DEFAULT_FLEET);
   const [query, setQuery] = useState('');
   const [openCities, setOpenCities] = useState<Record<string, boolean>>({
     Quito: true,
     Guayaquil: true,
     Cuenca: true,
   });
-  const [selectedTruck, setSelectedTruck] = useState('T01');
+  const [selectedTruck, setSelectedTruck] = useState(DEFAULT_FLEET[0]?.id ?? '');
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
   const [listTab, setListTab] = useState<'pendientes' | 'listos' | 'en_ruta'>('listos');
   const [stagedByTruck, setStagedByTruck] = useState<Record<string, string[]>>({});
@@ -50,6 +56,18 @@ export function LogisticsPage() {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiPlan, setAiPlan] = useState<AutoAssignPlan | null>(null);
   const [preparingId, setPreparingId] = useState<string | null>(null);
+  const [fleetConfigOpen, setFleetConfigOpen] = useState(false);
+
+  useEffect(() => {
+    void api
+      .fleet()
+      .then((r) => {
+        if (!r.trucks?.length) return;
+        setFleet(r.trucks);
+        setSelectedTruck((cur) => (r.trucks.some((t) => t.id === cur) ? cur : r.trucks[0].id));
+      })
+      .catch(() => {});
+  }, []);
 
   const activeOrders = useMemo(() => (state ? getActiveOrders(state) : []), [state]);
 
@@ -67,7 +85,7 @@ export function LogisticsPage() {
 
   const deliveryDate = useMemo(
     () =>
-      new Date('2026-10-07T12:00:00').toLocaleDateString('es-EC', {
+      new Date().toLocaleDateString('es-EC', {
         weekday: 'short',
         day: 'numeric',
         month: 'short',
@@ -115,25 +133,25 @@ export function LogisticsPage() {
 
   const detail = detailId ? state.orders.find((o) => o.id === detailId) : null;
   const detailClient = detail ? client(state, detail.clientId) : null;
-  const detailTruck = detail?.vehicle ? FLEET.find((t) => t.plate === detail.vehicle) : null;
+  const detailTruck = detail?.vehicle ? fleet.find((t) => t.plate === detail.vehicle) : null;
 
   const totalVolume = activeOrders.reduce((n, o) => n + orderVolume(state, o), 0);
   const totalWeight = activeOrders.reduce((n, o) => n + orderWeight(state, o), 0);
   const fleetMaxVolume = 120;
   const fleetMaxWeight = 10000;
-  const trucksInUse = FLEET.filter((t) => activeOrders.some((o) => o.vehicle === t.plate));
+  const trucksInUse = fleet.filter((t) => activeOrders.some((o) => o.vehicle === t.plate));
   const avgEta = trucksInUse.length
     ? trucksInUse.reduce((n, t) => n + t.etaHours, 0) / trucksInUse.length
     : 4.5;
 
-  const truck = FLEET.find((t) => t.id === selectedTruck) ?? FLEET[0];
+  const truck = fleet.find((t) => t.id === selectedTruck) ?? fleet[0];
 
   const stagedOrdersOf = (truckId: string) =>
     (stagedByTruck[truckId] ?? [])
       .map((id) => activeOrders.find((o) => o.id === id && o.status === 'Preparado'))
       .filter((o): o is Order => Boolean(o));
 
-  const truckLoad = (t: (typeof FLEET)[number]) =>
+  const truckLoad = (t: (typeof fleet)[number]) =>
     calcTruckLoad(state, t, activeOrders, stagedOrdersOf(t.id));
 
   const selectedLoad = truckLoad(truck);
@@ -151,24 +169,39 @@ export function LogisticsPage() {
   );
 
   const stageToTruck = (truckId: string, orderIds: string[]) => {
+    const truck = fleet.find((t) => t.id === truckId);
     const ids = [...new Set(orderIds)].filter((id) =>
       activeOrders.some((o) => o.id === id && o.status === 'Preparado' && !stagedIds.has(id)),
     );
-    if (!ids.length) return;
+    if (!ids.length || !truck) return;
+    const allowed: string[] = [];
+    const blocked: string[] = [];
+    for (const id of ids) {
+      const o = activeOrders.find((x) => x.id === id);
+      if (!o) continue;
+      if (vehicleAllowsSector(truck, sectorOf(state!, o))) allowed.push(id);
+      else blocked.push(id);
+    }
+    if (blocked.length) {
+      toast(
+        `${blocked.length} pedido(s) fuera de zona de ${truck.label}` +
+          (truck.allowedSectors?.length ? ` (${truck.allowedSectors.join(', ')})` : ''),
+      );
+    }
+    if (!allowed.length) return;
     setStagedByTruck((prev) => {
       const next: Record<string, string[]> = {};
       for (const [tid, list] of Object.entries(prev)) {
-        next[tid] = list.filter((id) => !ids.includes(id));
+        next[tid] = list.filter((id) => !allowed.includes(id));
       }
-      next[truckId] = [...new Set([...(next[truckId] ?? []), ...ids])];
+      next[truckId] = [...new Set([...(next[truckId] ?? []), ...allowed])];
       return next;
     });
-    setSelectedOrders((prev) => prev.filter((id) => !ids.includes(id)));
+    setSelectedOrders((prev) => prev.filter((id) => !allowed.includes(id)));
     setSelectedTruck(truckId);
     setDraggingId(null);
     setDropTarget(null);
-    const name = FLEET.find((t) => t.id === truckId)?.label ?? truckId;
-    toast(`${ids.length} pedido(s) cargado(s) en ${name}. Revisa Pedidos o Enviar camión.`);
+    toast(`${allowed.length} pedido(s) cargado(s) en ${truck.label}. Revisa Pedidos o Enviar.`);
   };
 
   const unstageOrder = (truckId: string, orderId: string) => {
@@ -197,7 +230,7 @@ export function LogisticsPage() {
   };
 
   const sendTruck = async (truckId: string) => {
-    const t = FLEET.find((x) => x.id === truckId);
+    const t = fleet.find((x) => x.id === truckId);
     const ids = stagedByTruck[truckId] ?? [];
     if (!t || !ids.length || assigning) return;
     setAssigning(true);
@@ -231,7 +264,7 @@ export function LogisticsPage() {
         const res = await api.logisticsAutoAssign({
           orderIds: ready.map((o) => o.id),
           stagedByTruck,
-          fleet: FLEET.map((t) => ({
+          fleet: fleet.map((t) => ({
             id: t.id,
             plate: t.plate,
             label: t.label,
@@ -240,11 +273,12 @@ export function LogisticsPage() {
             maxKg: t.maxKg,
             maxM3: t.maxM3,
             costPerKm: t.costPerKm,
+            allowedSectors: t.allowedSectors ?? [],
           })),
         });
         plan = res.plan;
       } catch {
-        plan = suggestAutoAssign(state, ready, stagedByTruck);
+        plan = suggestAutoAssign(state, ready, stagedByTruck, fleet);
         plan.source = 'heuristic';
         plan.summary = `Sin respuesta de IA · ${plan.summary}`;
       }
@@ -555,15 +589,19 @@ export function LogisticsPage() {
             <div className="log-trucks-head">
               <h3>
                 <Icon name="truck" />
-                Camiones disponibles
+                Vehículos disponibles
               </h3>
-              <button type="button" className="log-filter-btn">
-                <Icon name="search" />
-                Filtrar
+              <button
+                type="button"
+                className="log-filter-btn"
+                onClick={() => setFleetConfigOpen(true)}
+              >
+                <Icon name="settings" />
+                Configurar flota
               </button>
             </div>
             <ul className="log-truck-list">
-              {FLEET.map((t) => {
+              {fleet.map((t) => {
                 const load = truckLoad(t);
                 const active = selectedTruck === t.id;
                 const tone = load.status === 'full' ? 'red' : load.status === 'partial' ? 'amber' : 'green';
@@ -604,10 +642,10 @@ export function LogisticsPage() {
                       <div className="log-truck-top">
                         <div className="log-truck-title">
                           <span className={`log-truck-icon log-truck-icon-${tone}`}>
-                            <Icon name="truck" />
+                            <Icon name={vehicleIconName(t)} />
                           </span>
                           <strong>
-                            {t.label} - {t.city}
+                            {t.label} · {vehicleKindLabel(t)} - {t.city}
                           </strong>
                         </div>
                         <span className={`log-truck-badge ${load.status}`}>
@@ -630,6 +668,12 @@ export function LogisticsPage() {
                           <strong>${t.costPerKm.toFixed(2)}</strong>
                         </div>
                       </div>
+                      <p className="log-truck-zones">
+                        <strong>Zonas:</strong>{' '}
+                        {t.allowedSectors?.length
+                          ? t.allowedSectors.join(', ')
+                          : 'Sin restricción de sector'}
+                      </p>
 
                       <div className={`log-truck-bar log-bar is-${tone}`}>
                         <span style={{ width: `${Math.max(load.pct, load.kg > 0 ? 2 : 0)}%` }} />
@@ -726,7 +770,7 @@ export function LogisticsPage() {
               </div>
             </div>
             <ul className="log-route-list">
-              {FLEET.map((t, index) => {
+              {fleet.map((t, index) => {
                 const load = truckLoad(t);
                 const tone = load.status === 'full' ? 'red' : load.status === 'partial' ? 'amber' : 'green';
                 const open = expandedRoute === t.id;
@@ -745,7 +789,7 @@ export function LogisticsPage() {
                       <span className={`log-route-num log-route-num-${tone}`}>{index + 1}</span>
                       <span className="log-route-copy">
                         <strong>
-                          {t.label} - {t.city}
+                          {t.label} · {vehicleKindLabel(t)} - {t.city}
                         </strong>
                         <small>
                           {fmtHours(t.etaHours)} | {moneyFmt(t.routeKm * t.costPerKm)}
@@ -965,7 +1009,7 @@ export function LogisticsPage() {
       ) : null}
 
       {pedidosTruckId ? (() => {
-        const pt = FLEET.find((t) => t.id === pedidosTruckId) ?? truck;
+        const pt = fleet.find((t) => t.id === pedidosTruckId) ?? truck;
         const staged = stagedOrdersOf(pt.id);
         const onRoute = activeOrders.filter((o) => o.vehicle === pt.plate);
         return (
@@ -1121,7 +1165,7 @@ export function LogisticsPage() {
               <strong>Enviar camión</strong> para despachar.
             </p>
             {Object.entries(aiPlan.byTruck).map(([truckId, ids]) => {
-              const t = FLEET.find((x) => x.id === truckId);
+              const t = fleet.find((x) => x.id === truckId);
               const items = aiPlan.assignments.filter((a) => a.truckId === truckId);
               return (
                 <div key={truckId} className="log-ai-truck">
@@ -1164,6 +1208,18 @@ export function LogisticsPage() {
             ) : null}
           </div>
         </Modal>
+      ) : null}
+
+      {fleetConfigOpen ? (
+        <FleetConfigModal
+          onClose={() => setFleetConfigOpen(false)}
+          onFleetChange={(trucks) => {
+            setFleet(trucks);
+            setSelectedTruck((cur) =>
+              trucks.some((t) => t.id === cur) ? cur : trucks[0]?.id ?? '',
+            );
+          }}
+        />
       ) : null}
     </div>
   );

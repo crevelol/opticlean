@@ -88,7 +88,8 @@ function setFloor(id){
  warehouse();
 }
 const camScene=()=>({floor:activeFloor==='*'?'*':curFloor().id,section:openSection,selectedLoc,zoom});
-function focusLocation(id){selectedLoc=id;const f=floorOfRack(state.layout,rackOf(id));if(f)activeFloor=f.id;const r=f?.racks.find(r=>r.id===rackOf(id));openSection=(r&&sectionOf(f,r)?.id)||null;mapMode='3d'}
+function focusLocation(id,mode){selectedLoc=id;const f=floorOfRack(state.layout,rackOf(id));if(f)activeFloor=f.id;const r=f?.racks.find(r=>r.id===rackOf(id));openSection=(r&&sectionOf(f,r)?.id)||null;mapMode=mode||'3d'}
+function notifyParent(type,payload={}){if(window.parent===window)return;try{parent.postMessage({source:'opticlean-control-embed',type,...payload},'*')}catch{}}
 function ensureVisible(){
  const f=floorOfRack(state.layout,rackOf(selectedLoc));if(!f)return;let changed=false;
  if(activeFloor!=='*'&&f.id!==curFloor().id){activeFloor=f.id;openSection=null;changed=true}
@@ -223,7 +224,7 @@ document.addEventListener('click',e=>{const el=e.target.closest('[data-action]')
  if(a==='floor-pick'){setFloor(el.dataset.floor);return}
  if(a==='back-plan'){const snap=camScene();cameraTransition({box:'#warehouse-map',dir:'out',frame:t=>warehouseSVG({...snap,blend:t}),render:()=>{mapMode='plan';if(activeFloor==='*')activeFloor=state.layout.floors[0].id;warehouse()}});return}
  if(a==='open-section'){const same=mapMode==='3d'&&(el.dataset.section||null)===openSection&&!el.dataset.floor,origin=mapMode==='plan'?originOf('#warehouse-map',el):null;const run=()=>{if(el.dataset.floor)activeFloor=el.dataset.floor;openSection=el.dataset.section||null;if(el.dataset.rack){const rk=el.dataset.rack;if(rackOf(selectedLoc)!==rk)selectedLoc=state.lots.find(l=>rackOf(l.loc)===rk)?.loc||locations.find(l=>l.rack===rk)?.id||selectedLoc}mapMode='3d';warehouse()};same?run():mapMode==='plan'?cameraTransition({box:'#warehouse-map',dir:'in',frame:t=>warehouseSVG({...camScene(),blend:t}),render:run}):animateSwitch('#warehouse-map','in',origin,run);return}
- if(a==='select-location'){selectedLoc=el.dataset.loc;refreshMap();return}
+ if(a==='select-location'){selectedLoc=el.dataset.loc;refreshMap();notifyParent('select-location',{loc:selectedLoc});return}
  if(a==='select-rack'){const rack=el.dataset.rack;selectedLoc=state.lots.find(l=>rackOf(l.loc)===rack)?.loc||locations.find(l=>l.rack===rack)?.id||selectedLoc;const run=()=>{mapMode='front';warehouse()};mapMode==='front'?run():animateSwitch('#warehouse-map','in',originOf('#warehouse-map',el),run);return}
  if(a==='map-reset'){zoom=1;level='all';warehouse();return}
  if(a==='zoom-in'||a==='zoom-out'){if(mapMode!=='3d'){toast('El zoom está disponible en la vista 3D.');return}zoom=Math.min(1.45,Math.max(.75,zoom+(a==='zoom-in'?.1:-.1)));refreshMap();return}
@@ -308,4 +309,6 @@ document.addEventListener('submit',e=>{e.preventDefault();const f=e.target;const
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if($('.modal'))closeModal();else{$('.sidebar')?.classList.remove('open');$('.mobile-overlay')?.classList.remove('open')}}if((e.key==='Enter'||e.key===' ')&&e.target.matches('g[role="button"],polygon[role="button"],rect[role="button"]')){e.preventDefault();e.target.dispatchEvent(new MouseEvent('click',{bubbles:true}))}if(e.key==='Tab'&&$('.modal')){const els=$$('button:not([disabled]),input:not([type="hidden"]),select,textarea,a[href],[tabindex="0"]',$('.modal'));const first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){last.focus();e.preventDefault()}else if(!e.shiftKey&&document.activeElement===last){first.focus();e.preventDefault()}}});
 window.addEventListener('hashchange',()=>{view=location.hash.slice(1)||'bodega';render();window.scrollTo(0,0)});
 initDesigner({state:()=>state,persist,toast,I,pageHead,onSaved:()=>{if(!locations.some(l=>l.id===selectedLoc))selectedLoc=locations[0]?.id||'';if(activeFloor&&activeFloor!=='*'&&!state.layout.floors.some(f=>f.id===activeFloor))activeFloor=null;if(openSection&&!curFloor().sections.some(x=>x.id===openSection))openSection=null;pickOrderId=null}});
+(()=>{const params=new URLSearchParams(location.search);const loc=params.get('loc');const mode=params.get('mode');if(loc&&locations.some(l=>l.id===loc)){focusLocation(loc,mode==='3d'||mode==='front'?mode:'plan');warehouseSearch=loc}else if(mode==='plan'||mode==='3d'||mode==='front'){mapMode=mode}notifyParent('ready',{loc:selectedLoc})})();
 persist();render();
+window.addEventListener('message',(ev)=>{if(ev.source!==window.parent)return;const d=ev.data;if(!d||d.source!=='opticlean-host')return;if(d.type==='focus-location'&&d.loc&&locations.some(l=>l.id===d.loc)){focusLocation(d.loc,d.mode||'plan');warehouseSearch=d.loc;if(view==='bodega')warehouse();else go('bodega')}});

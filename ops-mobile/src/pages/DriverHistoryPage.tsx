@@ -1,10 +1,26 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { api } from '../api';
 import type { AuthUser } from '../auth';
-import { clientOf, orderWeight, truckByPlate } from '../lib/fleet';
+import {
+  FLEET as DEFAULT_FLEET,
+  clientOf,
+  orderWeight,
+  truckByPlate,
+  type Truck,
+} from '../lib/fleet';
 import type { AppState } from '../types';
 
 export function DriverHistoryPage({ state, user }: { state: AppState; user: AuthUser }) {
-  const truck = truckByPlate(user.truckPlate);
+  const [fleet, setFleet] = useState<Truck[]>(DEFAULT_FLEET);
+  useEffect(() => {
+    void api
+      .fleet()
+      .then((r) => {
+        if (r.trucks?.length) setFleet(r.trucks);
+      })
+      .catch(() => {});
+  }, []);
+  const truck = truckByPlate(user.truckPlate, fleet);
   const delivered = useMemo(
     () =>
       state.orders

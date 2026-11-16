@@ -9,6 +9,11 @@ const iconPaths: Record<string, string> = {
   cart: '<path d="M2 3h3l3 12h11l3-8H6M9 19h.01M18 19h.01"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/>',
   truck:
     '<path d="M2 5h12v12H2ZM14 9h4l4 5v3h-8"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>',
+  /** Auto / carro utilitario */
+  car: '<path d="M4 14 6 8h12l2 6M3 14h18v4H3Zm3 4v2m12-2v2"/><circle cx="7.5" cy="14" r="1.5"/><circle cx="16.5" cy="14" r="1.5"/>',
+  /** Motocicleta */
+  motorcycle:
+    '<circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="M9 17h4l2-5h3M6 14l2-5h4l1 3M13 12l3-5h2"/>',
   users:
     '<circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M17 4a3 3 0 0 1 0 6m1 5a5 5 0 0 1 3 6"/>',
   chart: '<path d="M4 3v18h17M8 16v-4m5 4V7m5 9V3"/>',

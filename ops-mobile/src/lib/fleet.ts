@@ -1,9 +1,13 @@
 import type { AppState, Order } from '../types';
 
+export type VehicleKind = 'carro' | 'camion' | 'motocicleta';
+
 export type Truck = {
   id: string;
   plate: string;
   label: string;
+  vehicleType?: VehicleKind;
+  vehicleTypeLabel?: string;
   city: string;
   driver: string;
   maxKg: number;
@@ -11,13 +15,42 @@ export type Truck = {
   costPerKm: number;
   etaHours: number;
   routeKm: number;
+  allowedSectors?: string[];
 };
 
+export function vehicleAllowsSector(t: Pick<Truck, 'allowedSectors'>, sector: string) {
+  const allowed = t.allowedSectors ?? [];
+  if (!allowed.length) return true;
+  const target = sector.trim().toLowerCase();
+  if (!target) return true;
+  return allowed.some((s) => {
+    const a = s.toLowerCase();
+    return a === target || a.includes(target) || target.includes(a);
+  });
+}
+
+export function vehicleKindLabel(t: Truck) {
+  if (t.vehicleTypeLabel) return t.vehicleTypeLabel;
+  if (t.vehicleType === 'motocicleta') return 'Motocicleta';
+  if (t.vehicleType === 'carro') return 'Carro';
+  return 'Camión';
+}
+
+export function vehicleIconName(t: Pick<Truck, 'vehicleType'> | VehicleKind | undefined) {
+  const kind = typeof t === 'string' ? t : t?.vehicleType;
+  if (kind === 'motocicleta') return 'motorcycle';
+  if (kind === 'carro') return 'car';
+  return 'truck';
+}
+
+/** Fallback si /api/fleet no responde. */
 export const FLEET: Truck[] = [
   {
-    id: 'T01',
+    id: 'veh-t01',
     plate: 'GBA-2041',
     label: 'Camión 01',
+    vehicleType: 'camion',
+    vehicleTypeLabel: 'Camión',
     city: 'Quito',
     driver: 'Carlos Sur',
     maxKg: 5000,
@@ -27,9 +60,11 @@ export const FLEET: Truck[] = [
     routeKm: 62,
   },
   {
-    id: 'T02',
+    id: 'veh-t02',
     plate: 'GYE-1188',
     label: 'Camión 02',
+    vehicleType: 'camion',
+    vehicleTypeLabel: 'Camión',
     city: 'Guayaquil',
     driver: 'María Costa',
     maxKg: 4000,
@@ -39,9 +74,11 @@ export const FLEET: Truck[] = [
     routeKm: 65,
   },
   {
-    id: 'T03',
+    id: 'veh-t03',
     plate: 'CUE-3301',
     label: 'Camión 03',
+    vehicleType: 'camion',
+    vehicleTypeLabel: 'Camión',
     city: 'Cuenca',
     driver: 'Luis Andes',
     maxKg: 3000,
@@ -51,9 +88,11 @@ export const FLEET: Truck[] = [
     routeKm: 65,
   },
   {
-    id: 'T04',
+    id: 'veh-t04',
     plate: 'AMB-5520',
     label: 'Camión 04',
+    vehicleType: 'camion',
+    vehicleTypeLabel: 'Camión',
     city: 'Santo Domingo',
     driver: 'Ana Rivera',
     maxKg: 4500,
@@ -66,8 +105,9 @@ export const FLEET: Truck[] = [
 
 export const ROUTE_STATUSES = new Set(['En ruta', 'Incidencia']);
 
-export function truckByPlate(plate?: string) {
-  return FLEET.find((t) => t.plate === plate) ?? FLEET[0];
+export function truckByPlate(plate?: string, fleet: Truck[] = FLEET) {
+  if (!fleet.length) return FLEET[0];
+  return fleet.find((t) => t.plate === plate) ?? fleet[0];
 }
 
 export function clientOf(s: AppState, id: string) {

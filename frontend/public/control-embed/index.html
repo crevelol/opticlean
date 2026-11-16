@@ -42,6 +42,29 @@
     html.embed-mode.mobile-embed .warehouse-bottom { grid-template-columns: 1fr !important; }
     html.embed-mode.mobile-embed .page-footer { display: none !important; }
 
+    /* Solo el plano de bodega (modal recepción / vista compacta) */
+    html.embed-mode.map-only .page-head,
+    html.embed-mode.map-only .kpis,
+    html.embed-mode.map-only .warehouse-bottom,
+    html.embed-mode.map-only .page-footer,
+    html.embed-mode.map-only .side-stack,
+    html.embed-mode.map-only #warehouse-detail { display: none !important; }
+    html.embed-mode.map-only .page {
+      padding: 10px 12px !important;
+    }
+    html.embed-mode.map-only .work-area {
+      display: block !important;
+      grid-template-columns: none !important;
+    }
+    html.embed-mode.map-only .warehouse-canvas {
+      height: min(62vh, 480px) !important;
+      min-height: 360px;
+    }
+    html.embed-mode.map-only .map-controls .search-input,
+    html.embed-mode.map-only .map-controls .map-actions {
+      display: none !important;
+    }
+
   </style>
   <script>
     (function () {
@@ -49,6 +72,7 @@
       if (params.get('embed') === '1') {
         document.documentElement.classList.add('embed-mode');
         if (params.get('mobile') === '1') document.documentElement.classList.add('mobile-embed');
+        if (params.get('maponly') === '1') document.documentElement.classList.add('map-only');
         if (!location.hash || location.hash === '#') location.hash = '#bodega';
       }
     })();
@@ -58,6 +82,6 @@
   <div id="app"></div>
   <div id="modal-root"></div>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="app.mjs?v=20261109a"></script>
+  <script type="module" src="app.mjs?v=20261115c"></script>
 </body>
 </html>

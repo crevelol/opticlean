@@ -18,6 +18,9 @@ const iconPaths: Record<string, string> = {
   edit: '<path d="m15 4 5 5M4 16 16 4a3 3 0 0 1 4 4L8 20l-5 1Z"/>',
   truck:
     '<path d="M2 5h12v12H2ZM14 9h4l4 5v3h-8"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>',
+  car: '<path d="M4 14 6 8h12l2 6M3 14h18v4H3Zm3 4v2m12-2v2"/><circle cx="7.5" cy="14" r="1.5"/><circle cx="16.5" cy="14" r="1.5"/>',
+  motorcycle:
+    '<circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="M9 17h4l2-5h3M6 14l2-5h4l1 3M13 12l3-5h2"/>',
   route:
     '<circle cx="6" cy="5" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 7v6a3 3 0 0 0 3 3h6m3 1V8a3 3 0 0 0-3-3h-3"/>',
   refresh: '<path d="M3 9a9 9 0 0 1 15-5l3 3M21 3v4h-4M21 15A9 9 0 0 1 6 20l-3-3m0 4v-4h4"/>',
@@ -26,6 +29,11 @@ const iconPaths: Record<string, string> = {
   history: '<path d="M3 4v5h5M3 9a9 9 0 1 1 0 7M12 7v5l3 2"/>',
   calendar:
     '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18"/>',
+  map: '<path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2Zm6-2v16m6-14v16"/>',
+  arrow: '<path d="M4 12h16m-5-5 5 5-5 5"/>',
+  users:
+    '<circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M17 4a3 3 0 0 1 0 6m1 5a5 5 0 0 1 3 6"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
 };
 
 export function Icon({ name, className = '' }: { name: string; className?: string }) {

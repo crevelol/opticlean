@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { clearSession, type AuthUser } from '../auth';
 import { Icon } from '../components/Icon';
 import { RouteMap } from '../components/RouteMap';
 import {
-  FLEET,
+  FLEET as DEFAULT_FLEET,
   cityOf,
   clientOf,
   fmtHours,
@@ -12,6 +12,10 @@ import {
   packagesOf,
   routeOrders,
   sectorOf,
+  vehicleAllowsSector,
+  vehicleIconName,
+  vehicleKindLabel,
+  type Truck,
 } from '../lib/fleet';
 import type { AppState, Order } from '../types';
 
@@ -25,12 +29,24 @@ type Tab = 'pendientes' | 'listos' | 'camiones';
 
 export function DispatchPage({ state, user, onRefresh }: Props) {
   const [tab, setTab] = useState<Tab>('listos');
+  const [fleet, setFleet] = useState<Truck[]>(DEFAULT_FLEET);
   const [stagedByTruck, setStagedByTruck] = useState<Record<string, string[]>>({});
-  const [selectedTruck, setSelectedTruck] = useState(FLEET[0].id);
+  const [selectedTruck, setSelectedTruck] = useState(DEFAULT_FLEET[0]?.id ?? '');
   const [busy, setBusy] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    void api
+      .fleet()
+      .then((r) => {
+        if (!r.trucks?.length) return;
+        setFleet(r.trucks);
+        setSelectedTruck((cur) => (r.trucks.some((t) => t.id === cur) ? cur : r.trucks[0].id));
+      })
+      .catch(() => {});
+  }, []);
 
   const stagedIds = useMemo(() => new Set(Object.values(stagedByTruck).flat()), [stagedByTruck]);
 
@@ -46,7 +62,7 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
     [state.orders, stagedIds],
   );
 
-  const truck = FLEET.find((t) => t.id === selectedTruck) ?? FLEET[0];
+  const truck = fleet.find((t) => t.id === selectedTruck) ?? fleet[0];
   const stagedOrders = (stagedByTruck[truck.id] ?? [])
     .map((id) => state.orders.find((o) => o.id === id))
     .filter((o): o is Order => Boolean(o));
@@ -69,6 +85,16 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
   };
 
   const stageOrder = (truckId: string, orderId: string) => {
+    const t = fleet.find((x) => x.id === truckId);
+    const o = state.orders.find((x) => x.id === orderId);
+    if (t && o && !vehicleAllowsSector(t, sectorOf(state, o))) {
+      setError(
+        `${t.label} no cubre el sector ${sectorOf(state, o)}` +
+          (t.allowedSectors?.length ? ` (${t.allowedSectors.join(', ')})` : ''),
+      );
+      return;
+    }
+    setError('');
     setStagedByTruck((prev) => {
       const next: Record<string, string[]> = {};
       for (const [tid, list] of Object.entries(prev)) {
@@ -78,7 +104,7 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
       return next;
     });
     setSelectedTruck(truckId);
-    setMsg('Pedido cargado en camión');
+    setMsg('Pedido cargado');
   };
 
   const unstage = (truckId: string, orderId: string) => {
@@ -89,7 +115,7 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
   };
 
   const sendTruck = async (truckId: string) => {
-    const t = FLEET.find((x) => x.id === truckId);
+    const t = fleet.find((x) => x.id === truckId);
     const ids = stagedByTruck[truckId] ?? [];
     if (!t || !ids.length) return;
     setBusy(true);
@@ -118,7 +144,7 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
       const res = await api.logisticsAutoAssign({
         orderIds: listos.map((o) => o.id),
         stagedByTruck,
-        fleet: FLEET.map((t) => ({
+        fleet: fleet.map((t) => ({
           id: t.id,
           plate: t.plate,
           label: t.label,
@@ -235,9 +261,9 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
           <label className="field">
             <span>Camión destino</span>
             <select value={selectedTruck} onChange={(e) => setSelectedTruck(e.target.value)}>
-              {FLEET.map((t) => (
+              {fleet.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.label} · {t.city} · {t.plate}
+                  {t.label} · {vehicleKindLabel(t)} · {t.city} · {t.plate}
                 </option>
               ))}
             </select>
@@ -254,7 +280,7 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
                     </small>
                   </div>
                   <button type="button" className="btn primary small" onClick={() => stageOrder(selectedTruck, o.id)}>
-                    <Icon name="truck" /> Cargar
+                    <Icon name={vehicleIconName(truck)} /> Cargar
                   </button>
                 </li>
               ))}
@@ -268,7 +294,7 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
       {tab === 'camiones' ? (
         <>
           <section className="dsp-truck-pick">
-            {FLEET.map((t) => {
+            {fleet.map((t) => {
               const n = (stagedByTruck[t.id] ?? []).length + routeOrders(state, t.plate).length;
               return (
                 <button
@@ -289,7 +315,7 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
           <section className="card">
             <div className="drv-section-head">
               <h2>
-                {truck.label} · {truck.plate}
+                {truck.label} · {vehicleKindLabel(truck)} · {truck.plate}
               </h2>
               <small>
                 {truck.driver} · ETA {fmtHours(truck.etaHours)}
@@ -338,8 +364,8 @@ export function DispatchPage({ state, user, onRefresh }: Props) {
               disabled={!stagedOrders.length || busy}
               onClick={() => void sendTruck(truck.id)}
             >
-              <Icon name="truck" />
-              {busy ? 'Enviando…' : 'Enviar camión'}
+              <Icon name={vehicleIconName(truck)} />
+              {busy ? 'Enviando…' : `Enviar ${vehicleKindLabel(truck).toLowerCase()}`}
             </button>
           </section>
 
