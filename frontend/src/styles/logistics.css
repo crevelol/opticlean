@@ -2,27 +2,6 @@
   color: var(--color-text);
   min-width: 0;
 }
-
-.log-page .page-head {
-  margin-bottom: 14px;
-  align-items: flex-start;
-}
-.log-page .page-head h1 {
-  font-size: var(--text-5xl);
-  letter-spacing: -0.7px;
-  margin: 4px 0 6px;
-}
-.log-page .page-head p {
-  font-size: var(--text-base);
-  color: var(--color-text-muted);
-  max-width: 42rem;
-  margin: 0;
-  line-height: 1.45;
-}
-.log-page .page-head .eyebrow {
-  font-size: var(--text-xs);
-  letter-spacing: 0.45px;
-}
 .log-head-actions {
   display: flex;
   flex-wrap: wrap;
@@ -102,53 +81,6 @@
   font-size: var(--text-sm);
   color: var(--color-primary);
   line-height: 1.35;
-}
-
-.log-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.log-metric {
-  border: 1px solid var(--color-border);
-  background: var(--slate-0);
-  border-radius: var(--radius-xl);
-  padding: 14px 16px;
-  min-width: 0;
-}
-.log-metric-label {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--text-md);
-  color: var(--slate-650);
-}
-.log-metric-label .icon {
-  width: 16px;
-  height: 16px;
-  color: var(--slate-550);
-}
-.log-metric strong {
-  display: block;
-  margin-top: 10px;
-  font-size: var(--text-4xl);
-  letter-spacing: -0.6px;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-.log-metric strong small {
-  margin-left: 6px;
-  font-size: var(--text-md);
-  font-weight: var(--weight-medium);
-  color: var(--slate-550);
-}
-.log-metric > span {
-  display: block;
-  margin-top: 8px;
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
 }
 
 .log-layout {
@@ -1199,13 +1131,13 @@
 }
 .log-stops-panel h2,
 .log-current-panel h2,
-.log-history-page h2 {
+.log-history-page h2:not(.page-head h2) {
   margin: 0;
   font-size: var(--text-lg);
 }
 .log-stops-panel header p,
 .log-current-panel header p,
-.log-history-page header p {
+.log-history-page header:not(.page-head) p {
   margin: 4px 0 0;
   font-size: var(--text-md);
   color: var(--color-text-muted);
@@ -1602,9 +1534,6 @@
   }
 }
 @media (max-width: 1100px) {
-  .log-metrics {
-    grid-template-columns: 1fr 1fr;
-  }
   .log-layout {
     grid-template-columns: 1fr;
   }
@@ -1615,12 +1544,6 @@
   }
 }
 @media (max-width: 720px) {
-  .log-metrics {
-    grid-template-columns: 1fr;
-  }
-  .log-page .page-head h1 {
-    font-size: var(--text-4xl);
-  }
   .log-route {
     grid-template-columns: auto 1fr auto;
   }

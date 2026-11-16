@@ -13,7 +13,7 @@ import {
   stock,
 } from '../../shared/lib/inventory';
 import { buildForecast } from '../../shared/lib/forecast';
-import { Badge, Btn } from '../../shared/components/ui';
+import { Badge, Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import '../../styles/dashboard.css';
 
@@ -28,9 +28,7 @@ export function DashboardPage() {
 
   const totalCells = meta.locations.length;
   const occupied = meta.locations.filter((l) => {
-    const q = state.lots
-      .filter((lot) => lot.loc === l.id)
-      .reduce((n, lot) => n + lot.qty, 0);
+    const q = state.lots.filter((lot) => lot.loc === l.id).reduce((n, lot) => n + lot.qty, 0);
     return q > 0;
   }).length;
   const occupancyPct = Math.round((occupied / Math.max(totalCells, 1)) * 100);
@@ -69,8 +67,22 @@ export function DashboardPage() {
   };
 
   return (
-    <div className="dash">
-      <div className="dash-toolbar">
+    <>
+      <PageHead
+        eyebrow="Panel de control"
+        title="Resumen de operaciones"
+        desc="Pedidos, stock y movimientos de tu operación de un vistazo."
+        actions={
+          <>
+            <Btn icon="receive" onClick={() => navigate('/recepcion')}>
+              Registrar entrada
+            </Btn>
+            <Btn variant="primary" icon="plus" onClick={() => navigate('/pedidos/nuevo')}>
+              Nuevo pedido
+            </Btn>
+          </>
+        }
+      >
         <label className="dash-wh">
           <Icon name="warehouse" />
           <select
@@ -87,223 +99,210 @@ export function DashboardPage() {
             ))}
           </select>
         </label>
-        <div className="dash-toolbar-actions">
-          <Btn icon="receive" onClick={() => navigate('/recepcion')}>
-            Registrar entrada
-          </Btn>
-          <Btn variant="primary" icon="plus" onClick={() => navigate('/pedidos/nuevo')}>
-            Nuevo pedido
-          </Btn>
-        </div>
-      </div>
-
-      <div className="dash-kpis">
-        <article className="dash-kpi">
-          <div className="dash-kpi-label">
-            Pedidos activos
-            <Icon name="orders" />
-          </div>
-          <div className="dash-kpi-value">{activeOrders.length}</div>
-          <div className="dash-kpi-foot warn">{pending.length} por preparar</div>
-        </article>
-        <article className="dash-kpi">
-          <div className="dash-kpi-label">
-            Productos bajo mínimo
-            <Icon name="alert" />
-          </div>
-          <div className="dash-kpi-value">{low.length}</div>
-          <button type="button" className="dash-kpi-link" onClick={() => navigate('/inventario')}>
-            Revisar reposición
-          </button>
-        </article>
-        <article className="dash-kpi">
-          <div className="dash-kpi-label">
-            Unidades disponibles
-            <Icon name="box" />
-          </div>
-          <div className="dash-kpi-value">{num(units)}</div>
-          <div className="dash-kpi-foot">Descontando reservas</div>
-        </article>
-        <article className="dash-kpi">
-          <div className="dash-kpi-label">
-            Ocupación de bodega
-            <Icon name="warehouse" />
-          </div>
-          <div className="dash-kpi-value">{occupancyPct}%</div>
-          <div className="dash-occ">
-            <div className="dash-occ-bar" style={{ width: `${occupancyPct}%` }} />
-          </div>
-          <div className="dash-kpi-foot">
-            {occupied} de {totalCells} posiciones
-          </div>
-        </article>
-      </div>
-
-      <div className="dash-mid">
-        <section className="panel dash-orders">
-          <div className="panel-head dash-orders-head">
-            <span className="panel-title">Pedidos por preparar</span>
-            <div className="dash-tabs" role="tablist">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab === 'pending'}
-                className={tab === 'pending' ? 'active' : ''}
-                onClick={() => setTab('pending')}
-              >
-                Por preparar ({pending.length})
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab === 'all'}
-                className={tab === 'all' ? 'active' : ''}
-                onClick={() => setTab('all')}
-              >
-                Todos ({activeOrders.length})
-              </button>
-            </div>
-          </div>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Pedido</th>
-                  <th>Cliente</th>
-                  <th>Total</th>
-                  <th>Estado</th>
-                  <th>Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {listed.length ? (
-                  listed.slice(0, 6).map((o) => (
-                    <tr key={o.id}>
-                      <td>
-                        <strong>{o.id}</strong>
-                      </td>
-                      <td>{client(state, o.clientId)?.name}</td>
-                      <td>
-                        <strong>{money(orderValue(state, o))}</strong>
-                      </td>
-                      <td>
-                        <Badge text={o.status} color={statusColor(o.status)} />
-                      </td>
-                      <td>
-                        {o.status === 'Por preparar' ? (
-                          <Btn
-                            variant="small"
-                            onClick={() => navigate('/bodega', { state: { pick: o.id } })}
-                          >
-                            Preparar
-                          </Btn>
-                        ) : (
-                          <Btn variant="small" onClick={() => navigate('/pedidos')}>
-                            Ver
-                          </Btn>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="dash-empty-row">
-                      No hay pedidos en esta vista.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="panel dash-prio">
-          <div className="panel-head">
-            <span className="panel-title">Prioridades de hoy</span>
-          </div>
-          <div className="dash-prio-list">
-            <article className="dash-prio-item">
-              <div className="dash-prio-icon">
-                <Icon name="alert" />
-              </div>
-              <div className="dash-prio-body">
-                <strong>{low.length} productos bajo mínimo</strong>
-                <small>Consulta existencias y mínimos.</small>
-                <button type="button" onClick={() => navigate('/inventario')}>
-                  Revisar productos
-                </button>
-              </div>
-            </article>
-            <article className="dash-prio-item">
-              <div className="dash-prio-icon">
-                <Icon name="orders" />
-              </div>
-              <div className="dash-prio-body">
-                <strong>{pending.length} pedidos por preparar</strong>
-                <small>Consulta posiciones y lotes.</small>
-                <button type="button" onClick={() => navigate('/bodega')}>
-                  Ir a preparación
-                </button>
-              </div>
-            </article>
-            <article className="dash-prio-item">
-              <div className="dash-prio-icon">
-                <Icon name="spark" />
-              </div>
-              <div className="dash-prio-body">
-                <strong>
-                  {productionAlerts} alerta{productionAlerts === 1 ? '' : 's'} de producción
-                </strong>
-                <span className="dash-prio-tag">Por validar</span>
-                <small>Revisa el stock antes de actuar.</small>
-                <button type="button" onClick={() => navigate('/compras')}>
-                  Revisar alertas
-                </button>
-              </div>
-            </article>
-          </div>
-        </section>
-      </div>
-
-      <div className="dash-bottom">
-        <section className="panel">
-          <div className="panel-head">
-            <span className="panel-title">Inventario por línea</span>
-          </div>
-          <div className="dash-lines">
-            {meta.categories.map((c) => {
-              const q = state.products
-                .filter((p) => p.category === c)
-                .reduce((n, p) => n + stock(state, p.id), 0);
-              return (
+      </PageHead>
+      <KpiGrid label="Resumen de la operación">
+        <Kpi
+          label="Pedidos activos"
+          icon="orders"
+          value={activeOrders.length}
+          caption={<Badge text={`${pending.length} por preparar`} color="amber" />}
+        />
+        <Kpi
+          label="Productos bajo mínimo"
+          icon="alert"
+          value={low.length}
+          tone={low.length ? 'warning' : 'default'}
+          caption={
+            <button type="button" onClick={() => navigate('/inventario')}>
+              Revisar reposición
+            </button>
+          }
+        />
+        <Kpi
+          label="Unidades disponibles"
+          icon="box"
+          value={num(units)}
+          caption="Descontando reservas"
+        />
+        <Kpi
+          label="Ocupación de bodega"
+          icon="warehouse"
+          value={`${occupancyPct}%`}
+          caption={`${occupied} de ${totalCells} posiciones`}
+          progress={occupancyPct}
+        />
+      </KpiGrid>
+      <div className="dash">
+        <div className="dash-mid">
+          <section className="panel dash-orders">
+            <div className="panel-head dash-orders-head">
+              <span className="panel-title">Pedidos por preparar</span>
+              <div className="dash-tabs" role="tablist">
                 <button
                   type="button"
-                  className="dash-line"
-                  key={c}
-                  onClick={() => navigate(`/inventario?cat=${encodeURIComponent(c)}`)}
+                  role="tab"
+                  aria-selected={tab === 'pending'}
+                  className={tab === 'pending' ? 'active' : ''}
+                  onClick={() => setTab('pending')}
                 >
-                  <span>{c}</span>
-                  <strong>{num(q)}</strong>
+                  Por preparar ({pending.length})
                 </button>
-              );
-            })}
-          </div>
-          <p className="dash-lines-note">Las unidades físicas incluyen reservas.</p>
-        </section>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === 'all'}
+                  className={tab === 'all' ? 'active' : ''}
+                  onClick={() => setTab('all')}
+                >
+                  Todos ({activeOrders.length})
+                </button>
+              </div>
+            </div>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Pedido</th>
+                    <th>Cliente</th>
+                    <th>Total</th>
+                    <th>Estado</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {listed.length ? (
+                    listed.slice(0, 6).map((o) => (
+                      <tr key={o.id}>
+                        <td>
+                          <strong>{o.id}</strong>
+                        </td>
+                        <td>{client(state, o.clientId)?.name}</td>
+                        <td>
+                          <strong>{money(orderValue(state, o))}</strong>
+                        </td>
+                        <td>
+                          <Badge text={o.status} color={statusColor(o.status)} />
+                        </td>
+                        <td>
+                          {o.status === 'Por preparar' ? (
+                            <Btn
+                              variant="small"
+                              onClick={() => navigate('/bodega', { state: { pick: o.id } })}
+                            >
+                              Preparar
+                            </Btn>
+                          ) : (
+                            <Btn variant="small" onClick={() => navigate('/pedidos')}>
+                              Ver
+                            </Btn>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="dash-empty-row">
+                        No hay pedidos en esta vista.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
 
-        <section className="panel dash-value">
-          <div className="panel-head">
-            <span className="panel-title">Valor del inventario</span>
-          </div>
-          <div className="dash-value-body">
-            <div className="dash-value-amount">{money(stockValue)}</div>
-            <p>Valorado a precio de venta</p>
-            <button type="button" className="dash-kpi-link" onClick={() => navigate('/inventario')}>
-              Ver detalle
-            </button>
-          </div>
-        </section>
+          <section className="panel dash-prio">
+            <div className="panel-head">
+              <span className="panel-title">Prioridades de hoy</span>
+            </div>
+            <div className="dash-prio-list">
+              <article className="dash-prio-item">
+                <div className="dash-prio-icon">
+                  <Icon name="alert" />
+                </div>
+                <div className="dash-prio-body">
+                  <strong>{low.length} productos bajo mínimo</strong>
+                  <small>Consulta existencias y mínimos.</small>
+                  <button type="button" onClick={() => navigate('/inventario')}>
+                    Revisar productos
+                  </button>
+                </div>
+              </article>
+              <article className="dash-prio-item">
+                <div className="dash-prio-icon">
+                  <Icon name="orders" />
+                </div>
+                <div className="dash-prio-body">
+                  <strong>{pending.length} pedidos por preparar</strong>
+                  <small>Consulta posiciones y lotes.</small>
+                  <button type="button" onClick={() => navigate('/bodega')}>
+                    Ir a preparación
+                  </button>
+                </div>
+              </article>
+              <article className="dash-prio-item">
+                <div className="dash-prio-icon">
+                  <Icon name="spark" />
+                </div>
+                <div className="dash-prio-body">
+                  <strong>
+                    {productionAlerts} alerta{productionAlerts === 1 ? '' : 's'} de producción
+                  </strong>
+                  <span className="dash-prio-tag">Por validar</span>
+                  <small>Revisa el stock antes de actuar.</small>
+                  <button type="button" onClick={() => navigate('/compras')}>
+                    Revisar alertas
+                  </button>
+                </div>
+              </article>
+            </div>
+          </section>
+        </div>
+
+        <div className="dash-bottom">
+          <section className="panel">
+            <div className="panel-head">
+              <span className="panel-title">Inventario por línea</span>
+            </div>
+            <div className="dash-lines">
+              {meta.categories.map((c) => {
+                const q = state.products
+                  .filter((p) => p.category === c)
+                  .reduce((n, p) => n + stock(state, p.id), 0);
+                return (
+                  <button
+                    type="button"
+                    className="dash-line"
+                    key={c}
+                    onClick={() => navigate(`/inventario?cat=${encodeURIComponent(c)}`)}
+                  >
+                    <span>{c}</span>
+                    <strong>{num(q)}</strong>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="dash-lines-note">Las unidades físicas incluyen reservas.</p>
+          </section>
+
+          <section className="panel dash-value">
+            <div className="panel-head">
+              <span className="panel-title">Valor del inventario</span>
+            </div>
+            <div className="dash-value-body">
+              <div className="dash-value-amount">{money(stockValue)}</div>
+              <p>Valorado a precio de venta</p>
+              <button
+                type="button"
+                className="dash-kpi-link"
+                onClick={() => navigate('/inventario')}
+              >
+                Ver detalle
+              </button>
+            </div>
+          </section>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

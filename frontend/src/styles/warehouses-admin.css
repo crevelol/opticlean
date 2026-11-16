@@ -1,14 +1,6 @@
 .wh-admin {
   --wh-muted: var(--slate-650);
 }
-.wh-admin .page-head p {
-  color: var(--wh-muted);
-  font-size: var(--text-md);
-  line-height: 1.6;
-}
-.wh-admin .wh-overview {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
 .wh-list-toolbar {
   display: flex;
   align-items: center;
@@ -395,22 +387,6 @@
   }
 }
 @media (max-width: 600px) {
-  .wh-overview {
-    gap: 8px;
-  }
-  .wh-overview .kpi {
-    padding: 12px 10px;
-  }
-  .wh-overview .kpi-value {
-    font-size: var(--text-3xl);
-  }
-  .wh-overview .kpi-label > .icon {
-    display: none;
-  }
-  .wh-overview .kpi-foot {
-    font-size: var(--text-2xs);
-    line-height: 1.5;
-  }
   .wh-list-toolbar .search-input {
     min-width: 100%;
   }

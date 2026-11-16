@@ -1,7 +1,13 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import '../../styles/warehouse-embed.css';
 
-const EMBED_VERSION = '20261115c';
+const EMBED_VERSION = '20261116d';
+
+/** Altura del topbar (--topbar-h) para que el embed se extienda por debajo. */
+function topbarHeight() {
+  const v = getComputedStyle(document.documentElement).getPropertyValue('--topbar-h');
+  return parseInt(v, 10) || 56;
+}
 
 type Props = {
   /** Altura del iframe. Por defecto ocupa el viewport disponible. */
@@ -23,7 +29,7 @@ type Props = {
  * Embebe la bodega visual EXACTA de opticlean-control (misma UI, CSS y SVG).
  */
 export function WarehouseEmbed({
-  height = 'calc(100vh - 72px)',
+  height = 'calc(100vh - var(--topbar-h))',
   title = 'Bodega visual OPTICLEAN',
   focusLoc,
   mode = 'plan',
@@ -34,13 +40,19 @@ export function WarehouseEmbed({
   const frameRef = useRef<HTMLIFrameElement>(null);
   const onSelectRef = useRef(onSelectLoc);
   onSelectRef.current = onSelectLoc;
+  // Pantalla completa: el iframe pasa bajo el topbar glass y sincroniza sus modales con el shell.
+  const fullPage = !compact && !mapOnly;
+  const [modalOpen, setModalOpen] = useState(false);
+  /** El clic que cierra el modal no debe activar lo que hay debajo (p. ej. un item del menú). */
+  const swallowClick = useRef(false);
 
   const src = useMemo(() => {
     const q = new URLSearchParams({ embed: '1', v: EMBED_VERSION, mode });
     if (focusLoc) q.set('loc', focusLoc);
     if (mapOnly || compact) q.set('maponly', '1');
+    if (fullPage) q.set('under', String(topbarHeight()));
     return `/control-embed/index.html?${q.toString()}#bodega`;
-  }, [focusLoc, mode, mapOnly, compact]);
+  }, [focusLoc, mode, mapOnly, compact, fullPage]);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -53,6 +65,7 @@ export function WarehouseEmbed({
       if (data.type === 'select-location' && typeof data.loc === 'string') {
         onSelectRef.current?.(data.loc);
       }
+      if (data.type === 'modal') setModalOpen(!!data.open);
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -67,14 +80,58 @@ export function WarehouseEmbed({
     );
   }, [focusLoc, mode]);
 
+  // Con un modal abierto dentro del iframe, el shell también se oscurece
+  // (clase en <html>, ver warehouse-embed.css) y un clic fuera lo cierra.
+  useEffect(() => {
+    if (!fullPage || !modalOpen) return;
+    const root = document.documentElement;
+    root.classList.add('embed-modal-open');
+    const close = () =>
+      frameRef.current?.contentWindow?.postMessage(
+        { source: 'opticlean-shell', type: 'close-modal' },
+        '*',
+      );
+    const onPointer = (e: PointerEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      swallowClick.current = true;
+      window.setTimeout(() => (swallowClick.current = false), 500);
+      close();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('pointerdown', onPointer, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      root.classList.remove('embed-modal-open');
+      document.removeEventListener('pointerdown', onPointer, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [fullPage, modalOpen]);
+
+  useEffect(() => {
+    if (!fullPage) return;
+    const onClick = (e: MouseEvent) => {
+      if (!swallowClick.current) return;
+      swallowClick.current = false;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, [fullPage]);
+
   return (
-    <div className={`warehouse-embed${compact ? ' is-compact' : ''}`}>
+    <div
+      className={`warehouse-embed${compact ? ' is-compact' : ''}${fullPage ? ' is-under-topbar' : ''}`}
+    >
       <iframe
         ref={frameRef}
         className="warehouse-embed__frame"
         title={title}
         src={src}
-        style={{ height }}
+        style={fullPage ? undefined : { height }}
         allow="clipboard-write"
       />
     </div>

@@ -4,35 +4,6 @@
   padding-bottom: 88px;
 }
 
-.no-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-
-.no-title {
-  margin: 0;
-  font-size: var(--text-5xl);
-  font-weight: var(--weight-bold);
-  letter-spacing: -0.7px;
-}
-
-.no-subtitle {
-  margin: 4px 0 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-base);
-}
-
-.no-top-actions {
-  display: flex;
-  gap: 10px;
-  margin-left: auto;
-  flex-wrap: wrap;
-}
-
 .no-xml-file {
   margin: -6px 0 12px;
   font-size: var(--text-md);

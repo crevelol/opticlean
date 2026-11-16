@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { Children, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Icon } from './Icon';
 
 export function esc(v: unknown) {
@@ -9,59 +9,122 @@ export function esc(v: unknown) {
     .replace(/"/g, '&quot;');
 }
 
+/**
+ * Cabecera estándar de página (patrón de Bodega visual):
+ *   EYEBROW · Título · descripción  ……………  acciones
+ *   [children: selectores de contexto, p. ej. bodega activa]
+ * Úsala en TODAS las pantallas; no crees cabeceras propias.
+ */
 export function PageHead({
   eyebrow,
   title,
   desc,
   actions,
+  children,
 }: {
-  eyebrow: string;
-  title: string;
-  desc: string;
+  eyebrow?: ReactNode;
+  title: ReactNode;
+  desc?: ReactNode;
   actions?: ReactNode;
+  /** Contenido bajo el título (selectores de contexto, filtros principales). */
+  children?: ReactNode;
 }) {
   return (
-    <div className="page-head">
-      <div>
-        <div className="eyebrow">{eyebrow}</div>
+    <header className="page-head">
+      <div className="page-head-text">
+        {eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}
         <h1>{title}</h1>
-        <p>{desc}</p>
+        {desc ? <p>{desc}</p> : null}
+        {children ? <div className="page-head-extra">{children}</div> : null}
       </div>
       {actions ? <div className="head-actions">{actions}</div> : null}
-    </div>
+    </header>
   );
 }
 
+export type KpiTone = 'default' | 'primary' | 'success' | 'warning' | 'danger';
+
+/**
+ * Indicador estándar (compacto): icono + etiqueta · valor (+unidad) · leyenda.
+ * Úsalo SIEMPRE dentro de <KpiGrid>. No crees tarjetas de métricas propias.
+ *
+ * - `tone`: colorea valor e icono según el estado.
+ * - `progress` (0–100): barra fina inferior (ocupación, avance…).
+ * - `onClick` + `active`: el KPI actúa como filtro (se renderiza como botón).
+ */
 export function Kpi({
   label,
   value,
   unit,
-  foot,
+  caption,
   icon = 'box',
-  color = '',
+  tone = 'default',
+  captionTone,
+  progress,
+  onClick,
+  active,
+  foot,
+  color,
 }: {
-  label: string;
-  value: string | number;
-  unit: string;
-  foot: string;
+  label: ReactNode;
+  value: ReactNode;
+  unit?: ReactNode;
+  /** Leyenda bajo el valor. Acepta texto, enlaces o badges. */
+  caption?: ReactNode;
   icon?: string;
+  tone?: KpiTone;
+  captionTone?: 'success' | 'warning' | 'danger';
+  progress?: number;
+  onClick?: () => void;
+  active?: boolean;
+  /** @deprecated Usa `caption`. */
+  foot?: ReactNode;
+  /** @deprecated Usa `captionTone` ("positive" → success, "warning" → warning). */
   color?: string;
 }) {
-  return (
-    <div className="kpi">
+  const legacyTone = color === 'positive' ? 'success' : color === 'warning' ? 'warning' : undefined;
+  const capTone = captionTone ?? legacyTone;
+  const text = caption ?? foot;
+  const body = (
+    <>
       <div className="kpi-label">
-        {label}
         <Icon name={icon} />
+        <span>{label}</span>
       </div>
       <div className="kpi-value">
         {value}
         {unit ? <small>{unit}</small> : null}
       </div>
-      <div className={`kpi-foot ${color}`}>
-        {color === 'positive' ? <Icon name="check" /> : null}
-        {foot}
-      </div>
-    </div>
+      {text ? <div className={cx('kpi-caption', capTone && `is-${capTone}`)}>{text}</div> : null}
+      {progress !== undefined ? (
+        <div className="kpi-progress" aria-hidden>
+          <span style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
+        </div>
+      ) : null}
+    </>
+  );
+  const cls = cx(
+    'kpi',
+    tone !== 'default' && `tone-${tone}`,
+    onClick && 'is-interactive',
+    active && 'is-active',
+  );
+  return onClick ? (
+    <button type="button" className={cls} onClick={onClick} aria-pressed={!!active}>
+      {body}
+    </button>
+  ) : (
+    <article className={cls}>{body}</article>
+  );
+}
+
+/** Fila de KPIs: reparte las tarjetas en columnas iguales (máx. 4 por fila). */
+export function KpiGrid({ children, label }: { children: ReactNode; label?: string }) {
+  const count = Math.min(4, Children.toArray(children).filter(Boolean).length) || 4;
+  return (
+    <section className="kpis" aria-label={label} style={{ ['--kpi-cols' as string]: count }}>
+      {children}
+    </section>
   );
 }
 
@@ -103,7 +166,8 @@ export function Button({
 }: ButtonProps) {
   const legacySize = variant === 'small' ? 'small' : undefined;
   const legacyFull = variant === 'full';
-  const visual = variant === '' || variant === 'small' || variant === 'full' ? 'secondary' : variant;
+  const visual =
+    variant === '' || variant === 'small' || variant === 'full' ? 'secondary' : variant;
   return (
     <button
       type={type}
@@ -199,7 +263,15 @@ export function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(' ');
 }
 
-export function Empty({ title, desc, action }: { title: string; desc: string; action?: ReactNode }) {
+export function Empty({
+  title,
+  desc,
+  action,
+}: {
+  title: string;
+  desc: string;
+  action?: ReactNode;
+}) {
   return (
     <div className="empty-state">
       <Icon name="box" />
@@ -210,7 +282,15 @@ export function Empty({ title, desc, action }: { title: string; desc: string; ac
   );
 }
 
-export function ProductCell({ name, id, category }: { name: string; id: string; category: string }) {
+export function ProductCell({
+  name,
+  id,
+  category,
+}: {
+  name: string;
+  id: string;
+  category: string;
+}) {
   return (
     <div className="table-product">
       <span className="product-icon">

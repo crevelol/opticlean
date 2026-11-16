@@ -1,15 +1,21 @@
 .login-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 460px);
+  /* Hero ~52% / formulario ~48%; el panel nunca baja de 460px en escritorio. */
+  grid-template-columns: minmax(0, 1.1fr) minmax(460px, 1fr);
   background: var(--slate-75);
 }
 .login-aside {
   background:
-    linear-gradient(160deg, #041526bf 0%, color-mix(in srgb, var(--slate-950) 60%, transparent) 40%, color-mix(in srgb, var(--slate-950) 40%, transparent) 100%),
-    url('/login-bg.jpg') center / cover no-repeat var(--slate-950);
+    linear-gradient(
+      160deg,
+      #041526bf 0%,
+      color-mix(in srgb, var(--slate-950) 60%, transparent) 40%,
+      color-mix(in srgb, var(--slate-950) 40%, transparent) 100%
+    ),
+    url('/login-bg.jpg') 62% center / cover no-repeat var(--slate-950);
   color: var(--slate-250);
-  padding: 36px 42px;
+  padding: 36px clamp(28px, 4vw, 56px);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -67,15 +73,15 @@
 .login-panel {
   display: grid;
   place-items: center;
-  padding: 28px 22px;
+  padding: 32px clamp(20px, 4vw, 48px);
   background: var(--slate-75);
 }
 .login-form {
-  width: min(100%, 360px);
+  width: min(100%, 400px);
   background: var(--slate-0);
   border: 1px solid var(--slate-200);
   border-radius: var(--radius-xl);
-  padding: 28px 24px 24px;
+  padding: 32px 32px 28px;
   box-shadow: 0 18px 40px color-mix(in srgb, var(--slate-900) 7%, transparent);
 }
 .login-mark {
@@ -114,22 +120,31 @@
   display: block;
 }
 .login-password input {
-  padding-right: 64px;
+  padding-right: 44px;
   width: 100%;
 }
-.login-eye {
+.login-password .login-eye {
   position: absolute;
-  right: 8px;
+  right: 4px;
   top: 50%;
   transform: translateY(-50%);
-  border: 0;
-  background: transparent;
-  color: var(--blue-600);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-  padding: 4px 6px;
+  color: var(--color-text-subtle);
+}
+.login-eye[aria-pressed='true'] {
+  color: var(--color-primary);
+}
+.login-eye .icon {
+  width: 17px;
+  height: 17px;
+}
+.login-eye-glyph {
+  display: inline-flex;
 }
 .login-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  overflow: hidden;
   margin: 0 0 12px;
   padding: 10px 12px;
   border-radius: var(--radius-md);
@@ -138,10 +153,28 @@
   color: var(--red-600);
   font-size: var(--text-md);
 }
+.login-error .icon {
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+}
 .login-submit {
-  width: 100%;
-  min-height: 42px;
   margin-top: 4px;
+}
+/* Mientras carga se ve el spinner a color pleno, no "deshabilitado". */
+.login-submit:disabled {
+  opacity: 1;
+  cursor: progress;
+}
+.login-submit-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1px;
+}
+.login-submit .spinner {
+  width: 18px;
+  height: 18px;
 }
 .login-hint {
   margin: 16px 0 0;

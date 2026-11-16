@@ -5,7 +5,7 @@ import { api } from '../../shared/api/client';
 import { activeWarehouseId, num } from '../../shared/lib/inventory';
 import { childrenStatus, componentsOf, isRaw } from '../../shared/lib/bom';
 import { downloadCSV } from '../../shared/lib/csv';
-import { Btn } from '../../shared/components/ui';
+import { Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import type { AppState, Metrics } from '../../shared/types';
 import { InventoryDetailPanel } from './InventoryDetailPanel';
@@ -81,11 +81,13 @@ export function InventoryWorkspace({
   const query = params.get('q') ?? '';
   const category = params.get('linea') ?? '';
   const supplier = params.get('proveedor') ?? '';
-  const status = statusOptions.find((option) => option.value === params.get('estado'))?.value ?? 'all';
-  const kind = (['finished', 'raw'].includes(params.get('tipo') ?? '')
-    ? params.get('tipo')
-    : 'all') as InventoryKindFilter;
-  const sort = sortOptions.find((option) => option.value === params.get('orden'))?.value ?? 'attention';
+  const status =
+    statusOptions.find((option) => option.value === params.get('estado'))?.value ?? 'all';
+  const kind = (
+    ['finished', 'raw'].includes(params.get('tipo') ?? '') ? params.get('tipo') : 'all'
+  ) as InventoryKindFilter;
+  const sort =
+    sortOptions.find((option) => option.value === params.get('orden'))?.value ?? 'attention';
 
   const allRows = useMemo(() => buildInventoryRows(state), [state]);
   const rows = useMemo(
@@ -102,10 +104,7 @@ export function InventoryWorkspace({
     () => filterInventoryRows(allRows, { status: 'attention', kind }),
     [allRows, kind],
   );
-  const finishedRows = useMemo(
-    () => filterInventoryRows(allRows, { kind: 'finished' }),
-    [allRows],
-  );
+  const finishedRows = useMemo(() => filterInventoryRows(allRows, { kind: 'finished' }), [allRows]);
   const rawRows = useMemo(() => filterInventoryRows(allRows, { kind: 'raw' }), [allRows]);
   const totals = allRows.reduce(
     (sum, row) => ({
@@ -122,9 +121,7 @@ export function InventoryWorkspace({
   const linkedBlocked = useMemo(
     () =>
       allRows.filter(
-        (r) =>
-          !isRaw(r.product) &&
-          childrenStatus(state, r.product).some((c) => c.status !== 'ok'),
+        (r) => !isRaw(r.product) && childrenStatus(state, r.product).some((c) => c.status !== 'ok'),
       ),
     [allRows, state],
   );
@@ -149,7 +146,8 @@ export function InventoryWorkspace({
     );
     setVisibleCount(PAGE_CHUNK);
   };
-  const resetFilters = () => updateParams({ q: '', linea: '', proveedor: '', estado: '', tipo: '' });
+  const resetFilters = () =>
+    updateParams({ q: '', linea: '', proveedor: '', estado: '', tipo: '' });
   const selectProduct = (id: string) => {
     setSelectedId(id);
     if (window.matchMedia('(max-width: 1350px)').matches) {
@@ -254,111 +252,105 @@ export function InventoryWorkspace({
 
   return (
     <div className="inv-page inv-page-v2">
-      <div className="inv-top">
-        <div className="inv-top-left">
-          <h1 className="inv-title">Inventario</h1>
-          <label className="inv-wh-select">
-            <Icon name="building" />
-            <select
-              value={activeWarehouseId(state)}
-              disabled={whBusy}
-              aria-label="Bodega"
-              onChange={(e) => void onWarehouseChange(e.target.value)}
-            >
-              {state.warehouses.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                  {w.code ? ` • ${w.code}` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div className="inv-top-actions">
-          <Btn icon="download" disabled={!rows.length} onClick={exportRows}>
-            Exportar vista
-          </Btn>
-          <div className="inv-create" ref={createRef}>
-            <button
-              type="button"
-              className="btn primary inv-create-btn"
-              onClick={() => setCreateOpen((o) => !o)}
-              aria-expanded={createOpen}
-            >
-              <Icon name="plus" />
-              Crear
-              <Icon name="chevron" />
-            </button>
-            {createOpen ? (
-              <div className="inv-create-menu" role="menu">
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setCreateOpen(false);
-                    setEditProduct('');
-                  }}
-                >
-                  Nuevo producto
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setCreateOpen(false);
-                    navigate('/recepcion');
-                  }}
-                >
-                  Registrar entrada
-                </button>
-              </div>
-            ) : null}
+      <PageHead
+        eyebrow="Control de stock"
+        title="Inventario"
+        desc="Stock físico, reservas y disponibilidad de productos e insumos por bodega."
+        actions={
+          <div className="inv-top-actions">
+            <Btn icon="download" disabled={!rows.length} onClick={exportRows}>
+              Exportar vista
+            </Btn>
+            <div className="inv-create" ref={createRef}>
+              <button
+                type="button"
+                className="btn primary inv-create-btn"
+                onClick={() => setCreateOpen((o) => !o)}
+                aria-expanded={createOpen}
+              >
+                <Icon name="plus" />
+                Crear
+                <Icon name="chevron" />
+              </button>
+              {createOpen ? (
+                <div className="inv-create-menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setCreateOpen(false);
+                      setEditProduct('');
+                    }}
+                  >
+                    Nuevo producto
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setCreateOpen(false);
+                      navigate('/recepcion');
+                    }}
+                  >
+                    Registrar entrada
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
-        </div>
-      </div>
+        }
+      >
+        <label className="inv-wh-select">
+          <Icon name="building" />
+          <select
+            value={activeWarehouseId(state)}
+            disabled={whBusy}
+            aria-label="Bodega"
+            onChange={(e) => void onWarehouseChange(e.target.value)}
+          >
+            {state.warehouses.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+                {w.code ? ` • ${w.code}` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+      </PageHead>
 
-      <section className="inv-metrics" aria-label="Resumen de la bodega activa">
-        <button type="button" className="inv-metric" onClick={resetFilters}>
-          <span className="inv-metric-label">
-            Stock físico <Icon name="box" />
-          </span>
-          <strong>{num(totals.stock)}</strong>
-          <span>
-            {finishedRows.length} productos • {rawRows.length} insumos
-          </span>
-        </button>
-        <button
-          type="button"
-          className={`inv-metric ${status === 'reserved' ? 'is-active' : ''}`}
+      <KpiGrid label="Resumen de la bodega activa">
+        <Kpi
+          label="Stock físico"
+          icon="box"
+          value={num(totals.stock)}
+          caption={`${finishedRows.length} productos · ${rawRows.length} insumos`}
+          onClick={resetFilters}
+        />
+        <Kpi
+          label="Reservado"
+          icon="orders"
+          value={num(totals.reserved)}
+          caption="En pedidos por preparar"
+          active={status === 'reserved'}
           onClick={() => updateParams({ estado: status === 'reserved' ? '' : 'reserved' })}
-        >
-          <span className="inv-metric-label">
-            Reservado <Icon name="orders" />
-          </span>
-          <strong>{num(totals.reserved)}</strong>
-          <span>En pedidos por preparar</span>
-        </button>
-        <div className="inv-metric inv-metric-available">
-          <span className="inv-metric-label">
-            Disponible <Icon name="check" />
-          </span>
-          <strong>{num(totals.available)}</strong>
-          <span>Físico menos reservado</span>
-        </div>
-        <button
-          type="button"
-          className={`inv-metric inv-metric-attention ${status === 'attention' ? 'is-active' : ''}`}
+        />
+        <Kpi
+          label="Disponible"
+          icon="check"
+          tone="success"
+          value={num(totals.available)}
+          caption="Físico menos reservado"
+        />
+        <Kpi
+          label="Por reponer"
+          icon="alert"
+          tone={attention.length ? 'warning' : 'default'}
+          value={attention.length}
+          caption={`${attentionFinished} productos · ${attentionRaw} insumos`}
+          active={status === 'attention'}
           onClick={() => updateParams({ estado: status === 'attention' ? '' : 'attention' })}
-        >
-          <span className="inv-metric-label">
-            Por reponer <Icon name="alert" />
-          </span>
-          <strong>{attention.length}</strong>
-          <span>
-            {attentionFinished} productos • {attentionRaw} insumos
-          </span>
-        </button>
-      </section>
+        />
+      </KpiGrid>
 
       {linkedBlocked.length > 0 ? (
         <div className="inv-linked-banner" role="status">
@@ -434,7 +426,11 @@ export function InventoryWorkspace({
                 onChange={(event) => updateParams({ q: event.target.value })}
               />
               {query ? (
-                <button type="button" aria-label="Borrar búsqueda" onClick={() => updateParams({ q: '' })}>
+                <button
+                  type="button"
+                  aria-label="Borrar búsqueda"
+                  onClick={() => updateParams({ q: '' })}
+                >
                   <Icon name="close" />
                 </button>
               ) : null}
@@ -443,7 +439,9 @@ export function InventoryWorkspace({
               <span>Tipo</span>
               <select
                 value={kind}
-                onChange={(e) => updateParams({ tipo: e.target.value === 'all' ? '' : e.target.value })}
+                onChange={(e) =>
+                  updateParams({ tipo: e.target.value === 'all' ? '' : e.target.value })
+                }
               >
                 <option value="all">Todos</option>
                 <option value="finished">Productos</option>
@@ -452,10 +450,7 @@ export function InventoryWorkspace({
             </label>
             <label className="inv-select">
               <span>Familia</span>
-              <select
-                value={category}
-                onChange={(e) => updateParams({ linea: e.target.value })}
-              >
+              <select value={category} onChange={(e) => updateParams({ linea: e.target.value })}>
                 <option value="">Todas</option>
                 {categoryNames.map((name) => (
                   <option key={name} value={name}>
@@ -522,9 +517,7 @@ export function InventoryWorkspace({
                 key={filter.value}
                 className={status === filter.value ? 'active' : ''}
                 aria-pressed={status === filter.value}
-                onClick={() =>
-                  updateParams({ estado: filter.value === 'all' ? '' : filter.value })
-                }
+                onClick={() => updateParams({ estado: filter.value === 'all' ? '' : filter.value })}
               >
                 {filter.label} <em>{filter.count}</em>
               </button>
@@ -624,9 +617,7 @@ export function InventoryWorkspace({
                                       <small>
                                         {row.product.id} ·{' '}
                                         {isRaw(row.product) ? 'Insumo' : 'Producto'}
-                                        {row.product.category
-                                          ? ` · ${row.product.category}`
-                                          : ''}
+                                        {row.product.category ? ` · ${row.product.category}` : ''}
                                       </small>
                                     </span>
                                   </button>
@@ -754,9 +745,7 @@ export function InventoryWorkspace({
                   <Icon name={allRows.length ? 'search' : 'box'} />
                 </span>
                 <h3>
-                  {allRows.length
-                    ? 'No hay ítems con estos filtros'
-                    : 'Tu inventario empieza aquí'}
+                  {allRows.length ? 'No hay ítems con estos filtros' : 'Tu inventario empieza aquí'}
                 </h3>
                 <p>
                   {allRows.length
@@ -788,9 +777,7 @@ export function InventoryWorkspace({
                 purchase(selected.product.id, selected.shortage || selected.product.min)
               }
               onLocate={(loc) => locate(selected.product.id, loc)}
-              onTrace={() =>
-                navigate('/trazabilidad', { state: { q: selected.product.id } })
-              }
+              onTrace={() => navigate('/trazabilidad', { state: { q: selected.product.id } })}
               onSelectRelated={selectProduct}
             />
           </aside>
@@ -820,8 +807,6 @@ function StatusBadge({ row }: { row: InventoryRow }) {
     return <span className="inv-status-badge healthy">En nivel</span>;
   }
   return (
-    <span className={`inv-status-badge ${row.status}`}>
-      {inventoryStatusLabels[row.status]}
-    </span>
+    <span className={`inv-status-badge ${row.status}`}>{inventoryStatusLabels[row.status]}</span>
   );
 }

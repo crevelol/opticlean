@@ -36,6 +36,7 @@
   --slate-850: #1c3a57;
   --slate-900: #16304c;
   --slate-950: #062344;
+  --slate-975: #03182f; /* fondo profundo del sidebar */
 
   /* Blue: marca / acción principal */
   --blue-50: #eef6ff;
@@ -199,6 +200,15 @@
   --space-6: 24px;
   --space-8: 32px;
   --space-10: 40px;
+
+  /* ── Movimiento ───────────────────────────────────────────────── */
+  /* Espejo de shared/motion/presets.ts: CSS y motion usan los mismos tiempos. */
+
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 
   /* ── Capas ────────────────────────────────────────────────────── */
 

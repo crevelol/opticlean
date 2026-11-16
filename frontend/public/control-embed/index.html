@@ -8,6 +8,9 @@
   <title>OPTICLEAN AI · Bodega visual</title>
   <base href="/control-embed/">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap">
   <link rel="stylesheet" href="styles.css">
   <style>
     /* Modo embed: se muestra dentro de opticlean (React) sin doble sidebar */
@@ -21,9 +24,190 @@
       grid-template-columns: none !important;
       min-height: 100vh;
     }
+    /* Paridad con el layout de OPTICLEAN (frontend/src/styles/layout.css + tokens.css).
+       Si cambias allí margen o cabecera, cámbialo también aquí. */
     html.embed-mode .page {
-      padding: 18px 20px 28px !important;
-      max-width: none;
+      padding: 24px 28px 28px !important;
+      max-width: 1780px;
+      margin: 0 auto;
+    }
+    html.embed-mode .page-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center !important;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 20px !important;
+    }
+    html.embed-mode .page-head .eyebrow {
+      margin-bottom: 7px !important;
+      font-size: 9px !important;
+      font-weight: 700 !important;
+      letter-spacing: 1.6px !important;
+      color: #1a8de8 !important; /* --blue-500 */
+    }
+    html.embed-mode .page-head h1 {
+      font-size: 26px !important; /* --text-4xl */
+      line-height: 1.2 !important;
+      font-weight: 600 !important;
+      letter-spacing: -0.75px !important;
+      color: #16304c !important; /* --color-text */
+    }
+    html.embed-mode .page-head p {
+      margin: 7px 0 0 !important;
+      max-width: 680px !important;
+      font-size: 11px !important;
+      line-height: 1.5 !important;
+      color: #7a90a5 !important; /* --slate-550 */
+    }
+    /* Botones glass (paridad con .btn de frontend/src/styles/global.css) */
+    html.embed-mode .btn {
+      --btn-color: #16304c;
+      --btn-bg: linear-gradient(180deg, rgba(255,255,255,.94), rgba(247,250,253,.82));
+      --btn-bg-hover: linear-gradient(180deg, #fff, rgba(247,250,253,.92));
+      --btn-border: rgba(216,227,238,.85);
+      --btn-border-hover: #c8d6e4;
+      --btn-highlight: inset 0 1px 0 rgba(255,255,255,.9);
+      --btn-shadow: 0 1px 2px rgba(22,48,76,.06);
+      --btn-shadow-hover: 0 6px 14px -6px rgba(22,48,76,.22);
+      min-height: 36px;
+      padding: 8px 13px;
+      border: 1px solid var(--btn-border);
+      border-radius: 8px;
+      background: var(--btn-bg);
+      color: var(--btn-color);
+      box-shadow: var(--btn-highlight), var(--btn-shadow);
+      backdrop-filter: blur(12px) saturate(160%);
+      -webkit-backdrop-filter: blur(12px) saturate(160%);
+      font-size: 11px;
+      font-weight: 500;
+      line-height: 1.2;
+      transition: background .2s cubic-bezier(.22,1,.36,1), border-color .2s cubic-bezier(.22,1,.36,1),
+        box-shadow .2s cubic-bezier(.22,1,.36,1), transform .12s cubic-bezier(.22,1,.36,1);
+    }
+    html.embed-mode .btn:hover:not(:disabled) {
+      background: var(--btn-bg-hover);
+      border-color: var(--btn-border-hover);
+      box-shadow: var(--btn-highlight), var(--btn-shadow-hover);
+      transform: translateY(-1px);
+    }
+    html.embed-mode .btn:active:not(:disabled) { transform: scale(.98); box-shadow: var(--btn-highlight), var(--btn-shadow); }
+    html.embed-mode .btn.small { min-height: 30px; padding: 5px 10px; font-size: 10px; }
+    html.embed-mode .btn.primary {
+      --btn-color: #fff;
+      --btn-bg: linear-gradient(135deg, #087af0, #1a8de8);
+      --btn-bg-hover: linear-gradient(135deg, #087af0, #45a6f2);
+      --btn-border: rgba(8,112,210,.55);
+      --btn-border-hover: rgba(8,112,210,.7);
+      --btn-highlight: inset 0 1px 0 rgba(255,255,255,.22);
+      --btn-shadow: 0 6px 16px -8px rgba(8,122,240,.75);
+      --btn-shadow-hover: 0 10px 22px -8px rgba(8,122,240,.85);
+    }
+    html.embed-mode .btn.dark {
+      --btn-color: #fff;
+      --btn-bg: radial-gradient(120% 120% at 0% 0%, rgba(40,184,237,.22), transparent 60%), linear-gradient(135deg, #16304c, #062344);
+      --btn-bg-hover: radial-gradient(120% 120% at 0% 0%, rgba(40,184,237,.32), transparent 60%), linear-gradient(135deg, #1c3a57, #062344);
+      --btn-border: #1f3956;
+      --btn-border-hover: #2f4a66;
+      --btn-highlight: inset 0 1px 0 rgba(255,255,255,.14);
+      --btn-shadow: 0 6px 16px -8px rgba(6,35,68,.7);
+      --btn-shadow-hover: 0 10px 22px -8px rgba(6,35,68,.8);
+    }
+    html.embed-mode .btn.danger {
+      --btn-color: #d24b4b;
+      --btn-bg: linear-gradient(180deg, rgba(255,255,255,.88), rgba(255,241,242,.85));
+      --btn-bg-hover: linear-gradient(180deg, rgba(255,241,242,.95), rgba(255,230,234,.9));
+      --btn-border: rgba(242,198,204,.9);
+      --btn-border-hover: #e25f6a;
+      --btn-shadow-hover: 0 6px 14px -6px rgba(210,75,75,.4);
+    }
+    html.embed-mode .btn.green {
+      --btn-color: #1a8a62;
+      --btn-bg: linear-gradient(180deg, rgba(235,248,242,.92), rgba(211,239,227,.7));
+      --btn-bg-hover: linear-gradient(180deg, #ebf8f2, rgba(211,239,227,.95));
+      --btn-border: rgba(143,208,182,.7);
+      --btn-border-hover: #8fd0b6;
+      --btn-shadow-hover: 0 6px 14px -6px rgba(36,160,116,.4);
+    }
+    html.embed-mode .btn.ghost {
+      --btn-color: #087af0;
+      --btn-bg: transparent;
+      --btn-bg-hover: linear-gradient(180deg, rgba(238,246,255,.9), rgba(226,239,253,.7));
+      --btn-border: transparent;
+      --btn-border-hover: rgba(196,224,250,.7);
+      --btn-highlight: inset 0 0 0 transparent;
+      --btn-shadow: 0 0 0 transparent;
+      --btn-shadow-hover: 0 4px 12px -6px rgba(8,122,240,.3);
+      backdrop-filter: none;
+    }
+    /* El iframe se extiende bajo el topbar glass de OPTICLEAN (param ?under=56):
+       el contenido arranca debajo y, al hacer scroll, pasa difuminado tras el topbar. */
+    html.embed-mode.under-topbar .page { padding-top: calc(var(--under-topbar, 0px) + 24px) !important; }
+    @media (max-width: 760px) {
+      html.embed-mode.under-topbar .page { padding-top: calc(var(--under-topbar, 0px) + 18px) !important; }
+    }
+
+    /* KPI compacto (paridad con .kpi de frontend/src/styles/global.css) */
+    html.embed-mode .kpis {
+      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+      gap: 12px !important;
+      margin-bottom: 20px !important;
+    }
+    html.embed-mode .kpi {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 12px 14px !important;
+      border: 1px solid #e1e9f2 !important; /* --color-border */
+      border-radius: 10px !important;
+    }
+    html.embed-mode .kpi-label {
+      flex-direction: row-reverse;
+      justify-content: flex-end !important;
+      gap: 7px;
+      font-size: 11px !important;
+      font-weight: 500;
+      color: #6b8298 !important; /* --color-text-muted */
+    }
+    html.embed-mode .kpi-label > .icon,
+    html.embed-mode .kpi-label > svg {
+      width: 15px !important;
+      height: 15px !important;
+      color: #8b9db0 !important; /* --slate-500 */
+    }
+    html.embed-mode .kpi-value {
+      margin-top: 0 !important;
+      gap: 5px !important;
+      font-size: 22px !important;
+      font-weight: 600 !important;
+      line-height: 1.15;
+      letter-spacing: -0.5px !important;
+      font-variant-numeric: tabular-nums;
+      color: #16304c !important;
+    }
+    html.embed-mode .kpi-value small {
+      font-size: 11px !important;
+      color: #8b9db0 !important;
+    }
+    html.embed-mode .kpi-foot {
+      margin-top: 0 !important;
+      font-size: 10px !important;
+      line-height: 1.4;
+      color: #8b9db0 !important;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    html.embed-mode .kpi-foot.positive { color: #1a8a62 !important; } /* --color-success */
+    html.embed-mode .kpi-foot .icon,
+    html.embed-mode .kpi-foot svg { width: 12px; height: 12px; }
+    @media (max-width: 1000px) {
+      html.embed-mode .kpis { grid-template-columns: 1fr 1fr !important; }
+    }
+    @media (max-width: 760px) {
+      html.embed-mode .page { padding: 18px 16px 28px !important; }
+      html.embed-mode .page-head { flex-direction: column; align-items: flex-start !important; }
+      html.embed-mode .page-head h1 { font-size: 22px !important; }
     }
     html.embed-mode body {
       background: #f4f7fb;
@@ -74,6 +258,38 @@
         if (params.get('mobile') === '1') document.documentElement.classList.add('mobile-embed');
         if (params.get('maponly') === '1') document.documentElement.classList.add('map-only');
         if (!location.hash || location.hash === '#') location.hash = '#bodega';
+        var under = parseInt(params.get('under') || '0', 10);
+        if (under > 0) {
+          document.documentElement.classList.add('under-topbar');
+          document.documentElement.style.setProperty('--under-topbar', under + 'px');
+        }
+
+        // Avisa a OPTICLEAN cuando se abre/cierra un modal, para que oscurezca
+        // también su sidebar y topbar (el fondo del modal no puede salir del iframe).
+        var post = function (open) {
+          try {
+            parent.postMessage({ source: 'opticlean-control-embed', type: 'modal', open: open }, '*');
+          } catch (e) {}
+        };
+        var watch = function () {
+          var root = document.getElementById('modal-root');
+          if (!root) return;
+          var last = false;
+          new MutationObserver(function () {
+            var open = root.childElementCount > 0;
+            if (open !== last) { last = open; post(open); }
+          }).observe(root, { childList: true });
+        };
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watch);
+        else watch();
+
+        // OPTICLEAN pide cerrar el modal (clic fuera del iframe): equivale a Escape.
+        window.addEventListener('message', function (e) {
+          var d = e.data;
+          if (e.source === parent && d && d.source === 'opticlean-shell' && d.type === 'close-modal') {
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          }
+        });
       }
     })();
   </script>

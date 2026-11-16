@@ -5,7 +5,7 @@ import { api } from '../../shared/api/client';
 import { activeWarehouseId, num, scopedLots } from '../../shared/lib/inventory';
 import { DEFAULT_LAYOUT, layoutSummary, normalizeLayout } from '../../shared/lib/warehouseLayout';
 import type { AppState, WarehouseSite } from '../../shared/types';
-import { Badge, Btn, Empty, Kpi, PageHead } from '../../shared/components/ui';
+import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { WarehouseDesigner } from './WarehouseDesigner';
 import { WarehouseLayoutSchematic } from './WarehouseLayoutSchematic';
@@ -71,11 +71,11 @@ function WarehouseAdmin({ state }: { state: AppState }) {
   return <div className="wh-admin">
     <PageHead eyebrow="Red logística" title="Tus bodegas" desc="Organiza tus espacios, consulta su ocupación y elige dónde operar." actions={<Btn variant="primary" icon="plus" onClick={startNew}>Nueva bodega</Btn>} />
     {editId ? <div className="wh-notice" role="alert">No encontramos esa bodega. Puedes seleccionarla en el listado.</div> : null}
-    <div className="kpis wh-overview">
+    <KpiGrid>
       <Kpi label="Bodegas" value={state.warehouses.length} unit="" foot={`${state.warehouses.filter((w) => w.status === 'Operativa').length} operativas`} icon="building" />
       <Kpi label="Ubicaciones" value={num(rows.reduce((n, row) => n + row.summary.totalCells, 0))} unit="" foot="En toda tu red de bodegas" icon="grid" />
       <Kpi label="Existencias" value={num(rows.reduce((n, row) => n + row.units, 0))} unit="u." foot="Inventario de todas las bodegas" icon="box" />
-    </div>
+    </KpiGrid>
     {error ? <div className="wh-error" role="alert">{error}</div> : null}
     <section aria-label="Listado de bodegas">
       <div className="wh-list-toolbar">

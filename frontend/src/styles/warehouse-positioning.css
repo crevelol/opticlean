@@ -251,17 +251,6 @@
 .floor-announcement:empty {
   display: none;
 }
-.warehouse-positioning-page .kpis {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-.warehouse-positioning-page .page-head h1 {
-  font-size: var(--text-5xl);
-  letter-spacing: -0.8px;
-}
-.warehouse-positioning-page .page-head p {
-  color: var(--slate-600);
-  font-size: var(--text-md);
-}
 .warehouse-positioning-page .work-area {
   grid-template-columns: minmax(0, 1fr) 290px;
 }
@@ -711,9 +700,6 @@
   }
   .warehouse-positioning-page .side-stack {
     grid-template-columns: 1fr;
-  }
-  .warehouse-positioning-page .page-head h1 {
-    font-size: var(--text-4xl);
   }
   .warehouse-positioning-page .map-controls {
     padding: 12px;

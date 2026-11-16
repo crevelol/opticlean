@@ -4,14 +4,6 @@
   gap: 18px;
 }
 
-.dash-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
 .dash-wh {
   display: inline-flex;
   align-items: center;
@@ -42,69 +34,6 @@
   font-weight: var(--weight-medium);
 }
 
-.dash-toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-left: auto;
-}
-
-.dash-kpis {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.dash-kpi {
-  background: var(--slate-0);
-  border: 1px solid var(--slate-200);
-  border-radius: var(--radius-xl);
-  padding: 16px 18px 14px;
-  min-height: 118px;
-}
-
-.dash-kpi-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: var(--text-sm);
-  color: var(--slate-550);
-  margin-bottom: 10px;
-}
-
-.dash-kpi-label > .icon {
-  width: 17px;
-  height: 17px;
-  color: var(--slate-500);
-}
-
-.dash-kpi-value {
-  font-size: var(--text-5xl);
-  font-weight: var(--weight-semibold);
-  letter-spacing: -0.6px;
-  color: var(--slate-900);
-  line-height: 1;
-  margin-bottom: 10px;
-}
-
-.dash-kpi-foot {
-  font-size: var(--text-sm);
-  color: var(--slate-550);
-}
-
-.dash-kpi-foot.warn {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 8px;
-  border-radius: var(--radius-full);
-  background: var(--amber-100);
-  color: var(--amber-700);
-  font-weight: var(--weight-semibold);
-  font-size: var(--text-xs);
-}
-
 .dash-kpi-link {
   border: 0;
   background: none;
@@ -117,20 +46,6 @@
 
 .dash-kpi-link:hover {
   text-decoration: underline;
-}
-
-.dash-occ {
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--slate-150);
-  overflow: hidden;
-  margin: 0 0 8px;
-}
-
-.dash-occ-bar {
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--blue-400), var(--blue-600));
 }
 
 .dash-mid {
@@ -337,9 +252,6 @@
 }
 
 @media (max-width: 1100px) {
-  .dash-kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 
   .dash-mid,
   .dash-bottom {
@@ -352,20 +264,9 @@
 }
 
 @media (max-width: 640px) {
-  .dash-kpis {
-    grid-template-columns: 1fr;
-  }
 
   .dash-lines {
     grid-template-columns: 1fr 1fr;
-  }
-
-  .dash-toolbar-actions {
-    width: 100%;
-  }
-
-  .dash-toolbar-actions .btn {
-    flex: 1;
   }
 
   .dash-wh {

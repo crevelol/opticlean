@@ -3,26 +3,6 @@
   min-width: 0;
 }
 
-.cli-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-.cli-title {
-  margin: 0;
-  font-size: var(--text-5xl);
-  font-weight: var(--weight-bold);
-  letter-spacing: -0.7px;
-}
-.cli-top-actions {
-  display: flex;
-  gap: 10px;
-  margin-left: auto;
-}
-
 .cli-toolbar {
   display: flex;
   flex-wrap: wrap;

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { client, money, orderValue, orderWeight, product, statusColor } from '../../shared/lib/inventory';
-import { Badge, Btn, Empty, Kpi, PageHead } from '../../shared/components/ui';
+import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
 import { Modal } from '../../shared/components/Modal';
 import { Icon } from '../../shared/components/Icon';
 import '../../styles/orders.css';
@@ -66,7 +66,7 @@ export function OrdersPage() {
         }
       />
 
-      <div className="kpis">
+      <KpiGrid>
         <Kpi label="En operación" value={counts.todos} unit="pedidos" foot="Sin historial demo" icon="orders" />
         <Kpi
           label="Por preparar"
@@ -90,7 +90,7 @@ export function OrdersPage() {
           icon="check"
           color="positive"
         />
-      </div>
+      </KpiGrid>
 
       <div className="tabs" role="tablist" aria-label="Estado de pedidos">
         {tabs.map((t) => (

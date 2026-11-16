@@ -23,25 +23,6 @@
   outline: 3px solid var(--blue-500);
   outline-offset: 3px;
 }
-.inv-page .page-head {
-  margin-bottom: 13px;
-  align-items: center;
-}
-.inv-page .page-head h1 {
-  font-size: var(--text-5xl);
-  letter-spacing: -0.8px;
-  margin: 5px 0;
-}
-.inv-page .page-head p {
-  font-size: var(--text-md);
-  color: var(--color-text-muted);
-  max-width: none;
-  margin: 0;
-  line-height: 1.5;
-}
-.inv-page .page-head .eyebrow {
-  font-size: var(--text-2xs);
-}
 .inv-page .inv-context {
   display: flex;
   align-items: center;
@@ -102,84 +83,6 @@
 .inv-page .inv-text-button .icon {
   width: 14px;
   height: 14px;
-}
-.inv-page .inv-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 13px;
-}
-.inv-page .inv-metric {
-  min-width: 0;
-  border: 1px solid var(--color-border);
-  background: var(--slate-0);
-  border-radius: var(--radius-md);
-  padding: 12px 15px;
-  text-align: left;
-  color: var(--color-text);
-}
-.inv-page button.inv-metric:hover,
-.inv-page button.inv-metric.is-active {
-  border-color: var(--steel-300);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--steel-300) 20%, transparent);
-}
-.inv-page .inv-metric-label {
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
-  align-items: center;
-  font-size: var(--text-sm);
-  color: var(--slate-700);
-}
-.inv-page .inv-metric-label .icon {
-  width: 16px;
-  height: 16px;
-  color: var(--slate-550);
-}
-.inv-page .inv-metric > strong {
-  display: block;
-  font-size: var(--text-4xl);
-  font-weight: var(--weight-bold);
-  letter-spacing: -0.6px;
-  margin: 8px 0 6px;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-.inv-page .inv-metric > strong small {
-  font-size: var(--text-xs);
-  margin-left: 6px;
-  font-weight: var(--weight-regular);
-  letter-spacing: 0;
-  color: var(--slate-600);
-}
-.inv-page .inv-metric > span:last-child {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  display: flex;
-  justify-content: space-between;
-  gap: 5px;
-  align-items: center;
-  line-height: 1.4;
-}
-.inv-page .inv-metric > span:last-child .icon {
-  width: 12px;
-  height: 12px;
-}
-.inv-page .inv-metric-available {
-  background: var(--slate-50);
-  border-color: var(--green-100);
-}
-.inv-page .inv-metric-available > strong,
-.inv-page .inv-metric-available .inv-metric-label .icon {
-  color: var(--teal-600);
-}
-.inv-page .inv-metric-attention {
-  background: var(--amber-50);
-  border-color: var(--amber-200);
-}
-.inv-page .inv-metric-attention > strong,
-.inv-page .inv-metric-attention .inv-metric-label .icon {
-  color: var(--amber-600);
 }
 .inv-page .inv-category-nav {
   display: flex;
@@ -1282,12 +1185,6 @@
   .inv-page .inv-inspector {
     position: static;
   }
-  .inv-page .inv-metric {
-    padding: 11px 12px;
-  }
-  .inv-page .inv-metric-label .icon {
-    display: none;
-  }
   .inv-page .inv-line-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1320,18 +1217,6 @@
   .inv-page .inv-list-hint {
     display: none;
   }
-  .inv-page .inv-metric > span:last-child {
-    font-size: var(--text-2xs);
-  }
-  .inv-page .inv-metric > span:last-child .icon {
-    display: none;
-  }
-  .inv-page .inv-metric-label {
-    font-size: var(--text-xs);
-  }
-  .inv-page .inv-metric > strong {
-    font-size: var(--text-3xl);
-  }
 }
 
 @media (max-width: 760px) {
@@ -1345,16 +1230,6 @@
   }
   .inv-page .inv-kind-toggle {
     width: 100%;
-  }
-  .inv-page .page-head {
-    display: block;
-    margin-bottom: 13px;
-  }
-  .inv-page .page-head h1 {
-    font-size: var(--text-4xl);
-  }
-  .inv-page .page-head p {
-    font-size: var(--text-md);
   }
   .inv-page .head-actions {
     margin-top: 11px;
@@ -1377,24 +1252,6 @@
   }
   .inv-page .inv-warehouse-code {
     display: none;
-  }
-  .inv-page .inv-metrics {
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-bottom: 11px;
-  }
-  .inv-page .inv-metric {
-    padding: 10px 12px;
-  }
-  .inv-page .inv-metric > strong {
-    font-size: var(--text-3xl);
-    margin: 7px 0 0;
-  }
-  .inv-page .inv-metric > span:last-child {
-    display: none;
-  }
-  .inv-page .inv-metric-label {
-    font-size: var(--text-xs);
   }
   .inv-page .inv-category-nav {
     flex-wrap: nowrap;
@@ -1560,28 +1417,6 @@
 }
 
 /* —— Inventario v2 (mockup) —— */
-.inv-page-v2 .inv-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-.inv-page-v2 .inv-top-left {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-}
-.inv-page-v2 .inv-title {
-  margin: 0;
-  font-size: var(--text-5xl);
-  font-weight: var(--weight-bold);
-  letter-spacing: -0.7px;
-  color: var(--slate-900);
-  line-height: 1.1;
-}
 .inv-page-v2 .inv-wh-select {
   display: inline-flex;
   align-items: center;
@@ -1658,13 +1493,6 @@
 }
 .inv-page-v2 .inv-create-menu button:hover {
   background: var(--slate-75);
-}
-
-.inv-page-v2 .inv-metrics {
-  margin-bottom: 12px;
-}
-.inv-page-v2 .inv-metric > strong small {
-  display: none;
 }
 
 .inv-page-v2 .inv-linked-banner {
