@@ -9,8 +9,8 @@ import {
   orderValue,
   statusColor,
 } from '../../shared/lib/inventory';
+import { Badge, Btn, PageHead } from '../../shared/components/ui';
 import { resolveBusinessRules } from '../../shared/lib/businessRules';
-import { Badge, Btn } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import type { Client, Order } from '../../shared/types';
@@ -95,7 +95,9 @@ export function ClientsPage() {
 
     list.sort((a, b) => {
       if (sort === 'orders')
-        return b.orders.length - a.orders.length || a.client.name.localeCompare(b.client.name, 'es');
+        return (
+          b.orders.length - a.orders.length || a.client.name.localeCompare(b.client.name, 'es')
+        );
       if (sort === 'credit')
         return b.available - a.available || a.client.name.localeCompare(b.client.name, 'es');
       return a.client.name.localeCompare(b.client.name, 'es');
@@ -177,14 +179,16 @@ export function ClientsPage() {
 
   return (
     <div className={`cli-page ${selected ? 'has-selection' : ''}`}>
-      <div className="cli-top">
-        <h1 className="cli-title">Clientes</h1>
-        <div className="cli-top-actions">
+      <PageHead
+        eyebrow="Cartera comercial"
+        title="Clientes"
+        desc="Puntos de entrega, contactos y crédito de cada cliente."
+        actions={
           <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
             Nuevo cliente
           </Btn>
-        </div>
-      </div>
+        }
+      />
 
       <div className="cli-toolbar">
         <div className="cli-search">
@@ -507,11 +511,7 @@ export function ClientsPage() {
                   <div className="cli-credit-bar">
                     <span style={{ width: `${selected.pct}%` }} />
                   </div>
-                  <button
-                    type="button"
-                    className="cli-text-link"
-                    onClick={() => setTab('pedidos')}
-                  >
+                  <button type="button" className="cli-text-link" onClick={() => setTab('pedidos')}>
                     Ver pedidos que usan el cupo
                   </button>
                 </div>
@@ -603,7 +603,11 @@ export function ClientsPage() {
               >
                 Crear pedido
               </Btn>
-              <button type="button" className="cli-text-link" onClick={() => openCredit(selected.client)}>
+              <button
+                type="button"
+                className="cli-text-link"
+                onClick={() => openCredit(selected.client)}
+              >
                 Editar cliente
               </button>
             </footer>

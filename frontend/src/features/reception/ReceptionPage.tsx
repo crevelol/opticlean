@@ -368,7 +368,7 @@ export function ReceptionPage() {
               )}
 
               <div className="reception-actions">
-                <button type="submit" className="btn primary" disabled={!canSubmit}>
+                <button type="submit" className="btn primary large" disabled={!canSubmit}>
                   <Icon name="check" />
                   {saving ? 'Registrando…' : 'Confirmar recepción'}
                 </button>

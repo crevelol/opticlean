@@ -3,13 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { money, num } from '../../shared/lib/inventory';
 import { exportEvents, exportInventory, exportLocations, exportReport } from '../../shared/lib/csv';
-import { Btn, PageHead } from '../../shared/components/ui';
+import { Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
-import {
-  buildReportsSnapshot,
-  type ReportPeriod,
-  type ReportTab,
-} from './reportsModel';
+import { buildReportsSnapshot, type ReportPeriod, type ReportTab } from './reportsModel';
 import '../../styles/reports.css';
 
 const periods: { value: ReportPeriod; label: string }[] = [
@@ -41,37 +37,79 @@ export function ReportsPage() {
 
   const { capital, service, supply, warehouse } = snapshot;
   const insight =
-    tab === 'capital' ? capital.insight
-      : tab === 'service' ? service.insight
-        : tab === 'supply' ? supply.insight
+    tab === 'capital'
+      ? capital.insight
+      : tab === 'service'
+        ? service.insight
+        : tab === 'supply'
+          ? supply.insight
           : warehouse.insight;
 
   const exportActive = () => {
     if (tab === 'capital') {
-      exportReport('OPTICLEAN_Reporte_Capital', [
-        'Código', 'Producto', 'Línea', 'Tipo', 'Disponible', 'Mínimo', 'Gap', 'Valor en riesgo',
-      ], capital.atRisk.map((r) => [
-        r.productId, r.name, r.category, r.kind === 'raw' ? 'Insumo' : 'Producto',
-        r.available, r.min, r.gap, r.riskValue,
-      ]));
+      exportReport(
+        'OPTICLEAN_Reporte_Capital',
+        ['Código', 'Producto', 'Línea', 'Tipo', 'Disponible', 'Mínimo', 'Gap', 'Valor en riesgo'],
+        capital.atRisk.map((r) => [
+          r.productId,
+          r.name,
+          r.category,
+          r.kind === 'raw' ? 'Insumo' : 'Producto',
+          r.available,
+          r.min,
+          r.gap,
+          r.riskValue,
+        ]),
+      );
     } else if (tab === 'service') {
-      exportReport('OPTICLEAN_Reporte_Servicio', [
-        'Producto', 'Línea', 'Demanda periodo', 'Disponible', 'Días cobertura', 'Faltante',
-      ], service.velocity.map((r) => [
-        r.name, r.category, r.qtyOrdered, r.available, r.coverDays ?? '', r.shortfall,
-      ]));
+      exportReport(
+        'OPTICLEAN_Reporte_Servicio',
+        ['Producto', 'Línea', 'Demanda periodo', 'Disponible', 'Días cobertura', 'Faltante'],
+        service.velocity.map((r) => [
+          r.name,
+          r.category,
+          r.qtyOrdered,
+          r.available,
+          r.coverDays ?? '',
+          r.shortfall,
+        ]),
+      );
     } else if (tab === 'supply') {
-      exportReport('OPTICLEAN_Reporte_Abastecimiento', [
-        'Insumo', 'Disponible', 'Mínimo', 'Gap', 'Costo reposición', 'Padres bloqueados', 'Padres',
-      ], supply.items.map((r) => [
-        r.childName, r.available, r.min, r.gap, r.restockCost, r.parentsBlocked, r.parentNames.join(' | '),
-      ]));
+      exportReport(
+        'OPTICLEAN_Reporte_Abastecimiento',
+        [
+          'Insumo',
+          'Disponible',
+          'Mínimo',
+          'Gap',
+          'Costo reposición',
+          'Padres bloqueados',
+          'Padres',
+        ],
+        supply.items.map((r) => [
+          r.childName,
+          r.available,
+          r.min,
+          r.gap,
+          r.restockCost,
+          r.parentsBlocked,
+          r.parentNames.join(' | '),
+        ]),
+      );
     } else {
-      exportReport('OPTICLEAN_Reporte_Bodega', [
-        'Rack', 'Categoría', 'Posiciones', 'Ocupadas', 'Ocupación %', 'Unidades', 'Valor',
-      ], warehouse.byRack.map((r) => [
-        r.rack, r.category, r.positions, r.occupied, r.occupancyPct, r.units, r.value,
-      ]));
+      exportReport(
+        'OPTICLEAN_Reporte_Bodega',
+        ['Rack', 'Categoría', 'Posiciones', 'Ocupadas', 'Ocupación %', 'Unidades', 'Valor'],
+        warehouse.byRack.map((r) => [
+          r.rack,
+          r.category,
+          r.positions,
+          r.occupied,
+          r.occupancyPct,
+          r.units,
+          r.value,
+        ]),
+      );
     }
     toast('CSV del reporte activo descargado.');
   };
@@ -84,8 +122,12 @@ export function ReportsPage() {
         desc="Capital, servicio, abastecimiento y bodega: qué actuar hoy."
         actions={
           <>
-            <Btn icon="download" onClick={exportActive}>Exportar activo</Btn>
-            <Btn icon="file" onClick={() => window.print()}>Imprimir</Btn>
+            <Btn icon="download" onClick={exportActive}>
+              Exportar activo
+            </Btn>
+            <Btn icon="file" onClick={() => window.print()}>
+              Imprimir
+            </Btn>
           </>
         }
       />
@@ -134,28 +176,37 @@ export function ReportsPage() {
         </div>
       </div>
 
-      <section className="rpt-kpis" aria-label="Indicadores de decisión">
-        <div className="rpt-kpi rpt-kpi-risk">
-          <span>Capital en riesgo</span>
-          <strong>{money(capital.atRiskValue)}</strong>
-          <small>Gap bajo mínimo × PVP</small>
-        </div>
-        <div className={`rpt-kpi ${service.fillRate >= 90 ? 'rpt-kpi-ok' : 'rpt-kpi-warn'}`}>
-          <span>Fill rate estimado</span>
-          <strong>{service.fillRate}%</strong>
-          <small>{service.linesCovered}/{service.linesTotal} líneas cubiertas</small>
-        </div>
-        <div className={`rpt-kpi ${supply.blockers ? 'rpt-kpi-warn' : 'rpt-kpi-ok'}`}>
-          <span>Bloqueos BOM</span>
-          <strong>{supply.blockers}</strong>
-          <small>{supply.parentsAffected} productos padre afectados</small>
-        </div>
-        <div className="rpt-kpi">
-          <span>Ocupación bodega</span>
-          <strong>{warehouse.occupancyPct}%</strong>
-          <small>{warehouse.free} posiciones libres</small>
-        </div>
-      </section>
+      <KpiGrid label="Indicadores de decisión">
+        <Kpi
+          label="Capital en riesgo"
+          icon="alert"
+          tone="danger"
+          value={money(capital.atRiskValue)}
+          caption="Gap bajo mínimo × PVP"
+        />
+        <Kpi
+          label="Fill rate estimado"
+          icon="check"
+          tone={service.fillRate >= 90 ? 'success' : 'warning'}
+          value={`${service.fillRate}%`}
+          caption={`${service.linesCovered}/${service.linesTotal} líneas cubiertas`}
+          progress={service.fillRate}
+        />
+        <Kpi
+          label="Bloqueos BOM"
+          icon="layers"
+          tone={supply.blockers ? 'warning' : 'success'}
+          value={supply.blockers}
+          caption={`${supply.parentsAffected} productos padre afectados`}
+        />
+        <Kpi
+          label="Ocupación bodega"
+          icon="warehouse"
+          value={`${warehouse.occupancyPct}%`}
+          caption={`${warehouse.free} posiciones libres`}
+          progress={warehouse.occupancyPct}
+        />
+      </KpiGrid>
 
       <div className="rpt-tabs" role="tablist" aria-label="Tipo de reporte">
         {tabs.map((t) => (
@@ -174,7 +225,9 @@ export function ReportsPage() {
 
       <div className="rpt-insight" role="status">
         <Icon name="spark" />
-        <span><strong>Insight:</strong> {insight}</span>
+        <span>
+          <strong>Insight:</strong> {insight}
+        </span>
       </div>
 
       {tab === 'capital' && (
@@ -184,10 +237,15 @@ export function ReportsPage() {
               <div className="rpt-panel-head">
                 <div>
                   <h3>Valor por línea</h3>
-                  <p>Inventario a PVP · PT {money(capital.finishedValue)} · MP {money(capital.rawValue)}</p>
+                  <p>
+                    Inventario a PVP · PT {money(capital.finishedValue)} · MP{' '}
+                    {money(capital.rawValue)}
+                  </p>
                 </div>
                 <div className="rpt-panel-actions">
-                  <Btn icon="arrow" onClick={() => navigate('/inventario')}>Inventario</Btn>
+                  <Btn size="small" icon="arrow" onClick={() => navigate('/inventario')}>
+                    Inventario
+                  </Btn>
                 </div>
               </div>
               {capital.byLine.length ? (
@@ -206,14 +264,27 @@ export function ReportsPage() {
                         <tr key={row.category}>
                           <td>
                             <strong>{row.category}</strong>
-                            <small>{row.kind === 'raw' ? 'Insumos' : row.kind === 'finished' ? 'Productos' : 'Mixto'}</small>
+                            <small>
+                              {row.kind === 'raw'
+                                ? 'Insumos'
+                                : row.kind === 'finished'
+                                  ? 'Productos'
+                                  : 'Mixto'}
+                            </small>
                           </td>
                           <td className="num">{num(row.units)}</td>
                           <td className="num">{money(row.value)}</td>
                           <td className="num">
                             {money(row.atRiskValue)}
-                            <div className={`rpt-meter ${row.atRiskValue > 0 ? 'is-risk' : ''}`} aria-hidden="true">
-                              <span style={{ width: `${Math.min(100, capital.atRiskValue ? (row.atRiskValue / capital.atRiskValue) * 100 : 0)}%` }} />
+                            <div
+                              className={`rpt-meter ${row.atRiskValue > 0 ? 'is-risk' : ''}`}
+                              aria-hidden="true"
+                            >
+                              <span
+                                style={{
+                                  width: `${Math.min(100, capital.atRiskValue ? (row.atRiskValue / capital.atRiskValue) * 100 : 0)}%`,
+                                }}
+                              />
                             </div>
                           </td>
                         </tr>
@@ -221,17 +292,24 @@ export function ReportsPage() {
                     </tbody>
                   </table>
                 </div>
-              ) : <div className="rpt-empty">Sin datos de capital.</div>}
+              ) : (
+                <div className="rpt-empty">Sin datos de capital.</div>
+              )}
             </section>
 
             <section className="rpt-panel">
               <div className="rpt-panel-head">
                 <div>
                   <h3>Ítems bajo mínimo</h3>
-                  <p>Capital en riesgo {money(capital.atRiskValue)} · Exceso {money(capital.excessValue)}</p>
+                  <p>
+                    Capital en riesgo {money(capital.atRiskValue)} · Exceso{' '}
+                    {money(capital.excessValue)}
+                  </p>
                 </div>
                 <div className="rpt-panel-actions">
-                  <Btn icon="cart" onClick={() => navigate('/compras')}>Abastecer</Btn>
+                  <Btn size="small" icon="cart" onClick={() => navigate('/compras')}>
+                    Abastecer
+                  </Btn>
                 </div>
               </div>
               {capital.atRisk.length ? (
@@ -249,9 +327,13 @@ export function ReportsPage() {
                         <tr key={row.productId}>
                           <td>
                             <strong>{row.name}</strong>
-                            <small>{row.productId} · {row.kind === 'raw' ? 'Insumo' : 'Producto'}</small>
+                            <small>
+                              {row.productId} · {row.kind === 'raw' ? 'Insumo' : 'Producto'}
+                            </small>
                           </td>
-                          <td className="num">{num(row.available)} / {num(row.min)}</td>
+                          <td className="num">
+                            {num(row.available)} / {num(row.min)}
+                          </td>
                           <td className="num">
                             <span className="rpt-pill rpt-pill-risk">Gap {num(row.gap)}</span>
                             <small>{money(row.riskValue)}</small>
@@ -261,7 +343,9 @@ export function ReportsPage() {
                     </tbody>
                   </table>
                 </div>
-              ) : <div className="rpt-empty">Ningún ítem bajo mínimo.</div>}
+              ) : (
+                <div className="rpt-empty">Ningún ítem bajo mínimo.</div>
+              )}
             </section>
           </div>
 
@@ -294,7 +378,9 @@ export function ReportsPage() {
                         <td>{row.loc}</td>
                         <td className="num">{num(row.qty)}</td>
                         <td>
-                          <span className={`rpt-pill ${row.bucket === '30' ? 'rpt-pill-risk' : 'rpt-pill-warn'}`}>
+                          <span
+                            className={`rpt-pill ${row.bucket === '30' ? 'rpt-pill-risk' : 'rpt-pill-warn'}`}
+                          >
                             {row.daysLeft}d
                           </span>
                           <small>{row.expiry}</small>
@@ -305,7 +391,9 @@ export function ReportsPage() {
                   </tbody>
                 </table>
               </div>
-            ) : <div className="rpt-empty">No hay lotes venciendo en los próximos 90 días.</div>}
+            ) : (
+              <div className="rpt-empty">No hay lotes venciendo en los próximos 90 días.</div>
+            )}
           </section>
         </>
       )}
@@ -317,10 +405,14 @@ export function ReportsPage() {
               <div className="rpt-panel-head">
                 <div>
                   <h3>Pipeline de pedidos</h3>
-                  <p>{service.orderCount} pedidos · {money(service.pipelineValue)}</p>
+                  <p>
+                    {service.orderCount} pedidos · {money(service.pipelineValue)}
+                  </p>
                 </div>
                 <div className="rpt-panel-actions">
-                  <Btn icon="orders" onClick={() => navigate('/pedidos')}>Pedidos</Btn>
+                  <Btn size="small" icon="orders" onClick={() => navigate('/pedidos')}>
+                    Pedidos
+                  </Btn>
                 </div>
               </div>
               {service.byStatus.length ? (
@@ -336,7 +428,9 @@ export function ReportsPage() {
                     <tbody>
                       {service.byStatus.map((row) => (
                         <tr key={row.status}>
-                          <td><strong>{row.status}</strong></td>
+                          <td>
+                            <strong>{row.status}</strong>
+                          </td>
                           <td className="num">{row.count}</td>
                           <td className="num">{money(row.value)}</td>
                         </tr>
@@ -344,7 +438,9 @@ export function ReportsPage() {
                     </tbody>
                   </table>
                 </div>
-              ) : <div className="rpt-empty">Sin pedidos en el periodo.</div>}
+              ) : (
+                <div className="rpt-empty">Sin pedidos en el periodo.</div>
+              )}
             </section>
 
             <section className="rpt-panel">
@@ -354,7 +450,9 @@ export function ReportsPage() {
                   <p>Por valor de pedidos en el periodo</p>
                 </div>
                 <div className="rpt-panel-actions">
-                  <Btn icon="users" onClick={() => navigate('/clientes')}>Clientes</Btn>
+                  <Btn size="small" icon="users" onClick={() => navigate('/clientes')}>
+                    Clientes
+                  </Btn>
                 </div>
               </div>
               {service.topClients.length ? (
@@ -381,7 +479,9 @@ export function ReportsPage() {
                     </tbody>
                   </table>
                 </div>
-              ) : <div className="rpt-empty">Sin clientes con pedidos en el periodo.</div>}
+              ) : (
+                <div className="rpt-empty">Sin clientes con pedidos en el periodo.</div>
+              )}
             </section>
           </div>
 
@@ -392,7 +492,9 @@ export function ReportsPage() {
                 <p>Demanda del periodo vs stock disponible</p>
               </div>
               <div className="rpt-panel-actions">
-                <Btn icon="box" onClick={() => navigate('/inventario')}>Ver stock</Btn>
+                <Btn size="small" icon="box" onClick={() => navigate('/inventario')}>
+                  Ver stock
+                </Btn>
               </div>
             </div>
             {service.velocity.length ? (
@@ -420,16 +522,20 @@ export function ReportsPage() {
                           {row.coverDays === null ? '—' : `${row.coverDays}d`}
                         </td>
                         <td className="num">
-                          {row.shortfall > 0
-                            ? <span className="rpt-pill rpt-pill-risk">{num(row.shortfall)}</span>
-                            : <span className="rpt-pill rpt-pill-ok">OK</span>}
+                          {row.shortfall > 0 ? (
+                            <span className="rpt-pill rpt-pill-risk">{num(row.shortfall)}</span>
+                          ) : (
+                            <span className="rpt-pill rpt-pill-ok">OK</span>
+                          )}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            ) : <div className="rpt-empty">Sin demanda registrada en el periodo.</div>}
+            ) : (
+              <div className="rpt-empty">Sin demanda registrada en el periodo.</div>
+            )}
           </section>
         </>
       )}
@@ -443,7 +549,12 @@ export function ReportsPage() {
                 <p>Costo estimado para llevar insumos al mínimo: {money(supply.restockCost)}</p>
               </div>
               <div className="rpt-panel-actions">
-                <Btn variant="primary" icon="plus" onClick={() => navigate('/compras')}>
+                <Btn
+                  size="small"
+                  variant="primary"
+                  icon="plus"
+                  onClick={() => navigate('/compras')}
+                >
                   Ir a compras
                 </Btn>
               </div>
@@ -470,20 +581,25 @@ export function ReportsPage() {
                         <td className="num">
                           {num(row.available)} / {num(row.min)}
                           <div className="rpt-meter is-warn" aria-hidden="true">
-                            <span style={{ width: `${Math.max(4, Math.min(100, row.min ? (row.available / row.min) * 100 : 0))}%` }} />
+                            <span
+                              style={{
+                                width: `${Math.max(4, Math.min(100, row.min ? (row.available / row.min) * 100 : 0))}%`,
+                              }}
+                            />
                           </div>
                         </td>
                         <td className="num">{money(row.restockCost)}</td>
                         <td>
-                          <span className="rpt-pill rpt-pill-info">{row.parentsBlocked} padres</span>
-                          <small>{row.parentNames.slice(0, 2).join(', ')}{row.parentNames.length > 2 ? '…' : ''}</small>
+                          <span className="rpt-pill rpt-pill-info">
+                            {row.parentsBlocked} padres
+                          </span>
+                          <small>
+                            {row.parentNames.slice(0, 2).join(', ')}
+                            {row.parentNames.length > 2 ? '…' : ''}
+                          </small>
                         </td>
                         <td>
-                          <Btn
-                            variant="small"
-                            icon="plus"
-                            onClick={() => navigate('/compras')}
-                          >
+                          <Btn variant="small" icon="plus" onClick={() => navigate('/compras')}>
                             Solicitar
                           </Btn>
                         </td>
@@ -492,7 +608,9 @@ export function ReportsPage() {
                   </tbody>
                 </table>
               </div>
-            ) : <div className="rpt-empty">Sin bloqueos de materia prima.</div>}
+            ) : (
+              <div className="rpt-empty">Sin bloqueos de materia prima.</div>
+            )}
           </section>
 
           <section className="rpt-panel">
@@ -502,7 +620,11 @@ export function ReportsPage() {
                 <p>Alcance de fabricación limitado por insumos bajos</p>
               </div>
               <div className="rpt-panel-actions">
-                <Btn icon="layers" onClick={() => navigate('/inventario?tipo=finished&estado=attention')}>
+                <Btn
+                  size="small"
+                  icon="layers"
+                  onClick={() => navigate('/inventario?tipo=finished&estado=attention')}
+                >
                   Ver productos
                 </Btn>
               </div>
@@ -526,9 +648,13 @@ export function ReportsPage() {
                           <small>{row.parentId}</small>
                         </td>
                         <td>{row.blockingChildName}</td>
-                        <td className="num">{num(row.parentAvailable)} / mín. {num(row.parentMin)}</td>
                         <td className="num">
-                          <span className={`rpt-pill ${row.buildable < row.parentMin ? 'rpt-pill-warn' : 'rpt-pill-ok'}`}>
+                          {num(row.parentAvailable)} / mín. {num(row.parentMin)}
+                        </td>
+                        <td className="num">
+                          <span
+                            className={`rpt-pill ${row.buildable < row.parentMin ? 'rpt-pill-warn' : 'rpt-pill-ok'}`}
+                          >
                             {num(row.buildable)}
                           </span>
                         </td>
@@ -537,7 +663,9 @@ export function ReportsPage() {
                   </tbody>
                 </table>
               </div>
-            ) : <div className="rpt-empty">Todos los padres tienen insumos en nivel.</div>}
+            ) : (
+              <div className="rpt-empty">Todos los padres tienen insumos en nivel.</div>
+            )}
           </section>
         </>
       )}
@@ -549,10 +677,15 @@ export function ReportsPage() {
               <div className="rpt-panel-head">
                 <div>
                   <h3>Densidad por rack</h3>
-                  <p>{warehouse.occupied}/{warehouse.totalPositions} posiciones · {money(warehouse.totalValue)}</p>
+                  <p>
+                    {warehouse.occupied}/{warehouse.totalPositions} posiciones ·{' '}
+                    {money(warehouse.totalValue)}
+                  </p>
                 </div>
                 <div className="rpt-panel-actions">
-                  <Btn icon="map" onClick={() => navigate('/bodega')}>Mapa</Btn>
+                  <Btn size="small" icon="map" onClick={() => navigate('/bodega')}>
+                    Mapa
+                  </Btn>
                 </div>
               </div>
               {warehouse.byRack.length ? (
@@ -586,7 +719,9 @@ export function ReportsPage() {
                     </tbody>
                   </table>
                 </div>
-              ) : <div className="rpt-empty">Sin geometría de bodega.</div>}
+              ) : (
+                <div className="rpt-empty">Sin geometría de bodega.</div>
+              )}
             </section>
 
             <section className="rpt-panel">
@@ -622,7 +757,9 @@ export function ReportsPage() {
                     </tbody>
                   </table>
                 </div>
-              ) : <div className="rpt-empty">Sin stock ubicado.</div>}
+              ) : (
+                <div className="rpt-empty">Sin stock ubicado.</div>
+              )}
             </section>
           </div>
 
@@ -633,7 +770,9 @@ export function ReportsPage() {
                 <p>Proxy: sin eventos recientes (≥14 días) o sin historial</p>
               </div>
               <div className="rpt-panel-actions">
-                <Btn icon="history" onClick={() => navigate('/trazabilidad')}>Trazabilidad</Btn>
+                <Btn size="small" icon="history" onClick={() => navigate('/trazabilidad')}>
+                  Trazabilidad
+                </Btn>
               </div>
             </div>
             {warehouse.idle.length ? (
@@ -657,17 +796,25 @@ export function ReportsPage() {
                         <td className="num">{num(row.units)}</td>
                         <td className="num">{money(row.value)}</td>
                         <td>
-                          {row.daysIdle === null
-                            ? <span className="rpt-pill rpt-pill-warn">Sin historial</span>
-                            : <span className="rpt-pill rpt-pill-info">{row.daysIdle}d idle</span>}
-                          {row.lastMoveAt && <small>{row.lastMoveAt.slice(0, 16).replace('T', ' ')}</small>}
+                          {row.daysIdle === null ? (
+                            <span className="rpt-pill rpt-pill-warn">Sin historial</span>
+                          ) : (
+                            <span className="rpt-pill rpt-pill-info">{row.daysIdle}d idle</span>
+                          )}
+                          {row.lastMoveAt && (
+                            <small>{row.lastMoveAt.slice(0, 16).replace('T', ' ')}</small>
+                          )}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            ) : <div className="rpt-empty">Todas las ubicaciones con stock han tenido movimiento reciente.</div>}
+            ) : (
+              <div className="rpt-empty">
+                Todas las ubicaciones con stock han tenido movimiento reciente.
+              </div>
+            )}
           </section>
         </>
       )}

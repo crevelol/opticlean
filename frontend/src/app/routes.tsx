@@ -1,29 +1,72 @@
+import { lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './AppLayout';
 import { useAppState } from '../shared/hooks/AppStateProvider';
 import { useAuth } from '../shared/hooks/AuthProvider';
 import { LoginPage } from '../features/auth/LoginPage';
-import { DashboardPage } from '../features/dashboard/DashboardPage';
-import { InventoryPage } from '../features/inventory/InventoryPage';
-import { ReceptionPage } from '../features/reception/ReceptionPage';
-import { WarehousePage } from '../features/warehouse/WarehousePage';
-import { OrdersPage } from '../features/orders/OrdersPage';
-import { NewOrderPage } from '../features/orders/NewOrderPage';
-import { PurchasesPage } from '../features/purchases/PurchasesPage';
-import { LogisticsPage } from '../features/logistics/LogisticsPage';
-import { RoutesPage } from '../features/logistics/RoutesPage';
-import { RouteHistoryPage } from '../features/logistics/RouteHistoryPage';
-import { ClientsPage } from '../features/clients/ClientsPage';
-import { TraceabilityPage } from '../features/traceability/TraceabilityPage';
-import { ReportsPage } from '../features/reports/ReportsPage';
-import { SettingsPage } from '../features/settings/SettingsPage';
-import { BusinessRulesPage } from '../features/settings/BusinessRulesPage';
-import { WarehousesAdminPage } from '../features/warehouses/WarehousesAdminPage';
-import { FamiliesPage } from '../features/families/FamiliesPage';
+import { Spinner } from '../shared/components/Icon';
+
+// Cada pantalla se descarga solo al visitarla (code splitting por ruta).
+const DashboardPage = lazy(() =>
+  import('../features/dashboard/DashboardPage').then((m) => ({ default: m.DashboardPage })),
+);
+const InventoryPage = lazy(() =>
+  import('../features/inventory/InventoryPage').then((m) => ({ default: m.InventoryPage })),
+);
+const ReceptionPage = lazy(() =>
+  import('../features/reception/ReceptionPage').then((m) => ({ default: m.ReceptionPage })),
+);
+const WarehousePage = lazy(() =>
+  import('../features/warehouse/WarehousePage').then((m) => ({ default: m.WarehousePage })),
+);
+const OrdersPage = lazy(() =>
+  import('../features/orders/OrdersPage').then((m) => ({ default: m.OrdersPage })),
+);
+const NewOrderPage = lazy(() =>
+  import('../features/orders/NewOrderPage').then((m) => ({ default: m.NewOrderPage })),
+);
+const PurchasesPage = lazy(() =>
+  import('../features/purchases/PurchasesPage').then((m) => ({ default: m.PurchasesPage })),
+);
+const LogisticsPage = lazy(() =>
+  import('../features/logistics/LogisticsPage').then((m) => ({ default: m.LogisticsPage })),
+);
+const RoutesPage = lazy(() =>
+  import('../features/logistics/RoutesPage').then((m) => ({ default: m.RoutesPage })),
+);
+const RouteHistoryPage = lazy(() =>
+  import('../features/logistics/RouteHistoryPage').then((m) => ({ default: m.RouteHistoryPage })),
+);
+const ClientsPage = lazy(() =>
+  import('../features/clients/ClientsPage').then((m) => ({ default: m.ClientsPage })),
+);
+const TraceabilityPage = lazy(() =>
+  import('../features/traceability/TraceabilityPage').then((m) => ({
+    default: m.TraceabilityPage,
+  })),
+);
+const ReportsPage = lazy(() =>
+  import('../features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })),
+);
+const SettingsPage = lazy(() =>
+  import('../features/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
+);
+const BusinessRulesPage = lazy(() =>
+  import('../features/settings/BusinessRulesPage').then((m) => ({ default: m.BusinessRulesPage })),
+);
+const WarehousesAdminPage = lazy(() =>
+  import('../features/warehouses/WarehousesAdminPage').then((m) => ({
+    default: m.WarehousesAdminPage,
+  })),
+);
+const FamiliesPage = lazy(() =>
+  import('../features/families/FamiliesPage').then((m) => ({ default: m.FamiliesPage })),
+);
 
 function LoadingShell({ label = 'Cargando operación…' }: { label?: string }) {
   return (
-    <div className="page" style={{ padding: 40 }}>
+    <div className="app-loading" role="status">
+      <Spinner />
       <p>{label}</p>
     </div>
   );

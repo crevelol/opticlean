@@ -1,38 +1,72 @@
-/* La ruta /bodega ocupa todo el main sin padding del shell */
-.page:has(.warehouse-embed) {
+/* /bodega: el embed ocupa todo el main, sin padding del shell (solo en
+   pantalla completa; el embed compacto vive dentro de modales). */
+.page:has(.warehouse-embed.is-under-topbar) {
   padding: 0 !important;
-  overflow: hidden;
 }
-.page:has(.warehouse-embed) .page-footer {
+.page:has(.warehouse-embed.is-under-topbar) .page-footer {
   display: none;
 }
 
 .warehouse-embed {
   margin: 0;
-  min-height: calc(100vh - 59px);
-  background: #f4f7fb;
+  background: var(--slate-75);
 }
-
 .warehouse-embed__frame {
   display: block;
   width: 100%;
-  min-height: calc(100vh - 59px);
-  height: calc(100vh - 59px);
   border: 0;
-  background: #f4f7fb;
+  background: var(--slate-75);
   border-radius: 0;
+}
+
+/* Pantalla completa: el iframe sube bajo el topbar (que es sticky y glass).
+   El propio embed añade --topbar-h de margen arriba (?under=56), así el
+   contenido arranca igual que en otras pantallas y, al hacer scroll, pasa
+   difuminado tras el topbar. */
+.warehouse-embed.is-under-topbar {
+  margin-top: calc(-1 * var(--topbar-h));
+  height: 100vh;
+}
+.warehouse-embed.is-under-topbar .warehouse-embed__frame {
+  height: 100vh;
+}
+
+/* Modal abierto dentro del iframe: su fondo cubre el iframe (incluida la
+   franja bajo el topbar, que queda por debajo) y el shell oscurece el sidebar
+   con el mismo velo. */
+html.embed-modal-open .warehouse-embed.is-under-topbar {
+  position: relative;
+  z-index: 61; /* topbar = 60 */
+}
+html.embed-modal-open .app-shell::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--sidebar-current);
+  z-index: 65;
+  background: var(--color-overlay);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: embed-shell-dim 0.14s ease;
+}
+@keyframes embed-shell-dim {
+  from {
+    opacity: 0;
+  }
 }
 
 .warehouse-embed.is-compact {
   min-height: 0;
-  border: 1px solid #e2eaf3;
-  border-radius: 12px;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-xl);
   overflow: hidden;
-  background: #f4f7fb;
+  background: var(--slate-75);
 }
 
 .warehouse-embed.is-compact .warehouse-embed__frame {
   min-height: 0;
   height: 100%;
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
 }

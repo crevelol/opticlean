@@ -5,8 +5,8 @@
 .ord-table td small {
   display: block;
   margin-top: 3px;
-  color: #6b8298;
-  font-size: 11px;
+  color: var(--slate-600);
+  font-size: var(--text-sm);
 }
 
 .ord-detail {
@@ -29,23 +29,23 @@
 
 .ord-meta article {
   padding: 10px 12px;
-  border: 1px solid #e2eaf2;
-  border-radius: 10px;
-  background: #f8fbfe;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  background: var(--slate-50);
 }
 
 .ord-meta span {
   display: block;
-  font-size: 10px;
+  font-size: var(--text-xs);
   letter-spacing: 0.35px;
   text-transform: uppercase;
-  color: #6b8298;
+  color: var(--slate-600);
   margin-bottom: 3px;
 }
 
 .ord-meta strong {
-  font-size: 12px;
-  color: #17324f;
+  font-size: var(--text-md);
+  color: var(--slate-900);
   line-height: 1.35;
 }
 
@@ -53,8 +53,8 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  border: 1px solid #e2eaf2;
-  border-radius: 12px;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-xl);
   overflow: hidden;
 }
 
@@ -64,8 +64,8 @@
   gap: 10px;
   align-items: center;
   padding: 11px 12px;
-  border-bottom: 1px solid #eef3f8;
-  background: #fff;
+  border-bottom: 1px solid var(--slate-100);
+  background: var(--slate-0);
 }
 
 .ord-lines li:last-child {
@@ -74,21 +74,21 @@
 
 .ord-lines strong {
   display: block;
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 .ord-lines small {
   display: block;
   margin-top: 2px;
-  color: #6b8298;
-  font-size: 11px;
+  color: var(--slate-600);
+  font-size: var(--text-sm);
 }
 
 .ord-lines em {
   font-style: normal;
-  font-weight: 700;
-  font-size: 13px;
-  color: #17324f;
+  font-weight: var(--weight-bold);
+  font-size: var(--text-base);
+  color: var(--slate-900);
   white-space: nowrap;
 }
 
@@ -97,28 +97,28 @@
   justify-content: space-between;
   align-items: baseline;
   padding: 12px 14px;
-  border-radius: 12px;
-  background: #17324f;
-  color: #fff;
+  border-radius: var(--radius-xl);
+  background: var(--slate-900);
+  color: var(--slate-0);
 }
 
 .ord-total span {
-  font-size: 12px;
+  font-size: var(--text-md);
   opacity: 0.8;
 }
 
 .ord-total strong {
-  font-size: 20px;
+  font-size: var(--text-3xl);
   letter-spacing: -0.4px;
 }
 
 .ord-notes {
   padding: 10px 12px;
-  border-radius: 10px;
-  background: #fff8ef;
-  border: 1px solid #f0d9b8;
-  font-size: 12px;
-  color: #7a5a20;
+  border-radius: var(--radius-lg);
+  background: var(--amber-50);
+  border: 1px solid var(--amber-200);
+  font-size: var(--text-md);
+  color: var(--amber-800);
   line-height: 1.4;
 }
 

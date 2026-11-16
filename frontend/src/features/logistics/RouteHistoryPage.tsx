@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { client, money, orderWeight } from '../../shared/lib/inventory';
-import { Badge, Btn, PageHead } from '../../shared/components/ui';
-import { Icon } from '../../shared/components/Icon';
+import { Badge, Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
 import { api } from '../../shared/api/client';
 import { RouteMap } from './RouteMap';
 import {
@@ -43,10 +42,7 @@ export function RouteHistoryPage() {
   const [warehouseId, setWarehouseId] = useState('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const history = useMemo(
-    () => (state ? buildRouteHistory(state, fleet) : []),
-    [state, fleet],
-  );
+  const history = useMemo(() => (state ? buildRouteHistory(state, fleet) : []), [state, fleet]);
   const filtered = useMemo(
     () =>
       history.filter((h) => {
@@ -96,39 +92,12 @@ export function RouteHistoryPage() {
         }
       />
 
-      <section className="log-metrics" aria-label="Resumen del historial">
-        <article className="log-metric">
-          <div className="log-metric-label">
-            Rutas filtradas <Icon name="route" />
-          </div>
-          <strong>{filtered.length}</strong>
-          <span>en el periodo</span>
-        </article>
-        <article className="log-metric">
-          <div className="log-metric-label">
-            Entregas <Icon name="check" />
-          </div>
-          <strong>{totalDelivered}</strong>
-          <span>confirmadas</span>
-        </article>
-        <article className="log-metric">
-          <div className="log-metric-label">
-            Distancia <Icon name="map" />
-          </div>
-          <strong>
-            {totalKm}
-            <small>km</small>
-          </strong>
-          <span>estimados</span>
-        </article>
-        <article className="log-metric">
-          <div className="log-metric-label">
-            Costo <Icon name="spark" />
-          </div>
-          <strong>{money(totalCost)}</strong>
-          <span>estimado del periodo</span>
-        </article>
-      </section>
+      <KpiGrid label="Resumen del historial">
+        <Kpi label="Rutas filtradas" icon="route" value={filtered.length} caption="en el periodo" />
+        <Kpi label="Entregas" icon="check" value={totalDelivered} caption="confirmadas" />
+        <Kpi label="Distancia" icon="map" value={totalKm} unit="km" caption="estimados" />
+        <Kpi label="Costo" icon="spark" value={money(totalCost)} caption="estimado del periodo" />
+      </KpiGrid>
 
       <section className="log-panel log-history-filters">
         <div className="log-filter-grid">

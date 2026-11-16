@@ -1,6 +1,9 @@
 import { FormEvent, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { Logo } from '../../shared/components/Icon';
+import { AnimatePresence, motion } from 'motion/react';
+import { Icon, Logo, Spinner } from '../../shared/components/Icon';
+import { Button } from '../../shared/components/ui';
+import { fadeUp, stagger, swap } from '../../shared/motion/presets';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import '../../styles/login.css';
 
@@ -37,26 +40,38 @@ export function LoginPage() {
             OPTI<span>CLEAN</span> <em>AI</em>
           </span>
         </div>
-        <div>
-          <p className="eyebrow">Operación conectada</p>
-          <h1>
+        <motion.div variants={stagger} initial="hidden" animate="show">
+          <motion.p className="eyebrow" variants={fadeUp}>
+            Operación conectada
+          </motion.p>
+          <motion.h1 variants={fadeUp}>
             Tu bodega, bajo control.
             <br />
             <em>En un solo lugar.</em>
-          </h1>
-          <p className="login-lead">
+          </motion.h1>
+          <motion.p className="login-lead" variants={fadeUp}>
             Entra al panel para ver ubicaciones, inventario, recepción y pedidos en tiempo real.
-          </p>
-        </div>
+          </motion.p>
+        </motion.div>
         <p className="login-foot">innovamf.com · OPTICLEAN</p>
       </aside>
+
       <div className="login-panel">
-        <form className="login-form" onSubmit={onSubmit} autoComplete="on">
+        <motion.form
+          className="login-form"
+          onSubmit={onSubmit}
+          autoComplete="on"
+          variants={fadeUp}
+          initial="hidden"
+          animate="show"
+          aria-busy={busy}
+        >
           <div className="login-mark" aria-hidden>
             <Logo />
           </div>
           <h2>Iniciar sesión</h2>
           <p className="login-muted">Usa tu cuenta de operación OptiClean.</p>
+
           <label className="field">
             <span>Correo electrónico</span>
             <input
@@ -67,6 +82,7 @@ export function LoginPage() {
               placeholder="admin@innovamf.com"
             />
           </label>
+
           <label className="field">
             <span>Contraseña</span>
             <span className="login-password">
@@ -80,23 +96,70 @@ export function LoginPage() {
               />
               <button
                 type="button"
-                className="login-eye"
+                className="icon-btn login-eye"
                 onClick={() => setShowPassword((v) => !v)}
                 aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                aria-pressed={showPassword}
+                title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
               >
-                {showPassword ? 'Ocultar' : 'Ver'}
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.span
+                    key={showPassword ? 'off' : 'on'}
+                    className="login-eye-glyph"
+                    initial={{ opacity: 0, scale: 0.7 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.7 }}
+                  >
+                    <Icon name={showPassword ? 'eye-off' : 'eye'} />
+                  </motion.span>
+                </AnimatePresence>
               </button>
             </span>
           </label>
-          {error ? <p className="login-error">{error}</p> : null}
-          <button type="submit" className="btn primary login-submit" disabled={busy}>
-            {busy ? 'Entrando…' : 'Entrar'}
-          </button>
+
+          <AnimatePresence initial={false}>
+            {error ? (
+              <motion.p
+                key="error"
+                className="login-error"
+                role="alert"
+                initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                animate={{ opacity: 1, height: 'auto', marginBottom: 12 }}
+                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+              >
+                <Icon name="alert" />
+                <span>{error}</span>
+              </motion.p>
+            ) : null}
+          </AnimatePresence>
+
+          <Button
+            type="submit"
+            variant="primary"
+            size="large"
+            full
+            className="login-submit"
+            disabled={busy}
+            aria-label={busy ? 'Entrando' : undefined}
+          >
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span
+                key={busy ? 'busy' : 'idle'}
+                className="login-submit-content"
+                variants={swap}
+                initial="hidden"
+                animate="show"
+                exit="exit"
+              >
+                {busy ? <Spinner /> : 'Entrar'}
+              </motion.span>
+            </AnimatePresence>
+          </Button>
+
           <p className="login-hint">
-            Panel: <code>admin@innovamf.com</code> · Piso:{' '}
-            <code>ops@innovamf.com</code>
+            Panel: <code>admin@innovamf.com</code> · Piso: <code>ops@innovamf.com</code>
           </p>
-        </form>
+        </motion.form>
       </div>
     </div>
   );

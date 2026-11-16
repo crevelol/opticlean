@@ -12,7 +12,7 @@ import {
   orderValue,
   product,
 } from '../../shared/lib/inventory';
-import { Btn, Empty } from '../../shared/components/ui';
+import { Btn, Empty, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import '../../styles/new-order.css';
 
@@ -71,8 +71,7 @@ export function NewOrderPage() {
       .filter((p) => p.kind !== 'raw')
       .filter((p) => !q || (p.name + p.id + p.category).toLowerCase().includes(q))
       .sort(
-        (a, b) =>
-          available(state, b.id) - available(state, a.id) || a.name.localeCompare(b.name),
+        (a, b) => available(state, b.id) - available(state, a.id) || a.name.localeCompare(b.name),
       );
   }, [search, state]);
 
@@ -223,34 +222,31 @@ export function NewOrderPage() {
 
   return (
     <div className="no-page no-page-v2">
-      <div className="no-top">
-        <div>
-          <h1 className="no-title">Nuevo pedido</h1>
-          <p className="no-subtitle">{stepTitle}</p>
-        </div>
-        <div className="no-top-actions">
-          <Btn icon="back" onClick={() => navigate('/pedidos')}>
-            Volver a pedidos
-          </Btn>
-          <input
-            ref={xmlInputRef}
-            type="file"
-            accept=".xml,text/xml,application/xml"
-            hidden
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void importXml(f);
-            }}
-          />
-          <Btn
-            icon="file"
-            disabled={xmlBusy}
-            onClick={() => xmlInputRef.current?.click()}
-          >
-            {xmlBusy ? 'Importando…' : 'Importar XML'}
-          </Btn>
-        </div>
-      </div>
+      <PageHead
+        eyebrow="Pedidos"
+        title="Nuevo pedido"
+        desc={stepTitle}
+        actions={
+          <>
+            <Btn icon="back" onClick={() => navigate('/pedidos')}>
+              Volver a pedidos
+            </Btn>
+            <input
+              ref={xmlInputRef}
+              type="file"
+              accept=".xml,text/xml,application/xml"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void importXml(f);
+              }}
+            />
+            <Btn icon="file" disabled={xmlBusy} onClick={() => xmlInputRef.current?.click()}>
+              {xmlBusy ? 'Importando…' : 'Importar XML'}
+            </Btn>
+          </>
+        }
+      />
 
       {xmlName ? <p className="no-xml-file">Archivo: {xmlName}</p> : null}
       {error && step === 1 ? <div className="form-error visible">{error}</div> : null}
@@ -284,11 +280,7 @@ export function NewOrderPage() {
               <section className="no-card">
                 <header className="no-card-head">
                   <h2>Cliente</h2>
-                  <button
-                    type="button"
-                    className="no-link"
-                    onClick={() => navigate('/clientes')}
-                  >
+                  <button type="button" className="no-link" onClick={() => navigate('/clientes')}>
                     <Icon name="plus" /> Nuevo cliente
                   </button>
                 </header>
@@ -361,11 +353,7 @@ export function NewOrderPage() {
                 <header className="no-card-head">
                   <h2>Entrega</h2>
                   {selected ? (
-                    <button
-                      type="button"
-                      className="no-link"
-                      onClick={() => navigate('/clientes')}
-                    >
+                    <button type="button" className="no-link" onClick={() => navigate('/clientes')}>
                       <Icon name="edit" /> Editar dirección
                     </button>
                   ) : null}
