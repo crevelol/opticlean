@@ -7,29 +7,41 @@ import {
   client,
   creditAvailable,
   creditLimitOf,
+  creditUsed,
   money,
   orderValue,
   product,
 } from '../../shared/lib/inventory';
-import { Btn, Empty, PageHead } from '../../shared/components/ui';
+import { Btn, Empty } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import '../../styles/new-order.css';
 
 type Line = { productId: string; qty: number };
 
 const STEPS = [
-  { id: 1, title: 'Cliente', desc: 'Destino y prioridad' },
-  { id: 2, title: 'Productos', desc: 'Catálogo y cantidades' },
+  { id: 1, title: 'Cliente', desc: 'Datos y entrega' },
+  { id: 2, title: 'Productos', desc: 'Artículos y cantidades' },
   { id: 3, title: 'Confirmar', desc: 'Revisión final' },
 ] as const;
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((t) => t[0]?.toUpperCase() ?? '')
+    .join('');
+}
 
 export function NewOrderPage() {
   const { state, meta, applyResponse, toast } = useAppState();
   const navigate = useNavigate();
   const routeClient = (useLocation().state as { clientId?: string } | null)?.clientId;
   const [step, setStep] = useState(1);
-  const [clientId, setClientId] = useState(routeClient ?? 'CL001');
+  const [clientId, setClientId] = useState(routeClient ?? '');
+  const [clientQuery, setClientQuery] = useState('');
   const [priority, setPriority] = useState('Normal');
+  const [requestedDate, setRequestedDate] = useState('');
   const [lines, setLines] = useState<Line[]>([]);
   const [search, setSearch] = useState('');
   const [catalogMode, setCatalogMode] = useState<'products' | 'bundles'>('products');
@@ -40,25 +52,47 @@ export function NewOrderPage() {
   const [xmlName, setXmlName] = useState('');
   const xmlInputRef = useRef<HTMLInputElement>(null);
 
-  if (!state || !meta) return null;
+  const selected = state && clientId ? client(state, clientId) : undefined;
 
-  const selected = client(state, clientId);
-  const draft = { clientId, lines, priority };
-  const total = orderValue(state, draft);
-  const units = lines.reduce((n, l) => n + l.qty, 0);
+  const clientMatches = useMemo(() => {
+    if (!state) return [];
+    const q = clientQuery.trim().toLowerCase();
+    return state.clients.filter(
+      (c) =>
+        !q ||
+        [c.name, c.contact, c.city, c.sector, c.type, c.id].join(' ').toLowerCase().includes(q),
+    );
+  }, [state, clientQuery]);
 
   const productResults = useMemo(() => {
+    if (!state) return [];
     const q = search.trim().toLowerCase();
     return state.products
       .filter((p) => p.kind !== 'raw')
       .filter((p) => !q || (p.name + p.id + p.category).toLowerCase().includes(q))
-      .sort((a, b) => available(state, b.id) - available(state, a.id) || a.name.localeCompare(b.name));
+      .sort(
+        (a, b) =>
+          available(state, b.id) - available(state, a.id) || a.name.localeCompare(b.name),
+      );
   }, [search, state]);
 
   const bundleResults = useMemo(() => {
+    if (!meta) return [];
     const q = search.trim().toLowerCase();
-    return meta.bundles.filter((b) => !q || (b.name + b.id + b.description).toLowerCase().includes(q));
-  }, [search, meta.bundles]);
+    return meta.bundles.filter(
+      (b) => !q || (b.name + b.id + b.description).toLowerCase().includes(q),
+    );
+  }, [search, meta]);
+
+  if (!state || !meta) return null;
+
+  const draft = { clientId, lines, priority };
+  const total = orderValue(state, draft);
+  const units = lines.reduce((n, l) => n + l.qty, 0);
+  const limit = clientId ? creditLimitOf(state, clientId) : 0;
+  const used = clientId ? creditUsed(state, clientId) : 0;
+  const availableCredit = clientId ? creditAvailable(state, clientId) : 0;
+  const remainingAfter = Math.max(0, availableCredit - total);
 
   const setQty = (productId: string, qty: number) => {
     const max = available(state, productId);
@@ -127,7 +161,18 @@ export function NewOrderPage() {
     setBusy(true);
     setError('');
     try {
-      applyResponse(await api.createOrder({ clientId, lines, priority, notes: notes.trim() || undefined }));
+      const noteParts = [
+        notes.trim(),
+        requestedDate ? `Fecha solicitada: ${requestedDate}` : '',
+      ].filter(Boolean);
+      applyResponse(
+        await api.createOrder({
+          clientId,
+          lines,
+          priority,
+          notes: noteParts.join(' · ') || undefined,
+        }),
+      );
       toast('Pedido creado y listo para preparar.');
       navigate('/pedidos');
     } catch (e) {
@@ -139,7 +184,11 @@ export function NewOrderPage() {
 
   const importXml = async (file: File) => {
     if (xmlBusy) return;
-    if (!file.name.toLowerCase().endsWith('.xml') && file.type !== 'text/xml' && file.type !== 'application/xml') {
+    if (
+      !file.name.toLowerCase().endsWith('.xml') &&
+      file.type !== 'text/xml' &&
+      file.type !== 'application/xml'
+    ) {
       toast('Selecciona un archivo .xml de factura.');
       return;
     }
@@ -165,30 +214,24 @@ export function NewOrderPage() {
     }
   };
 
+  const stepTitle =
+    step === 1
+      ? 'Selecciona el cliente y el punto de entrega.'
+      : step === 2
+        ? 'Añade artículos con stock disponible.'
+        : 'Revisa el pedido antes de confirmar.';
+
   return (
-    <div className="no-page">
-      <PageHead
-        eyebrow="Gestión de pedidos"
-        title="Nuevo pedido"
-        desc="Elige cliente, arma el pedido con stock real, o importa una factura XML."
-        actions={
+    <div className="no-page no-page-v2">
+      <div className="no-top">
+        <div>
+          <h1 className="no-title">Nuevo pedido</h1>
+          <p className="no-subtitle">{stepTitle}</p>
+        </div>
+        <div className="no-top-actions">
           <Btn icon="back" onClick={() => navigate('/pedidos')}>
             Volver a pedidos
           </Btn>
-        }
-      />
-
-      <section className="no-xml-card" aria-label="Importar factura XML">
-        <div>
-          <strong>Importar factura XML</strong>
-          <p>
-            Acepta cualquier XML de factura (SRI u otros formatos). La IA interpreta el documento, crea cliente y
-            productos si faltan, y genera el pedido.
-          </p>
-          {xmlName ? <small>Archivo: {xmlName}</small> : null}
-          {error && step === 1 ? <div className="form-error visible">{error}</div> : null}
-        </div>
-        <div className="no-xml-actions">
           <input
             ref={xmlInputRef}
             type="file"
@@ -200,15 +243,17 @@ export function NewOrderPage() {
             }}
           />
           <Btn
-            variant="primary"
             icon="file"
             disabled={xmlBusy}
             onClick={() => xmlInputRef.current?.click()}
           >
-            {xmlBusy ? 'Leyendo con IA…' : 'Subir XML'}
+            {xmlBusy ? 'Importando…' : 'Importar XML'}
           </Btn>
         </div>
-      </section>
+      </div>
+
+      {xmlName ? <p className="no-xml-file">Archivo: {xmlName}</p> : null}
+      {error && step === 1 ? <div className="form-error visible">{error}</div> : null}
 
       <nav className="no-steps" aria-label="Pasos del pedido">
         {STEPS.map((s) => {
@@ -233,79 +278,178 @@ export function NewOrderPage() {
       </nav>
 
       <div className="no-layout">
-        <div>
+        <div className="no-main">
           {step === 1 ? (
-            <section className="no-panel">
-              <h2>¿Para quién es el pedido?</h2>
-              <p className="subtle">Selecciona el cliente. La ciudad y el sector se usan después en logística.</p>
+            <>
+              <section className="no-card">
+                <header className="no-card-head">
+                  <h2>Cliente</h2>
+                  <button
+                    type="button"
+                    className="no-link"
+                    onClick={() => navigate('/clientes')}
+                  >
+                    <Icon name="plus" /> Nuevo cliente
+                  </button>
+                </header>
 
-              <div className="no-client-grid">
-                {state.clients.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    className={`no-client-card ${clientId === c.id ? 'is-active' : ''}`}
-                    onClick={() => setClientId(c.id)}
-                  >
-                    <strong>{c.name}</strong>
-                    <small>
-                      {c.city ?? '—'} · {c.sector ?? c.type}
-                    </small>
-                    <small>{c.address}</small>
-                    <small>
-                      Crédito {money(creditLimitOf(state, c.id))} · disp.{' '}
-                      {money(creditAvailable(state, c.id))}
-                    </small>
-                  </button>
-                ))}
-              </div>
+                <label className="no-search-field">
+                  <Icon name="search" />
+                  <input
+                    value={clientQuery || selected?.name || ''}
+                    onChange={(e) => {
+                      setClientQuery(e.target.value);
+                      if (clientId) setClientId('');
+                    }}
+                    onFocus={() => {
+                      if (selected) setClientQuery(selected.name);
+                    }}
+                    placeholder="Buscar cliente por nombre o contacto…"
+                    aria-label="Buscar cliente"
+                  />
+                </label>
 
-              <label className="field">
-                <span>Prioridad</span>
-                <div className="no-priority">
-                  <button
-                    type="button"
-                    className={priority === 'Normal' ? 'is-active' : ''}
-                    onClick={() => setPriority('Normal')}
+                {!clientId && clientQuery ? (
+                  <ul className="no-client-results">
+                    {clientMatches.length ? (
+                      clientMatches.slice(0, 8).map((c) => (
+                        <li key={c.id}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setClientId(c.id);
+                              setClientQuery('');
+                            }}
+                          >
+                            <span className="no-avatar">{initials(c.name)}</span>
+                            <span>
+                              <strong>{c.name}</strong>
+                              <small>
+                                {c.type}
+                                {c.city ? ` · ${c.city}` : ''}
+                              </small>
+                            </span>
+                          </button>
+                        </li>
+                      ))
+                    ) : (
+                      <li className="no-empty-inline">Sin coincidencias</li>
+                    )}
+                  </ul>
+                ) : null}
+
+                {selected ? (
+                  <div className="no-selected-client">
+                    <span className="no-avatar">{initials(selected.name)}</span>
+                    <div>
+                      <strong>{selected.name}</strong>
+                      <small>
+                        {selected.type}
+                        {selected.city ? ` · ${selected.city}` : ''}
+                      </small>
+                    </div>
+                    <em>
+                      <Icon name="check" /> Seleccionado
+                    </em>
+                  </div>
+                ) : (
+                  <p className="no-hint">Escribe para buscar y seleccionar un cliente.</p>
+                )}
+              </section>
+
+              <section className="no-card">
+                <header className="no-card-head">
+                  <h2>Entrega</h2>
+                  {selected ? (
+                    <button
+                      type="button"
+                      className="no-link"
+                      onClick={() => navigate('/clientes')}
+                    >
+                      <Icon name="edit" /> Editar dirección
+                    </button>
+                  ) : null}
+                </header>
+
+                <label className="field">
+                  <span>Dirección de entrega</span>
+                  <select
+                    value={selected?.address ?? ''}
+                    disabled={!selected}
+                    onChange={() => undefined}
                   >
-                    Normal
-                  </button>
-                  <button
-                    type="button"
-                    className={`is-high ${priority === 'Alta' ? 'is-active' : ''}`}
-                    onClick={() => setPriority('Alta')}
-                  >
-                    Alta
-                  </button>
+                    {selected ? (
+                      <option value={selected.address}>{selected.address}</option>
+                    ) : (
+                      <option value="">Selecciona un cliente</option>
+                    )}
+                  </select>
+                </label>
+
+                <div className="no-info-grid">
+                  <div>
+                    <span>Ciudad</span>
+                    <strong>{selected?.city || '—'}</strong>
+                  </div>
+                  <div>
+                    <span>Sector</span>
+                    <strong>{selected?.sector || selected?.type || '—'}</strong>
+                  </div>
+                  <div>
+                    <span>Contacto</span>
+                    <strong>{selected?.contact || '—'}</strong>
+                  </div>
                 </div>
-              </label>
 
-              {selected ? (
-                <div className="no-delivery">
-                  <span>Punto de entrega</span>
-                  <strong>{selected.address}</strong>
-                  <p>
-                    {selected.contact} · {selected.city}
-                    {selected.sector ? ` · ${selected.sector}` : ''}
-                  </p>
+                <div className="field">
+                  <span>Prioridad</span>
+                  <div className="no-priority" role="group" aria-label="Prioridad">
+                    <button
+                      type="button"
+                      className={priority === 'Normal' ? 'is-active' : ''}
+                      onClick={() => setPriority('Normal')}
+                    >
+                      Normal
+                    </button>
+                    <button
+                      type="button"
+                      className={`is-high ${priority === 'Alta' ? 'is-active' : ''}`}
+                      onClick={() => setPriority('Alta')}
+                    >
+                      Alta
+                    </button>
+                  </div>
                 </div>
-              ) : null}
 
-              <div className="no-actions">
-                <Btn variant="primary" icon="arrow" onClick={goProducts}>
-                  Continuar a productos
-                </Btn>
-              </div>
-            </section>
+                <label className="field">
+                  <span>Fecha solicitada (opcional)</span>
+                  <input
+                    type="date"
+                    value={requestedDate}
+                    onChange={(e) => setRequestedDate(e.target.value)}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Notas de entrega (opcional)</span>
+                  <textarea
+                    rows={3}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Añade indicaciones para la entrega…"
+                  />
+                </label>
+              </section>
+            </>
           ) : null}
 
           {step === 2 ? (
-            <section className="no-panel">
-              <h2>Agregar productos</h2>
-              <p className="subtle">Solo se listan terminados con stock. Ajusta cantidades en el carrito.</p>
-
+            <section className="no-card">
+              <header className="no-card-head">
+                <h2>Productos</h2>
+              </header>
               <div className="no-toolbar">
-                <label className="no-search">
+                <label className="no-search-field grow">
                   <Icon name="search" />
                   <input
                     value={search}
@@ -355,7 +499,12 @@ export function NewOrderPage() {
                       );
                     })
                   : bundleResults.map((b) => (
-                      <button key={b.id} type="button" className="no-product" onClick={() => addBundle(b.id)}>
+                      <button
+                        key={b.id}
+                        type="button"
+                        className="no-product"
+                        onClick={() => addBundle(b.id)}
+                      >
                         <span>
                           <strong>{b.name}</strong>
                           <small>{b.description}</small>
@@ -370,23 +519,15 @@ export function NewOrderPage() {
               {!productResults.length && catalogMode === 'products' ? (
                 <Empty title="Sin resultados" desc="Prueba otro término de búsqueda." />
               ) : null}
-
-              <div className="no-actions">
-                <Btn icon="back" onClick={() => setStep(1)}>
-                  Atrás
-                </Btn>
-                <Btn variant="primary" icon="arrow" onClick={goConfirm}>
-                  Revisar pedido
-                </Btn>
-              </div>
             </section>
           ) : null}
 
           {step === 3 ? (
-            <section className="no-panel">
-              <h2>Confirmar pedido</h2>
-              <p className="subtle">Revisa líneas y total antes de crear el pedido en operación.</p>
-
+            <section className="no-card">
+              <header className="no-card-head">
+                <h2>Confirmar pedido</h2>
+              </header>
+              <p className="no-hint">Revisa líneas y total antes de crear el pedido.</p>
               <ul className="no-confirm-lines">
                 {lines.map((l) => {
                   const p = product(state, l.productId);
@@ -396,110 +537,188 @@ export function NewOrderPage() {
                         <strong>
                           {p?.name ?? l.productId} × {l.qty}
                         </strong>
-                        <small style={{ display: 'block', color: '#6b8298', marginTop: 2 }}>{l.productId}</small>
+                        <small>{l.productId}</small>
                       </div>
                       <span>{money((p?.price ?? 0) * l.qty)}</span>
                     </li>
                   );
                 })}
               </ul>
-
-              <label className="field">
-                <span>Notas (opcional)</span>
-                <textarea
-                  rows={2}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Horario de recepción, contacto, etc."
-                />
-              </label>
-
+              {selected ? (
+                <div className="no-confirm-meta">
+                  <div>
+                    <span>Cliente</span>
+                    <strong>{selected.name}</strong>
+                  </div>
+                  <div>
+                    <span>Entrega</span>
+                    <strong>{selected.address}</strong>
+                  </div>
+                  <div>
+                    <span>Prioridad</span>
+                    <strong>{priority}</strong>
+                  </div>
+                  {requestedDate ? (
+                    <div>
+                      <span>Fecha solicitada</span>
+                      <strong>{requestedDate}</strong>
+                    </div>
+                  ) : null}
+                  {notes ? (
+                    <div>
+                      <span>Notas</span>
+                      <strong>{notes}</strong>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               {error ? <div className="form-error visible">{error}</div> : null}
-
-              <div className="no-actions">
-                <Btn icon="back" onClick={() => setStep(2)}>
-                  Atrás
-                </Btn>
-                <Btn variant="primary" icon="check" disabled={busy || !lines.length} onClick={() => void confirm()}>
-                  {busy ? 'Creando…' : 'Confirmar pedido'}
-                </Btn>
-              </div>
             </section>
           ) : null}
         </div>
 
-        <aside className="no-panel no-side" aria-label="Resumen del pedido">
-          <h3>Resumen</h3>
-          <div className="no-side-meta">
-            <div>
-              <span>Cliente</span>
-              <strong>{selected?.name ?? '—'}</strong>
-            </div>
-            <div>
-              <span>Ciudad</span>
-              <strong>
-                {selected?.city ?? '—'}
-                {selected?.sector ? ` · ${selected.sector}` : ''}
-              </strong>
-            </div>
-            <div>
-              <span>Prioridad</span>
-              <strong>{priority}</strong>
-            </div>
-            <div>
-              <span>Ítems</span>
-              <strong>
-                {lines.length} · {units} u.
-              </strong>
-            </div>
-          </div>
+        <aside className="no-side-col" aria-label="Resumen del pedido">
+          <section className="no-card no-credit-card">
+            <h3>Crédito del cliente</h3>
+            {selected ? (
+              <>
+                <p className="no-credit-name">{selected.name}</p>
+                <div className="no-credit-available">
+                  <strong>{money(availableCredit)}</strong>
+                  <span>Cupo disponible</span>
+                </div>
+                <dl className="no-credit-dl">
+                  <div>
+                    <dt>Límite asignado</dt>
+                    <dd>{money(limit)}</dd>
+                  </div>
+                  <div>
+                    <dt>Comprometido</dt>
+                    <dd>{money(used)}</dd>
+                  </div>
+                </dl>
+                <small className="no-credit-note">Comprometido en pedidos abiertos</small>
+                {total > 0 ? (
+                  <p className="no-credit-after">
+                    Tras este pedido quedarían <strong>{money(remainingAfter)}</strong>
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <p className="no-hint">Selecciona un cliente para ver su cupo.</p>
+            )}
+          </section>
 
-          {lines.length ? (
-            <ul className="no-lines">
-              {lines.map((l) => {
-                const p = product(state, l.productId);
-                const max = available(state, l.productId);
-                return (
-                  <li key={l.productId} className="no-line">
-                    <div>
-                      <strong>{p?.name ?? l.productId}</strong>
-                      <small>
-                        {money(p?.price ?? 0)} · máx {max}
-                      </small>
-                    </div>
-                    {step === 2 ? (
-                      <div className="no-qty">
-                        <button type="button" aria-label="Menos" onClick={() => setQty(l.productId, l.qty - 1)}>
-                          −
-                        </button>
-                        <input
-                          type="number"
-                          min={1}
-                          max={max}
-                          value={l.qty}
-                          onChange={(e) => setQty(l.productId, Number(e.target.value))}
-                        />
-                        <button type="button" aria-label="Más" onClick={() => setQty(l.productId, l.qty + 1)}>
-                          +
-                        </button>
-                      </div>
-                    ) : (
-                      <strong>× {l.qty}</strong>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="subtle">Aún no hay productos en el pedido.</p>
-          )}
-
-          <div className="no-total">
-            <span>Total estimado</span>
-            <strong>{money(total)}</strong>
-          </div>
+          <section className="no-card no-summary-card">
+            <h3>Resumen del pedido</h3>
+            {lines.length ? (
+              <>
+                <ul className="no-lines">
+                  {lines.map((l) => {
+                    const p = product(state, l.productId);
+                    const max = available(state, l.productId);
+                    return (
+                      <li key={l.productId} className="no-line">
+                        <div>
+                          <strong>{p?.name ?? l.productId}</strong>
+                          <small>
+                            {money(p?.price ?? 0)} · máx {max}
+                          </small>
+                        </div>
+                        {step === 2 ? (
+                          <div className="no-qty">
+                            <button
+                              type="button"
+                              aria-label="Menos"
+                              onClick={() => setQty(l.productId, l.qty - 1)}
+                            >
+                              −
+                            </button>
+                            <input
+                              type="number"
+                              min={1}
+                              max={max}
+                              value={l.qty}
+                              onChange={(e) => setQty(l.productId, Number(e.target.value))}
+                            />
+                            <button
+                              type="button"
+                              aria-label="Más"
+                              onClick={() => setQty(l.productId, l.qty + 1)}
+                            >
+                              +
+                            </button>
+                          </div>
+                        ) : (
+                          <strong>× {l.qty}</strong>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="no-total">
+                  <span>
+                    {lines.length} ítems · {units} u.
+                  </span>
+                  <strong>{money(total)}</strong>
+                </div>
+              </>
+            ) : (
+              <div className="no-summary-empty">
+                <Icon name="box" />
+                <p>Aún no hay productos. El total se calculará al añadir artículos.</p>
+              </div>
+            )}
+          </section>
         </aside>
       </div>
+
+      <footer className="no-footer">
+        <span className="no-step-label">
+          Paso {step} de {STEPS.length}
+        </span>
+        <div className="no-footer-actions">
+          {step === 1 ? (
+            <>
+              <Btn
+                onClick={() =>
+                  toast('Borrador local: continúa cuando quieras. Aún no se guarda en servidor.')
+                }
+              >
+                Guardar borrador
+              </Btn>
+              <Btn variant="primary" icon="arrow" onClick={goProducts}>
+                Continuar a productos
+              </Btn>
+            </>
+          ) : null}
+          {step === 2 ? (
+            <>
+              <Btn icon="back" onClick={() => setStep(1)}>
+                Atrás
+              </Btn>
+              <Btn variant="primary" icon="arrow" onClick={goConfirm}>
+                Continuar a confirmar
+              </Btn>
+            </>
+          ) : null}
+          {step === 3 ? (
+            <>
+              <Btn icon="back" onClick={() => setStep(2)}>
+                Atrás
+              </Btn>
+              <Btn
+                variant="primary"
+                icon="check"
+                disabled={busy || !lines.length}
+                onClick={() => void confirm()}
+              >
+                {busy ? 'Creando…' : 'Confirmar pedido'}
+              </Btn>
+            </>
+          ) : null}
+        </div>
+      </footer>
     </div>
   );
 }
