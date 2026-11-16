@@ -1,5 +1,11 @@
 import { client, orderWeight, product } from '../../shared/lib/inventory';
-import type { AppState, Order } from '../../shared/types';
+import {
+  estimateRouteCost,
+  estimateRouteEtaHours,
+  estimateRouteKm,
+  resolveBusinessRules,
+} from '../../shared/lib/businessRules';
+import type { AppState, BusinessRules, Order } from '../../shared/types';
 
 export type VehicleKind = 'carro' | 'camion' | 'motocicleta';
 
@@ -222,6 +228,7 @@ export function suggestAutoAssign(
   ready: Order[],
   alreadyStaged: Record<string, string[]> = {},
   fleet: Truck[] = FLEET,
+  rules: BusinessRules = resolveBusinessRules(s.settings),
 ): AutoAssignPlan {
   const stagedSet = new Set(Object.values(alreadyStaged).flat());
   const candidates = ready
@@ -266,10 +273,15 @@ export function suggestAutoAssign(
       const m3Fill = nextM3 / t.maxM3;
       const fill = Math.max(kgFill, m3Fill);
       // Preferir llenado útil sin saturar
-      const fillScore = fill <= 0.85 ? fill * 40 : fill <= 0.95 ? 28 : 10;
+      const fillScore =
+        fill <= rules.assignIdealFillMax
+          ? fill * 40
+          : fill <= rules.assignNearFullFill
+            ? 28
+            : 10;
       const cityScore = t.city === c.city ? 100 : t.city.includes(c.city) || c.city.includes(t.city) ? 40 : 0;
       const sectorBonus = t.allowedSectors?.length ? 35 : 0;
-      const costScore = (1.2 - t.costPerKm) * 25;
+      const costScore = (rules.assignCostReference - t.costPerKm) * rules.assignCostWeight;
       const balanceScore = Math.max(0, 18 - cur.count * 2);
       const spareScore = ((t.maxKg - nextKg) / t.maxKg) * 8;
       const score = cityScore + fillScore + costScore + balanceScore + spareScore + sectorBonus;
@@ -447,6 +459,7 @@ function resolveTruck(fleet: Truck[], plate: string, sample?: Order, s?: AppStat
  * por placa + fecha operativa.
  */
 export function buildRouteHistory(s: AppState, fleet: Truck[] = FLEET): RouteHistoryEntry[] {
+  const rules = resolveBusinessRules(s.settings);
   const wh = s.warehouses[0];
   const relevant = s.orders.filter(
     (o) =>
@@ -478,9 +491,9 @@ export function buildRouteHistory(s: AppState, fleet: Truck[] = FLEET): RouteHis
     const pending = b.orders.filter((o) => o.status === 'En ruta').length;
     const stops = b.orders.length;
     const kg = Math.round(b.orders.reduce((n, o) => n + orderWeight(s, o), 0));
-    const km = Math.max(8, Math.round(truck.routeKm * (stops / Math.max(3, stops))));
-    const cost = Math.round(km * truck.costPerKm * 100) / 100;
-    const etaHours = Math.round(truck.etaHours * (0.55 + stops * 0.12) * 100) / 100;
+    const km = estimateRouteKm(truck.routeKm, stops, rules);
+    const cost = estimateRouteCost(km, truck.costPerKm);
+    const etaHours = estimateRouteEtaHours(truck.etaHours, stops, rules);
     let status: RouteHistoryEntry['status'] = 'Parcial';
     if (pending > 0) status = 'En ruta';
     else if (incidents > 0 && delivered + incidents === stops) status = 'Incidencia';

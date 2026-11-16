@@ -1,6 +1,7 @@
 import { seed } from './seed.js';
 import { ensureFamilies } from './families.service.js';
 import type { AppState } from './types.js';
+import { mergeBusinessRules } from './business-rules.js';
 import { DEFAULT_WAREHOUSE_ID, syncSettingsWarehouseLabel } from './warehouse-admin.service.js';
 import {
   DEFAULT_LAYOUT,
@@ -117,6 +118,8 @@ export function migrateState(raw: AppState): AppState {
         3000;
     }
   }
+
+  base.settings.businessRules = mergeBusinessRules(base.settings.businessRules, undefined);
 
   syncSettingsWarehouseLabel(base);
   return base;

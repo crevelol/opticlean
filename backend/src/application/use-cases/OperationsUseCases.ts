@@ -1,5 +1,6 @@
 import type { StateRepository } from '../ports/StateRepository.js';
 import type { AppState, Client, Product, Settings } from '../../domain/types.js';
+import { mergeBusinessRules } from '../../domain/business-rules.js';
 import { categories } from '../../domain/warehouse.js';
 import { getWarehouseGeometry } from '../../domain/warehouse-layout.js';
 import {
@@ -105,7 +106,11 @@ export class OperationsUseCases {
 
   async updateSettings(settings: Partial<Settings>) {
     return this.mutate((s) => {
-      s.settings = { ...s.settings, ...settings };
+      const { businessRules, ...rest } = settings;
+      s.settings = { ...s.settings, ...rest };
+      if (businessRules) {
+        s.settings.businessRules = mergeBusinessRules(s.settings.businessRules, businessRules);
+      }
     });
   }
 

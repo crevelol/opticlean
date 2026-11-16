@@ -17,6 +17,7 @@ import { ClientsPage } from '../features/clients/ClientsPage';
 import { TraceabilityPage } from '../features/traceability/TraceabilityPage';
 import { ReportsPage } from '../features/reports/ReportsPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
+import { BusinessRulesPage } from '../features/settings/BusinessRulesPage';
 import { WarehousesAdminPage } from '../features/warehouses/WarehousesAdminPage';
 import { FamiliesPage } from '../features/families/FamiliesPage';
 
@@ -65,6 +66,7 @@ function ProtectedApp() {
         <Route path="clientes" element={<ClientsPage />} />
         <Route path="trazabilidad" element={<TraceabilityPage />} />
         <Route path="reportes" element={<ReportsPage />} />
+        <Route path="reglas" element={<BusinessRulesPage />} />
         <Route path="configuracion" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/bodega" replace />} />
       </Route>

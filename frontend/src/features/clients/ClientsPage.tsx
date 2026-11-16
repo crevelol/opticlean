@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
@@ -9,6 +9,7 @@ import {
   orderValue,
   statusColor,
 } from '../../shared/lib/inventory';
+import { resolveBusinessRules } from '../../shared/lib/businessRules';
 import { Badge, Btn } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
@@ -19,6 +20,8 @@ type CreditFilter = 'all' | 'ok' | 'tight' | 'full';
 type ViewMode = 'list' | 'cards';
 type DetailTab = 'resumen' | 'pedidos' | 'credito';
 type SortMode = 'name' | 'orders' | 'credit';
+
+const PAGE_SIZE = 8;
 
 function initials(name: string) {
   return name
@@ -49,6 +52,7 @@ export function ClientsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<DetailTab>('resumen');
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   const sectors = useMemo(
     () =>
@@ -58,9 +62,12 @@ export function ClientsPage() {
     [state?.clients],
   );
 
+  const rules = resolveBusinessRules(state?.settings);
+
   const rows = useMemo(() => {
     if (!state) return [];
     const q = query.trim().toLowerCase();
+    const creditRules = resolveBusinessRules(state.settings);
     const list = state.clients
       .map((c) => {
         const orders = clientOrders(state, c.id);
@@ -72,9 +79,13 @@ export function ClientsPage() {
       })
       .filter(({ client: c, pct }) => {
         if (sector !== 'all' && c.type !== sector) return false;
-        if (creditFilter === 'ok' && pct >= 60) return false;
-        if (creditFilter === 'tight' && (pct < 60 || pct >= 90)) return false;
-        if (creditFilter === 'full' && pct < 90) return false;
+        if (creditFilter === 'ok' && pct >= creditRules.creditOkMaxPct) return false;
+        if (
+          creditFilter === 'tight' &&
+          (pct < creditRules.creditOkMaxPct || pct >= creditRules.creditTightMaxPct)
+        )
+          return false;
+        if (creditFilter === 'full' && pct < creditRules.creditTightMaxPct) return false;
         if (!q) return true;
         return [c.name, c.contact, c.email, c.address, c.id, c.sector]
           .join(' ')
@@ -91,6 +102,16 @@ export function ClientsPage() {
     });
     return list;
   }, [state, query, sector, creditFilter, sort]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, sector, creditFilter, sort, view]);
+
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const pageRows = rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const rangeFrom = rows.length ? (safePage - 1) * PAGE_SIZE + 1 : 0;
+  const rangeTo = Math.min(safePage * PAGE_SIZE, rows.length);
 
   if (!state) return null;
 
@@ -246,7 +267,7 @@ export function ClientsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map(({ client: c, orders, limit, available }) => (
+                    {pageRows.map(({ client: c, orders, limit, available }) => (
                       <tr
                         key={c.id}
                         className={selected?.client.id === c.id ? 'is-selected' : ''}
@@ -333,7 +354,7 @@ export function ClientsPage() {
             )
           ) : (
             <div className="cli-cards">
-              {rows.map(({ client: c, orders, limit, used, available, pct }) => (
+              {pageRows.map(({ client: c, orders, limit, used, available, pct }) => (
                 <button
                   type="button"
                   key={c.id}
@@ -363,8 +384,48 @@ export function ClientsPage() {
                   </span>
                 </button>
               ))}
+              {!pageRows.length ? (
+                <div className="cli-empty">No hay clientes con estos filtros.</div>
+              ) : null}
             </div>
           )}
+
+          {rows.length ? (
+            <div className="cli-pagination" aria-label="Paginación de clientes">
+              <span>
+                Mostrando {rangeFrom}–{rangeTo} de {rows.length}
+              </span>
+              <div>
+                <button
+                  type="button"
+                  disabled={safePage <= 1}
+                  aria-label="Página anterior"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <Icon name="back" />
+                </button>
+                {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={n === safePage ? 'is-active' : ''}
+                    aria-current={n === safePage ? 'page' : undefined}
+                    onClick={() => setPage(n)}
+                  >
+                    {n}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  disabled={safePage >= pageCount}
+                  aria-label="Página siguiente"
+                  onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                >
+                  <Icon name="arrow" />
+                </button>
+              </div>
+            </div>
+          ) : null}
         </section>
 
         {selected ? (
@@ -513,7 +574,11 @@ export function ClientsPage() {
                     <span
                       style={{ width: `${selected.pct}%` }}
                       className={
-                        selected.pct >= 90 ? 'is-red' : selected.pct >= 60 ? 'is-amber' : ''
+                        selected.pct >= rules.creditTightMaxPct
+                          ? 'is-red'
+                          : selected.pct >= rules.creditOkMaxPct
+                            ? 'is-amber'
+                            : ''
                       }
                     />
                   </div>
@@ -596,7 +661,7 @@ export function ClientsPage() {
                   type="number"
                   min={0}
                   step={50}
-                  defaultValue={3000}
+                  defaultValue={rules.defaultCreditLimit}
                   required
                 />
               </div>

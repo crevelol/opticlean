@@ -27,6 +27,7 @@ const titles: Record<string, string> = {
   '/logistica/historial': 'Historial de rutas',
   '/clientes': 'Clientes',
   '/reportes': 'Reportes',
+  '/reglas': 'Reglas de negocio',
   '/configuracion': 'Configuración',
   '/trazabilidad': 'Trazabilidad',
 };
@@ -47,6 +48,7 @@ const fallbackMenu: MenuSection[] = [
     section: 'Gestión',
     items: [
       { id: 'f-cli', label: 'Clientes', path: '/clientes', icon: 'users', badge: null },
+      { id: 'f-rules', label: 'Reglas de negocio', path: '/reglas', icon: 'shield', badge: null },
       { id: 'f-cfg', label: 'Configuración', path: '/configuracion', icon: 'settings', badge: null },
     ],
   },
@@ -60,6 +62,7 @@ export function AppLayout() {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantAnswer, setAssistantAnswer] = useState<string[]>([]);
   const [notifyOpen, setNotifyOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [menuSections, setMenuSections] = useState<MenuSection[]>(fallbackMenu);
 
   useEffect(() => {
@@ -112,6 +115,23 @@ export function AppLayout() {
 
   const pending = state.orders.filter((o) => o.status === 'Por preparar').length;
   const low = state.products.filter((p) => available(state, p.id) < p.min);
+  const displayName = user?.name || state.settings.operator || 'Usuario';
+  const roleLabel =
+    user?.role === 'admin'
+      ? 'Administrador'
+      : user?.role === 'dispatch'
+        ? 'Despacho'
+        : user?.role === 'driver'
+          ? 'Conductor'
+          : user?.role === 'ops'
+            ? 'Operaciones'
+            : 'Coordinación';
+
+  const doLogout = () => {
+    setProfileOpen(false);
+    logout();
+    navigate('/login', { replace: true });
+  };
 
   const nav = (to: string, label: string, icon: string, pill?: string | number) => (
     <NavLink
@@ -168,16 +188,13 @@ export function AppLayout() {
           <div className="user">
             <div className="avatar">{initials}</div>
             <div>
-              <strong>{user?.name || state.settings.operator}</strong>
-              <span>{user?.email || 'Coordinación de operaciones'}</span>
+              <strong>{displayName}</strong>
+              <span>{user?.email || roleLabel}</span>
               <button
                 type="button"
                 className="btn ghost small"
                 style={{ marginTop: 6, padding: 0, minHeight: 0 }}
-                onClick={() => {
-                  logout();
-                  navigate('/login', { replace: true });
-                }}
+                onClick={doLogout}
               >
                 Cerrar sesión
               </button>
@@ -199,20 +216,13 @@ export function AppLayout() {
             <strong>{title}</strong>
           </div>
           <div className="top-tools">
-            <form
-              className="top-search"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const q = new FormData(e.currentTarget).get('query')?.toString() ?? '';
-                navigate(`/inventario?q=${encodeURIComponent(q)}`);
-              }}
-            >
-              <Icon name="search" />
-              <input name="query" placeholder="Buscar producto, pedido o cliente…" autoComplete="off" />
-            </form>
             <span className="date-label">
               <Icon name="calendar" />
-              27 oct. 2026
+              {new Date().toLocaleDateString('es-EC', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+              })}
             </span>
             <button
               type="button"
@@ -223,8 +233,44 @@ export function AppLayout() {
               <Icon name="bell" />
               <span className="notification-dot" />
             </button>
-            <div className="avatar" style={{ background: '#e9f3fc', color: '#4687b9' }}>
-              ER
+            <div className={`top-profile ${profileOpen ? 'is-open' : ''}`}>
+              <button
+                type="button"
+                className="top-profile-btn"
+                aria-haspopup="menu"
+                aria-expanded={profileOpen}
+                onClick={() => setProfileOpen((o) => !o)}
+              >
+                <span className="avatar top-profile-avatar">{initials}</span>
+                <span className="top-profile-meta">
+                  <strong>{displayName}</strong>
+                  <small>{user?.email || roleLabel}</small>
+                </span>
+                <Icon name="chevron" className="top-profile-chevron" />
+              </button>
+              {profileOpen ? (
+                <>
+                  <button
+                    type="button"
+                    className="top-profile-backdrop"
+                    aria-label="Cerrar perfil"
+                    onClick={() => setProfileOpen(false)}
+                  />
+                  <div className="top-profile-menu" role="menu">
+                    <div className="top-profile-card">
+                      <span className="avatar top-profile-avatar">{initials}</span>
+                      <div>
+                        <strong>{displayName}</strong>
+                        <small>{user?.email || 'Sin correo'}</small>
+                        <em>{roleLabel}</em>
+                      </div>
+                    </div>
+                    <button type="button" role="menuitem" onClick={doLogout}>
+                      Cerrar sesión
+                    </button>
+                  </div>
+                </>
+              ) : null}
             </div>
           </div>
         </header>
