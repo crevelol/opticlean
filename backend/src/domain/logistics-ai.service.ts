@@ -1,4 +1,5 @@
 import type { AppState, Order } from './types.js';
+import { resolveBusinessRules } from './business-rules.js';
 
 export type FleetTruck = {
   id: string;
@@ -183,7 +184,11 @@ function allowsSector(t: FleetTruck, sector: string) {
   });
 }
 
-function heuristicAssign(ready: ReadyOrder[], trucks: TruckContext[]): AutoAssignPlan {
+function heuristicAssign(
+  ready: ReadyOrder[],
+  trucks: TruckContext[],
+  rules = resolveBusinessRules(),
+): AutoAssignPlan {
   const used = new Map(trucks.map((t) => [t.id, { kg: t.usedKg, m3: t.usedM3, count: t.stopsOnRoute }]));
   const sorted = [...ready].sort((a, b) => b.kg - a.kg || b.m3 - a.m3);
   const assignments: AutoAssignItem[] = [];
@@ -199,10 +204,15 @@ function heuristicAssign(ready: ReadyOrder[], trucks: TruckContext[]): AutoAssig
       if (nextKg > t.maxKg + 0.01 || nextM3 > t.maxM3 + 0.01) continue;
       if (!allowsSector(t, o.sector)) continue;
       const fill = Math.max(nextKg / t.maxKg, nextM3 / t.maxM3);
-      const fillScore = fill <= 0.85 ? fill * 40 : fill <= 0.95 ? 28 : 10;
+      const fillScore =
+        fill <= rules.assignIdealFillMax
+          ? fill * 40
+          : fill <= rules.assignNearFullFill
+            ? 28
+            : 10;
       const cityScore = t.city === o.city ? 100 : 0;
       const sectorBonus = t.allowedSectors?.length ? 35 : 0;
-      const costScore = (1.2 - t.costPerKm) * 25;
+      const costScore = (rules.assignCostReference - t.costPerKm) * rules.assignCostWeight;
       const balanceScore = Math.max(0, 18 - cur.count * 2);
       const score = cityScore + fillScore + costScore + balanceScore + sectorBonus;
       const reason = [
@@ -413,7 +423,11 @@ export async function autoAssignLogistics(input: {
     console.warn('[logistics-ai]', err instanceof Error ? err.message : err);
   }
 
-  const fallback = heuristicAssign(readyOrders, trucks);
+  const fallback = heuristicAssign(
+    readyOrders,
+    trucks,
+    resolveBusinessRules(input.state.settings),
+  );
   fallback.summary = `Fallback local · ${fallback.summary}`;
   return fallback;
 }

@@ -99,6 +99,16 @@ export function AppLayout() {
   const userName = user?.name || state.settings.operator || 'Operación';
   const pending = state.orders.filter((o) => o.status === 'Por preparar').length;
   const low = state.products.filter((p) => available(state, p.id) < p.min);
+  const roleLabel =
+    user?.role === 'admin'
+      ? 'Administrador'
+      : user?.role === 'dispatch'
+        ? 'Despacho'
+        : user?.role === 'driver'
+          ? 'Conductor'
+          : user?.role === 'ops'
+            ? 'Operaciones'
+            : 'Coordinación';
 
   return (
     <div className={cx('app-shell', collapsed && 'is-collapsed')}>
@@ -114,7 +124,8 @@ export function AppLayout() {
         counters={{ '/pedidos': pending }}
         user={{
           name: userName,
-          email: user?.email || 'Coordinación de operaciones',
+          email: user?.email || '',
+          role: roleLabel,
           initials: initialsOf(userName),
         }}
         onNavigate={() => setMobileOpen(false)}

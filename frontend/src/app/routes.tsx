@@ -51,6 +51,9 @@ const ReportsPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import('../features/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
+const BusinessRulesPage = lazy(() =>
+  import('../features/settings/BusinessRulesPage').then((m) => ({ default: m.BusinessRulesPage })),
+);
 const WarehousesAdminPage = lazy(() =>
   import('../features/warehouses/WarehousesAdminPage').then((m) => ({
     default: m.WarehousesAdminPage,
@@ -106,6 +109,7 @@ function ProtectedApp() {
         <Route path="clientes" element={<ClientsPage />} />
         <Route path="trazabilidad" element={<TraceabilityPage />} />
         <Route path="reportes" element={<ReportsPage />} />
+        <Route path="reglas" element={<BusinessRulesPage />} />
         <Route path="configuracion" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/bodega" replace />} />
       </Route>

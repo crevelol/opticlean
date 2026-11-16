@@ -11,7 +11,7 @@ type Props = {
   mobileOpen: boolean;
   /** Contador dinámico por ruta (p. ej. pedidos por preparar). */
   counters: Record<string, number>;
-  user: { name: string; email: string; initials: string };
+  user: { name: string; email: string; role: string; initials: string };
   onNavigate: () => void;
   onAssistant: () => void;
   onLogout: () => void;
@@ -105,9 +105,9 @@ export function Sidebar({
           <div className="avatar" title={user.name}>
             {user.initials}
           </div>
-          <div className="sidebar-user-text">
+          <div className="sidebar-user-text" title={user.email || undefined}>
             <strong>{user.name}</strong>
-            <span>{user.email}</span>
+            <span>{user.role}</span>
           </div>
           <button
             type="button"

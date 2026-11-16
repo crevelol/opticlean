@@ -116,6 +116,14 @@ const SEED_MODULES: Array<Omit<ModuleRow, 'active'> & { active?: number }> = [
   },
   { id: 'mod-reports', code: 'reports', name: 'Reportes', description: 'Indicadores y reportes', icon: 'chart', sort_order: 140 },
   {
+    id: 'mod-business-rules',
+    code: 'business_rules',
+    name: 'Reglas de negocio',
+    description: 'Costo de envío, crédito y asignación',
+    icon: 'shield',
+    sort_order: 145,
+  },
+  {
     id: 'mod-settings',
     code: 'settings',
     name: 'Configuración',
@@ -244,6 +252,15 @@ const SEED_MENU: Array<Omit<MenuItem, 'active' | 'badge'> & { badge?: string | n
     icon: 'chart',
     section: 'Gestión',
     sort_order: 30,
+  },
+  {
+    id: 'mi-business-rules',
+    module_id: 'mod-business-rules',
+    label: 'Reglas de negocio',
+    path: '/reglas',
+    icon: 'shield',
+    section: 'Gestión',
+    sort_order: 35,
   },
   {
     id: 'mi-settings',

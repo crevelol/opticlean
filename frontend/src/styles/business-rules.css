@@ -1,0 +1,158 @@
+.br-page {
+  --br-ink: #17324f;
+  --br-muted: #6b8298;
+  --br-line: #e2eaf2;
+  --br-blue: #1f7ad9;
+  color: var(--br-ink);
+  min-width: 0;
+}
+
+.br-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.7fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.br-main,
+.br-side {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.br-card {
+  border: 1px solid var(--br-line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 16px;
+}
+
+.br-card-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.br-card-head .icon {
+  width: 20px;
+  height: 20px;
+  color: var(--br-blue);
+  margin-top: 2px;
+}
+
+.br-card-head h2,
+.br-card h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.br-card-head p,
+.br-side-desc {
+  margin: 4px 0 0;
+  color: var(--br-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.br-card-head code,
+.br-note code {
+  font-size: 11px;
+  background: #f3f7fb;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.br-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.br-card .field {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.br-card .field > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--br-muted);
+}
+
+.br-card .field input {
+  width: 100%;
+  border: 1px solid var(--br-line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.br-note {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--br-muted);
+  line-height: 1.45;
+}
+
+.br-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.br-preview {
+  margin: 12px 0 0;
+  display: grid;
+  gap: 8px;
+}
+
+.br-preview > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #edf5ff;
+  border: 1px solid #b7d6f5;
+}
+
+.br-preview dt {
+  margin: 0;
+  font-size: 12px;
+  color: var(--br-muted);
+}
+
+.br-preview dd {
+  margin: 0;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--br-blue);
+}
+
+.br-help ul {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--br-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  display: grid;
+  gap: 8px;
+}
+
+.br-help strong {
+  color: var(--br-ink);
+}
+
+@media (max-width: 960px) {
+  .br-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .br-grid {
+    grid-template-columns: 1fr;
+  }
+}
