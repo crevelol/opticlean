@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { AppRoutes } from './app/routes';
 import { AuthProvider } from './shared/hooks/AuthProvider';
 import { AppStateProvider } from './shared/hooks/AppStateProvider';
+import './styles/tokens.css';
 import './styles/global.css';
 import './styles/warehouse-designer.css';
 

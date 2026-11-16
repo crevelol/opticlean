@@ -187,7 +187,7 @@ export function ReportsPage() {
                   <p>Inventario a PVP · PT {money(capital.finishedValue)} · MP {money(capital.rawValue)}</p>
                 </div>
                 <div className="rpt-panel-actions">
-                  <Btn icon="arrow" onClick={() => navigate('/inventario')}>Inventario</Btn>
+                  <Btn size="small" icon="arrow" onClick={() => navigate('/inventario')}>Inventario</Btn>
                 </div>
               </div>
               {capital.byLine.length ? (
@@ -231,7 +231,7 @@ export function ReportsPage() {
                   <p>Capital en riesgo {money(capital.atRiskValue)} · Exceso {money(capital.excessValue)}</p>
                 </div>
                 <div className="rpt-panel-actions">
-                  <Btn icon="cart" onClick={() => navigate('/compras')}>Abastecer</Btn>
+                  <Btn size="small" icon="cart" onClick={() => navigate('/compras')}>Abastecer</Btn>
                 </div>
               </div>
               {capital.atRisk.length ? (
@@ -320,7 +320,7 @@ export function ReportsPage() {
                   <p>{service.orderCount} pedidos · {money(service.pipelineValue)}</p>
                 </div>
                 <div className="rpt-panel-actions">
-                  <Btn icon="orders" onClick={() => navigate('/pedidos')}>Pedidos</Btn>
+                  <Btn size="small" icon="orders" onClick={() => navigate('/pedidos')}>Pedidos</Btn>
                 </div>
               </div>
               {service.byStatus.length ? (
@@ -354,7 +354,7 @@ export function ReportsPage() {
                   <p>Por valor de pedidos en el periodo</p>
                 </div>
                 <div className="rpt-panel-actions">
-                  <Btn icon="users" onClick={() => navigate('/clientes')}>Clientes</Btn>
+                  <Btn size="small" icon="users" onClick={() => navigate('/clientes')}>Clientes</Btn>
                 </div>
               </div>
               {service.topClients.length ? (
@@ -392,7 +392,7 @@ export function ReportsPage() {
                 <p>Demanda del periodo vs stock disponible</p>
               </div>
               <div className="rpt-panel-actions">
-                <Btn icon="box" onClick={() => navigate('/inventario')}>Ver stock</Btn>
+                <Btn size="small" icon="box" onClick={() => navigate('/inventario')}>Ver stock</Btn>
               </div>
             </div>
             {service.velocity.length ? (
@@ -443,7 +443,7 @@ export function ReportsPage() {
                 <p>Costo estimado para llevar insumos al mínimo: {money(supply.restockCost)}</p>
               </div>
               <div className="rpt-panel-actions">
-                <Btn variant="primary" icon="plus" onClick={() => navigate('/compras')}>
+                <Btn size="small" variant="primary" icon="plus" onClick={() => navigate('/compras')}>
                   Ir a compras
                 </Btn>
               </div>
@@ -502,7 +502,7 @@ export function ReportsPage() {
                 <p>Alcance de fabricación limitado por insumos bajos</p>
               </div>
               <div className="rpt-panel-actions">
-                <Btn icon="layers" onClick={() => navigate('/inventario?tipo=finished&estado=attention')}>
+                <Btn size="small" icon="layers" onClick={() => navigate('/inventario?tipo=finished&estado=attention')}>
                   Ver productos
                 </Btn>
               </div>
@@ -552,7 +552,7 @@ export function ReportsPage() {
                   <p>{warehouse.occupied}/{warehouse.totalPositions} posiciones · {money(warehouse.totalValue)}</p>
                 </div>
                 <div className="rpt-panel-actions">
-                  <Btn icon="map" onClick={() => navigate('/bodega')}>Mapa</Btn>
+                  <Btn size="small" icon="map" onClick={() => navigate('/bodega')}>Mapa</Btn>
                 </div>
               </div>
               {warehouse.byRack.length ? (
@@ -633,7 +633,7 @@ export function ReportsPage() {
                 <p>Proxy: sin eventos recientes (≥14 días) o sin historial</p>
               </div>
               <div className="rpt-panel-actions">
-                <Btn icon="history" onClick={() => navigate('/trazabilidad')}>Trazabilidad</Btn>
+                <Btn size="small" icon="history" onClick={() => navigate('/trazabilidad')}>Trazabilidad</Btn>
               </div>
             </div>
             {warehouse.idle.length ? (

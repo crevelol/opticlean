@@ -10,7 +10,7 @@
 .warehouse-embed {
   margin: 0;
   min-height: calc(100vh - 59px);
-  background: #f4f7fb;
+  background: var(--slate-75);
 }
 
 .warehouse-embed__frame {
@@ -19,20 +19,20 @@
   min-height: calc(100vh - 59px);
   height: calc(100vh - 59px);
   border: 0;
-  background: #f4f7fb;
+  background: var(--slate-75);
   border-radius: 0;
 }
 
 .warehouse-embed.is-compact {
   min-height: 0;
-  border: 1px solid #e2eaf3;
-  border-radius: 12px;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-xl);
   overflow: hidden;
-  background: #f4f7fb;
+  background: var(--slate-75);
 }
 
 .warehouse-embed.is-compact .warehouse-embed__frame {
   min-height: 0;
   height: 100%;
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
 }
