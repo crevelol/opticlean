@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Select } from '../../shared/components/Select';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
@@ -203,18 +204,18 @@ export function ClientsPage() {
         </div>
         <label className="cli-select">
           <span>Sector</span>
-          <select value={sector} onChange={(e) => setSector(e.target.value)}>
+          <Select value={sector} onChange={(e) => setSector(e.target.value)}>
             <option value="all">Todos</option>
             {sectors.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="cli-select">
           <span>Crédito</span>
-          <select
+          <Select
             value={creditFilter}
             onChange={(e) => setCreditFilter(e.target.value as CreditFilter)}
           >
@@ -222,7 +223,7 @@ export function ClientsPage() {
             <option value="ok">Con holgura</option>
             <option value="tight">Cerca del límite</option>
             <option value="full">Cupo alto</option>
-          </select>
+          </Select>
         </label>
         <div className="cli-view-toggle" role="group" aria-label="Vista">
           <button
@@ -250,11 +251,11 @@ export function ClientsPage() {
             </h2>
             <label className="cli-sort">
               Ordenar
-              <select value={sort} onChange={(e) => setSort(e.target.value as SortMode)}>
+              <Select value={sort} onChange={(e) => setSort(e.target.value as SortMode)}>
                 <option value="name">Nombre</option>
                 <option value="orders">Pedidos</option>
                 <option value="credit">Cupo disponible</option>
-              </select>
+              </Select>
             </label>
           </div>
 
@@ -641,13 +642,13 @@ export function ClientsPage() {
               </div>
               <div className="field">
                 <label htmlFor="cl-type">Sector</label>
-                <select id="cl-type" name="type">
+                <Select id="cl-type" name="type">
                   <option>Corporativo</option>
                   <option>Hotelería</option>
                   <option>Salud</option>
                   <option>Restauración</option>
                   <option>Industrial</option>
-                </select>
+                </Select>
               </div>
               <div className="field full">
                 <label htmlFor="cl-address">Dirección</label>

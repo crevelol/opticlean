@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Select } from '../../shared/components/Select';
 import { YAW_MAX, YAW_MIN } from './iso';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
@@ -6,13 +7,25 @@ import { api } from '../../shared/api/client';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import { can } from '../../shared/auth/permissions';
 import { activeWarehouseId, available, product, qtyAt, scopedLots, time } from '../../shared/lib/inventory';
-import { buildWarehouseGeometry, faceLabel, normalizeLayout } from '../../shared/lib/warehouseLayout';
+import { buildWarehouseGeometry, normalizeLayout } from '../../shared/lib/warehouseLayout';
 import { Btn, Kpi, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { WarehouseMap, type MapMode } from './WarehouseMap';
 import { WarehousePositioning } from './WarehousePositioning';
 import { WarehouseTransferDialog } from './WarehouseTransferDialog';
-import '../../styles/warehouse-operation.css';
+import { LocationDetailModal } from './LocationDetailModal';
+import { PickingModal, type PickLine } from './PickingModal';
+import '../../styles/warehouse-positioning.css';
+import '../../styles/warehouse-page.css';
+
+const MOVES_PER_PAGE = 6;
+const moveTone = (type: string) => {
+  const t = type.toLowerCase();
+  if (t.includes('recep')) return 'is-in';
+  if (t.includes('desp') || t.includes('salida') || t.includes('venta')) return 'is-out';
+  if (t.includes('tras') || t.includes('reubic')) return 'is-move';
+  return 'is-other';
+};
 
 export function WarehousePage() {
   const { state, meta: serverMeta, applyResponse, toast } = useAppState();
@@ -37,8 +50,11 @@ export function WarehousePage() {
   const dragRef = useRef<{ x: number; active: boolean } | null>(null);
   const [pickOrderId, setPickOrderId] = useState<string | null>(null);
   const [pickChecked, setPickChecked] = useState<Set<string>>(new Set());
-  const [pickPlan, setPickPlan] = useState<Array<{ id: string; loc: string; batch: string; qty: number; productId: string }>>([]);
+  const [pickPlan, setPickPlan] = useState<PickLine[]>([]);
+  const [pickOpen, setPickOpen] = useState(false);
   const [moveLot, setMoveLot] = useState<string | null>(null);
+  const [detailLoc, setDetailLoc] = useState<string | null>(null);
+  const [movesPage, setMovesPage] = useState(0);
   const navigationApplied = useRef<string | null>(null);
   const warehouseId = state ? activeWarehouseId(state) : null;
   const previousWarehouse = useRef(warehouseId);
@@ -66,7 +82,9 @@ export function WarehousePage() {
     setViewYaw(0);
     setPickOrderId(null);
     setPickChecked(new Set());
+    setPickOpen(false);
     setMoveLot(null);
+    setDetailLoc(null);
   }, [warehouseId]);
 
   useEffect(() => {
@@ -91,7 +109,7 @@ export function WarehousePage() {
         setWarehouseSearch(locState.productId);
       }
     }
-    if (locState?.pick) setPickOrderId(locState.pick);
+    if (locState?.pick) { setPickOrderId(locState.pick); setPickOpen(true); }
   }, [locState, routeLocation.key, state, meta, warehouseLots]);
 
   useEffect(() => {
@@ -149,6 +167,7 @@ export function WarehousePage() {
     try {
       applyResponse(await api.prepare(pickOrderId));
       setPickOrderId(null);
+      setPickOpen(false);
       setPickChecked(new Set());
       toast('Pedido preparado.');
     } catch (e) {
@@ -157,9 +176,28 @@ export function WarehousePage() {
   };
 
   const lotForMove = moveLot ? warehouseLots.find((l) => l.id === moveLot) : null;
+  const detailLocation = detailLoc ? meta.locations.find((l) => l.id === detailLoc) : null;
+  const pickDone = pickPlan.filter((l) => pickChecked.has(l.id)).length;
+  const locStatus = q === 0 ? 'free' : q >= loc.capacity ? 'full' : 'stock';
+  const movePages = Math.max(1, Math.ceil(state.events.length / MOVES_PER_PAGE));
+  const safeMovesPage = Math.min(movesPage, movePages - 1);
+  const pageEvents = state.events.slice(safeMovesPage * MOVES_PER_PAGE, (safeMovesPage + 1) * MOVES_PER_PAGE);
+  const views: Array<{ id: MapMode | 'positions'; icon: string; label: string }> = [
+    { id: 'positions', icon: 'pin', label: 'Ubicaciones' },
+    { id: '3d', icon: 'cube', label: 'Vista 3D' },
+    { id: 'plan', icon: 'map', label: 'Plano' },
+    { id: 'front', icon: 'layers', label: 'Frontal' },
+  ];
+
+  const startPicking = () => {
+    if (pickOrderId) { setPickOpen(true); return; }
+    const pending = state.orders.find((o) => o.status === 'Por preparar');
+    if (pending) { setPickOrderId(pending.id); setPickOpen(true); }
+    else toast('No hay pedidos por preparar.');
+  };
 
   return (
-    <div className="warehouse-positioning-page">
+    <div className="warehouse-positioning-page wh-page">
       <PageHead
         eyebrow="Espacio e inventario"
         title="Centro de ubicaciones"
@@ -172,21 +210,14 @@ export function WarehousePage() {
               </Btn>
             ) : null}
             {canPick ? (
-              <Btn
-                variant="primary"
-                icon="route"
-                onClick={() => {
-                  const pending = state.orders.find((o) => o.status === 'Por preparar');
-                  if (pending) setPickOrderId(pending.id);
-                  else toast('No hay pedidos por preparar.');
-                }}
-              >
+              <Btn variant="primary" icon="route" onClick={startPicking}>
                 Preparar pedido
               </Btn>
             ) : null}
           </>
         }
       />
+
       <div className="kpis">
         <Kpi
           label="Ocupación"
@@ -211,180 +242,157 @@ export function WarehousePage() {
           icon="orders"
         />
       </div>
-      <div className="work-area">
-        <section className="panel">
-          <div className="panel-head">
-            <div>
-              <div className="panel-title">
-                <Icon name="warehouse" />
-                {currentWarehouse?.name ?? state.settings.warehouse}
-              </div>
-              <div className="panel-subtitle">
-                {currentWarehouse?.city ? `${currentWarehouse.city} · ` : ''}
-                {meta.racks.length} racks · {totalCells} ubicaciones
-              </div>
+
+      {low.length ? (
+        <div className="wh-alert" role="status">
+          <Icon name="alert" />
+          <span>
+            <strong>{low.length} {low.length === 1 ? 'producto bajo el mínimo' : 'productos bajo el mínimo'}</strong>
+            {' · '}{low[0].name}{low.length > 1 ? ` y ${low.length - 1} más` : ''}
+          </span>
+          <Btn variant="ghost" icon="arrow" onClick={() => navigate('/compras')}>Revisar abastecimiento</Btn>
+        </div>
+      ) : null}
+
+      {pickOrderId ? (
+        <div className="wh-pick-banner" role="status">
+          <span className="wh-pick-banner-icon"><Icon name="route" /></span>
+          <div>
+            <strong>Picking en curso · {pickOrderId}</strong>
+            <span>{pickDone} de {pickPlan.length} posiciones verificadas · las posiciones del recorrido se resaltan en el mapa</span>
+          </div>
+          <Btn variant="primary" icon="check" onClick={() => setPickOpen(true)}>Ver lista</Btn>
+          <button type="button" className="icon-btn" aria-label="Cancelar picking" onClick={() => { setPickOrderId(null); setPickOpen(false); }}>
+            <Icon name="close" />
+          </button>
+        </div>
+      ) : null}
+
+      <section className="panel wh-map-panel">
+        <header className="wh-map-head">
+          <div>
+            <div className="panel-title">
+              <Icon name="warehouse" />
+              {currentWarehouse?.name ?? state.settings.warehouse}
             </div>
-            {canLayout ? (
-              <Btn variant="ghost" icon="building" onClick={() => navigate(warehouseId ? `/bodegas?edit=${encodeURIComponent(warehouseId)}&step=layout` : '/bodegas')}>
-                Editar distribución
-              </Btn>
+            <div className="panel-subtitle">
+              {currentWarehouse?.city ? `${currentWarehouse.city} · ` : ''}
+              {meta.racks.length} racks · {totalCells} ubicaciones
+            </div>
+          </div>
+          {canLayout ? (
+            <Btn variant="ghost" icon="building" onClick={() => navigate(warehouseId ? `/bodegas?edit=${encodeURIComponent(warehouseId)}&step=layout` : '/bodegas')}>
+              Editar distribución
+            </Btn>
+          ) : null}
+        </header>
+
+        <div className="wh-toolbar">
+          <div className="segmented" role="group" aria-label="Vista de la bodega">
+            {views.map((view) => (
+              <button key={view.id} type="button" aria-pressed={mapMode === view.id} className={mapMode === view.id ? 'active' : ''} onClick={() => setMapMode(view.id)}>
+                <Icon name={view.icon} />{view.label}
+              </button>
+            ))}
+          </div>
+          <div className="wh-toolbar-search search-input">
+            <Icon name="search" />
+            <input
+              type="search"
+              aria-label="Buscar producto o código de ubicación en esta bodega"
+              aria-describedby={query ? 'warehouse-search-status' : undefined}
+              value={warehouseSearch}
+              onChange={(e) => setWarehouseSearch(e.target.value)}
+              placeholder="Producto o código de ubicación…"
+            />
+          </div>
+          <Select value={level} onChange={(e) => {
+            const nextLevel = e.target.value;
+            setLevel(nextLevel);
+            if (nextLevel !== 'all') {
+              const nextLocation = meta.locations.find((location) => location.rack === activeRackId && String(location.level) === nextLevel);
+              if (nextLocation) setSelectedLoc(nextLocation.id);
+            }
+          }} aria-label="Filtrar por nivel">
+            <option value="all">Todos los niveles</option>
+            {Array.from({ length: meta.layout.levels }, (_, i) => i + 1).map((l) => (
+              <option key={l} value={l}>Nivel {l}</option>
+            ))}
+          </Select>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Restablecer vista"
+            title="Restablecer vista"
+            onClick={() => { setZoom(1); setLevel('all'); setViewYaw(0); setWarehouseSearch(''); }}
+          >
+            <Icon name="refresh" />
+          </button>
+        </div>
+
+        {query ? (
+          <div className={`wh-search-strip ${matchingLocations.length ? '' : 'no-results'}`}>
+            <p id="warehouse-search-status" role="status">
+              <Icon name={matchingLocations.length ? 'check' : 'info'} />
+              {matchingLocations.length
+                ? `${matchingLocations.length} ${matchingLocations.length === 1 ? 'ubicación encontrada' : 'ubicaciones encontradas'}`
+                : 'Sin coincidencias en esta bodega.'}
+            </p>
+            {matchingLocations.length > 1 ? (
+              <Select aria-label="Ir a una coincidencia" value={matchingLocations.some((location) => location.id === selectedLoc) ? selectedLoc : ''} onChange={(e) => {
+                setSelectedLoc(e.target.value);
+                setLevel('all');
+              }}>
+                <option value="" disabled>Ir a una coincidencia…</option>
+                {matchingLocations.map((location) => (
+                  <option key={location.id} value={location.id}>{location.id} · {qtyAt(state, location.id)} u.</option>
+                ))}
+              </Select>
             ) : null}
           </div>
-          <div className="map-controls">
-            <div className="segmented" role="group" aria-label="Vista de la bodega">
-              <button type="button" aria-pressed={mapMode === 'positions'} className={mapMode === 'positions' ? 'active' : ''} onClick={() => setMapMode('positions')}>
-                <Icon name="pin" />Ubicaciones
-              </button>
-              <button type="button" aria-pressed={mapMode === '3d'} className={mapMode === '3d' ? 'active' : ''} onClick={() => setMapMode('3d')}>
-                <Icon name="cube" />
-                Vista 3D
-              </button>
-              <button type="button" aria-pressed={mapMode === 'plan'} className={mapMode === 'plan' ? 'active' : ''} onClick={() => setMapMode('plan')}>
-                <Icon name="map" />
-                Plano
-              </button>
-              <button type="button" aria-pressed={mapMode === 'front'} className={mapMode === 'front' ? 'active' : ''} onClick={() => setMapMode('front')}>
-                <Icon name="layers" />
-                Frontal
-              </button>
-            </div>
-            <div className="map-actions">
-              <select value={level} onChange={(e) => {
-                const nextLevel = e.target.value;
-                setLevel(nextLevel);
-                if (nextLevel !== 'all') {
-                  const nextLocation = meta.locations.find((location) => location.rack === activeRackId && String(location.level) === nextLevel);
-                  if (nextLocation) setSelectedLoc(nextLocation.id);
-                }
-              }} aria-label="Filtrar por nivel">
-                <option value="all">Todos los niveles</option>
-                {Array.from({ length: meta.layout.levels }, (_, i) => i + 1).map((l) => (
-                  <option key={l} value={l}>
-                    Nivel {l}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label="Restablecer vista"
-                onClick={() => {
-                  setZoom(1);
-                  setLevel('all');
-                  setViewYaw(0);
-                }}
-              >
-                <Icon name="expand" />
-              </button>
+        ) : null}
+
+        {mapMode === '3d' ? (
+          <div className="wh-subbar">
+            <span><Icon name="cube" /> Girar vista</span>
+            <div className="wh-subbar-controls">
+              <button type="button" className="btn small" aria-label="Girar vista a la izquierda" disabled={viewYaw <= YAW_MIN} onClick={() => setViewYaw((y) => Math.max(YAW_MIN, y - Math.PI / 12))}>◀</button>
+              <input type="range" min={YAW_MIN} max={YAW_MAX} step={0.04} value={viewYaw} onChange={(e) => setViewYaw(Number(e.target.value))} aria-label="Ángulo de rotación 3D" />
+              <button type="button" className="btn small" aria-label="Girar vista a la derecha" disabled={viewYaw >= YAW_MAX} onClick={() => setViewYaw((y) => Math.min(YAW_MAX, y + Math.PI / 12))}>▶</button>
+              <span className="wh-subbar-value">{Math.round((viewYaw * 180) / Math.PI)}°</span>
             </div>
           </div>
-          <div className="toolbar" style={{ padding: '10px 16px' }}>
-            <div className="search-input" style={{ maxWidth: 'none' }}>
-              <Icon name="search" />
-              <input
-                type="search"
-                aria-label="Buscar producto o código de ubicación en esta bodega"
-                aria-describedby={query ? 'warehouse-search-status' : undefined}
-                value={warehouseSearch}
-                onChange={(e) => setWarehouseSearch(e.target.value)}
-                placeholder="Producto o código de ubicación…"
-              />
+        ) : null}
+        {mapMode === 'front' || mapMode === 'plan' ? (
+          <div className="wh-subbar">
+            <span>Rack</span>
+            <div className="rack-picker" role="group" aria-label="Seleccionar rack">
+              {meta.racks.map((r) => (
+                <button key={r.id} type="button" aria-pressed={activeRackId === r.id} aria-label={`Rack ${r.id}`} className={activeRackId === r.id ? 'active' : ''} onClick={() => selectRack(r.id)}>
+                  {r.id}
+                </button>
+              ))}
             </div>
-            {warehouseSearch ? (
-              <Btn
-                onClick={() => {
-                  setWarehouseSearch('');
-                }}
-              >
-                Limpiar
-              </Btn>
-            ) : null}
           </div>
-          {query ? (
-            <div className={`warehouse-search-feedback ${matchingLocations.length ? '' : 'no-results'}`}>
-              <p id="warehouse-search-status" role="status">
-                {matchingLocations.length
-                  ? `${matchingLocations.length} ${matchingLocations.length === 1 ? 'ubicación encontrada' : 'ubicaciones encontradas'} en esta bodega.`
-                  : 'Sin coincidencias en esta bodega. Busca un producto o parte del código de una ubicación.'}
-              </p>
-              {matchingLocations.length > 1 ? (
-                <div className="field">
-                  <label htmlFor="warehouse-search-result">Ir a una coincidencia</label>
-                  <select id="warehouse-search-result" value={matchingLocations.some((location) => location.id === selectedLoc) ? selectedLoc : ''} onChange={(e) => {
-                    setSelectedLoc(e.target.value);
-                    setLevel('all');
-                  }}>
-                    <option value="" disabled>Selecciona una ubicación</option>
-                    {matchingLocations.map((location) => (
-                      <option key={location.id} value={location.id}>
-                        {location.id} · {qtyAt(state, location.id)} u.
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {mapMode === '3d' ? (
-            <div className="toolbar" style={{ padding: '8px 16px', borderBottom: '1px solid #edf1f6' }}>
-              <span className="subtle" style={{ fontSize: 10 }}>
-                <Icon name="cube" /> Girar vista (parte trasera de racks)
-              </span>
-              <div className="filter-group" style={{ flex: 1, justifyContent: 'flex-end' }}>
-                <button
-                  type="button"
-                  className="btn small"
-                  aria-label="Girar vista a la izquierda"
-                  disabled={viewYaw <= YAW_MIN}
-                  onClick={() => setViewYaw((y) => Math.max(YAW_MIN, y - Math.PI / 12))}
-                >
-                  ◀
-                </button>
-                <input
-                  type="range"
-                  min={YAW_MIN}
-                  max={YAW_MAX}
-                  step={0.04}
-                  value={viewYaw}
-                  onChange={(e) => setViewYaw(Number(e.target.value))}
-                  aria-label="Ángulo de rotación 3D"
-                  style={{ width: 160 }}
-                />
-                <button
-                  type="button"
-                  className="btn small"
-                  aria-label="Girar vista a la derecha"
-                  disabled={viewYaw >= YAW_MAX}
-                  onClick={() => setViewYaw((y) => Math.min(YAW_MAX, y + Math.PI / 12))}
-                >
-                  ▶
-                </button>
-                <span className="subtle" style={{ minWidth: 36 }}>
-                  {Math.round((viewYaw * 180) / Math.PI)}°
-                </span>
-              </div>
-            </div>
-          ) : null}
-          {mapMode === 'front' || mapMode === 'plan' ? (
-            <div className="rack-picker-bar">
-              <span className="subtle">Rack</span>
-              <div className="rack-picker" role="group" aria-label="Seleccionar rack">
-                {meta.racks.map((r) => (
-                  <button
-                    key={r.id}
-                    type="button"
-                    aria-pressed={activeRackId === r.id}
-                    aria-label={`Rack ${r.id}`}
-                    className={activeRackId === r.id ? 'active' : ''}
-                    onClick={() => selectRack(r.id)}
-                  >
-                    {r.id}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {mapMode === 'positions' ? <WarehousePositioning key={warehouseId} state={mapState} layout={meta.layout} locations={meta.locations} selectedLoc={selectedLoc} level={level} query={query} matches={matchingLocations} pickLocs={pickLocs} onSelect={setSelectedLoc} onSelectRack={selectRack} /> : <div
+        ) : null}
+
+        {mapMode === 'positions' ? (
+          <WarehousePositioning
+            key={warehouseId}
+            state={mapState}
+            layout={meta.layout}
+            locations={meta.locations}
+            selectedLoc={selectedLoc}
+            level={level}
+            query={query}
+            matches={matchingLocations}
+            pickLocs={pickLocs}
+            onSelect={setSelectedLoc}
+            onSelectRack={selectRack}
+            onOpenDetail={(id) => { setSelectedLoc(id); setDetailLoc(id); }}
+          />
+        ) : (
+          <div
             className="warehouse-canvas"
             id="warehouse-map"
             onPointerDown={(e) => {
@@ -398,9 +406,7 @@ export function WarehousePage() {
               dragRef.current.x = e.clientX;
               setViewYaw((y) => Math.min(YAW_MAX, Math.max(YAW_MIN, y + dx * 0.008)));
             }}
-            onPointerUp={() => {
-              if (dragRef.current) dragRef.current.active = false;
-            }}
+            onPointerUp={() => { if (dragRef.current) dragRef.current.active = false; }}
             onPointerCancel={() => { dragRef.current = null; }}
             onLostPointerCapture={() => { dragRef.current = null; }}
             style={mapMode === '3d' ? { cursor: 'grab' } : undefined}
@@ -418,195 +424,121 @@ export function WarehousePage() {
               zoom={zoom}
               yaw={viewYaw}
               onSelect={setSelectedLoc}
-              onSelectRack={(rack) => {
-                selectRack(rack);
-                setMapMode('front');
-              }}
+              onSelectRack={(rack) => { selectRack(rack); setMapMode('front'); }}
             />
             <div className="map-corner">
               <span className="live-dot" />
-              {query
-                ? `${matchingLocations.length} coincidencias`
-                : 'Inventario conectado'}
+              {query ? `${matchingLocations.length} coincidencias` : 'Inventario conectado'}
             </div>
-            {mapMode === '3d' ? <div className="map-zoom">
-              <button
-                type="button"
-                aria-label="Acercar"
-                disabled={zoom >= 1.45}
-                onClick={() => {
-                  setZoom((z) => Math.min(1.45, z + 0.1));
-                }}
-              >
-                +
-              </button>
-              <button
-                type="button"
-                aria-label="Alejar"
-                disabled={zoom <= 0.75}
-                onClick={() => {
-                  setZoom((z) => Math.max(0.75, z - 0.1));
-                }}
-              >
-                −
-              </button>
-            </div> : null}
-            <div className="map-hint">
-              <Icon name="cursor" />
-              Selecciona una posición para explorar
-            </div>
-          </div>}
-          {mapMode !== 'positions' ? <div className="map-footer">
-            <div className="legend">
-              <span>
-                <i className="swatch blue" />
-                Seleccionada
-              </span>
-              <span>
-                <i className="swatch" />
-                Ocupada
-              </span>
-              <span>
-                <i className="swatch empty" />
-                Disponible
-              </span>
-              <span>
-                <i className="swatch green" />
-                Picking / búsqueda
-              </span>
-            </div>
-            <span>Vista 3D: arrastra horizontalmente o usa el control de rotación</span>
-          </div> : null}
-        </section>
-        <div className="side-stack">
-          {pickOrderId ? (
-            <section className="panel pick-panel">
-              <div className="panel-head">
-                <div className="panel-title">
-                  <Icon name="route" />
-                  Picking · {pickOrderId}
-                </div>
-                <button type="button" className="icon-btn" aria-label="Cerrar preparación del pedido" onClick={() => setPickOrderId(null)}>
-                  <Icon name="close" />
-                </button>
+            {mapMode === '3d' ? (
+              <div className="map-zoom">
+                <button type="button" aria-label="Acercar" disabled={zoom >= 1.45} onClick={() => setZoom((z) => Math.min(1.45, z + 0.1))}>+</button>
+                <button type="button" aria-label="Alejar" disabled={zoom <= 0.75} onClick={() => setZoom((z) => Math.max(0.75, z - 0.1))}>−</button>
               </div>
-              <div className="pick-intro">
-                {pickChecked.size} de {pickPlan.length} posiciones verificadas
-              </div>
-              {pickPlan.map((l, i) => (
-                <label key={l.id} className={`pick-item ${pickChecked.has(l.id) ? 'checked' : ''}`}>
-                  <input
-                    type="checkbox"
-                    checked={pickChecked.has(l.id)}
-                    onChange={(e) => {
-                      const next = new Set(pickChecked);
-                      if (e.target.checked) next.add(l.id);
-                      else next.delete(l.id);
-                      setPickChecked(next);
-                      setSelectedLoc(l.loc);
-                    }}
-                  />
-                  <span className="pick-number">{i + 1}</span>
-                  <div>
-                    <div className="product-title">{product(state, l.productId)?.name}</div>
-                    <div className="product-code">
-                      {l.loc} · {l.batch} · {l.qty} u.
-                    </div>
-                  </div>
-                </label>
-              ))}
-              <div className="pick-footer">
-                <Btn variant="primary" icon="check" disabled={!pickPlan.length || !pickPlan.every((item) => pickChecked.has(item.id))} onClick={() => void confirmPick()}>
-                  Confirmar preparación
-                </Btn>
-              </div>
-            </section>
-          ) : (
-            <section className="panel location-panel">
-              <div className="panel-head">
-                <span className="panel-title">
-                  <Icon name="pin" />
-                  Detalle de ubicación
-                </span>
-              </div>
-              <div className="panel-body">
-                <div className="location-code">{loc.id}</div>
-                <div className="position-address"><span>Rack<strong>{loc.rack}</strong></span><span>Nivel<strong>{String(loc.level).padStart(2, '0')}</strong></span><span>Casilla<strong>{String(loc.pos).padStart(2, '0')}</strong></span></div>
-                {loc.face ? (
-                  <div className="subtle" style={{ marginBottom: 8 }}>
-                    Cara {faceLabel(loc.face).toLowerCase()}
-                  </div>
-                ) : null}
-                <div className="position-capacity-head"><span>Capacidad utilizada</span><strong>{q}/{loc.capacity} u.</strong></div>
-                <div className="position-capacity-track"><span style={{ width: `${Math.min(100, q / loc.capacity * 100)}%` }} /></div>
-                <p className="subtle">{Math.max(0, loc.capacity - q)} unidades de espacio disponible</p>
-                {p ? (
-                  <>
-                    <div className="product-title">{p.name}</div>
-                    {lots.map((lot) => <div className="position-lot" key={lot.id}><div><strong>{lot.batch}</strong>{canStock ? <Btn variant="small" icon="swap" onClick={() => setMoveLot(lot.id)}>Reubicar</Btn> : null}</div><p>{lot.qty} unidades · Vence {lot.expiry}</p></div>)}
-                    <div className="button-row">
-                      {canStock ? (
-                        <Btn icon="plus" onClick={() => navigate('/recepcion', { state: { loc: loc.id, productId: p.id } })} disabled={q >= loc.capacity}>
-                          Añadir stock
-                        </Btn>
-                      ) : null}
-                      <Btn icon="history" onClick={() => navigate('/trazabilidad', { state: { q: p.id } })}>
-                        Trazabilidad
-                      </Btn>
-                    </div>
-                  </>
-                ) : canStock ? (
-                  <Btn variant="primary" icon="plus" onClick={() => navigate('/recepcion', { state: { loc: loc.id } })}>
-                    Asignar producto
-                  </Btn>
-                ) : (
-                  <p className="subtle">Ubicación libre.</p>
-                )}
-              </div>
-            </section>
-          )}
-          <section className="panel suggestion">
-            <div className="suggestion-title">
-              <Icon name="spark" />
-              Una operación más ágil
-            </div>
-            <p>
-              {low.length
-                ? `${low[0].name} está bajo el mínimo.`
-                : 'Prioriza lotes FEFO en el picking.'}
-            </p>
-            <Btn variant="ghost" icon="arrow" onClick={() => navigate(low.length ? '/compras' : '/pedidos')}>
-              {low.length ? 'Revisar abastecimiento' : 'Explorar pedidos'}
-            </Btn>
-          </section>
-        </div>
-      </div>
-      <section className="panel movements" style={{ marginTop: 17 }}>
-        <div className="panel-head">
-          <span className="panel-title">
-            <Icon name="history" />
-            Últimos movimientos
-          </span>
-        </div>
+            ) : null}
+          </div>
+        )}
+
+        <footer className={`wh-selection is-${locStatus}`} aria-live="polite">
+          <div className="wh-selection-code">
+            <small>Seleccionada</small>
+            <strong>{loc.id}</strong>
+          </div>
+          <div className="wh-selection-meta">
+            <span className={`loc-status-pill is-${locStatus === 'stock' ? 'partial' : locStatus}`}>
+              {locStatus === 'free' ? 'Libre' : locStatus === 'full' ? 'Llena' : 'Con stock'}
+            </span>
+            <span className="wh-selection-product">{p ? p.name : 'Sin producto asignado'}</span>
+            <span className="wh-selection-cap">
+              <span className="loc-capacity-track is-partial"><span style={{ width: `${Math.min(100, (q / Math.max(loc.capacity, 1)) * 100)}%` }} /></span>
+              {q}/{loc.capacity} u.
+            </span>
+          </div>
+          <Btn variant="primary" icon="eye" onClick={() => setDetailLoc(loc.id)}>Ver detalle</Btn>
+        </footer>
+      </section>
+
+      <section className="panel wh-moves">
+        <header className="wh-moves-head">
+          <span className="panel-title"><Icon name="history" /> Últimos movimientos</span>
+          <span className="wh-moves-count">{state.events.length} registros</span>
+        </header>
         <div className="table-scroll">
-          <table>
+          <table className="wh-moves-table">
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>Producto</th>
+                <th className="num">Cant.</th>
+                <th>Origen → Destino</th>
+                <th>Hora</th>
+              </tr>
+            </thead>
             <tbody>
-              {state.events.slice(0, 5).map((e) => (
+              {pageEvents.length ? pageEvents.map((e) => (
                 <tr key={e.id}>
+                  <td><span className={`wh-move-tag ${moveTone(e.type)}`}>{e.type}</span></td>
                   <td>
-                    <strong>{e.type}</strong>
-                    <span className="sub">{product(state, e.productId)?.name}</span>
+                    <strong>{product(state, e.productId)?.name ?? e.productId}</strong>
+                    {e.batch ? <span className="sub">Lote {e.batch}</span> : null}
                   </td>
-                  <td>
-                    {e.from} → {e.to}
-                  </td>
-                  <td>{time(e.at)}</td>
+                  <td className="num">{e.qty}</td>
+                  <td className="wh-move-route">{e.from || '—'} <Icon name="arrow" /> {e.to || '—'}</td>
+                  <td className="wh-move-time">{time(e.at)}</td>
                 </tr>
-              ))}
+              )) : (
+                <tr><td colSpan={5} className="wh-moves-empty">Aún no hay movimientos.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
+        {movePages > 1 ? (
+          <nav className="wh-pager" aria-label="Paginación de movimientos">
+            <span>
+              {safeMovesPage * MOVES_PER_PAGE + 1}–{Math.min(state.events.length, (safeMovesPage + 1) * MOVES_PER_PAGE)} de {state.events.length}
+            </span>
+            <div>
+              <button type="button" className="icon-btn" aria-label="Página anterior" disabled={safeMovesPage === 0} onClick={() => setMovesPage(safeMovesPage - 1)}>
+                <Icon name="chevron-left" />
+              </button>
+              <span className="wh-pager-current">{safeMovesPage + 1} / {movePages}</span>
+              <button type="button" className="icon-btn" aria-label="Página siguiente" disabled={safeMovesPage >= movePages - 1} onClick={() => setMovesPage(safeMovesPage + 1)}>
+                <Icon name="chevron" />
+              </button>
+            </div>
+          </nav>
+        ) : null}
       </section>
+
+      {detailLocation ? (
+        <LocationDetailModal
+          state={state}
+          location={detailLocation}
+          lots={warehouseLots.filter((l) => l.loc === detailLocation.id && l.qty > 0)}
+          canStock={canStock}
+          onMoveLot={(lotId) => { setDetailLoc(null); setMoveLot(lotId); }}
+          onClose={() => setDetailLoc(null)}
+        />
+      ) : null}
+
+      {pickOrderId && pickOpen ? (
+        <PickingModal
+          state={state}
+          orderId={pickOrderId}
+          plan={pickPlan}
+          checked={pickChecked}
+          onToggle={(line, checked) => {
+            const next = new Set(pickChecked);
+            if (checked) next.add(line.id);
+            else next.delete(line.id);
+            setPickChecked(next);
+            setSelectedLoc(line.loc);
+          }}
+          onLocate={(target) => { setSelectedLoc(target); setLevel('all'); setPickOpen(false); }}
+          onConfirm={() => void confirmPick()}
+          onClose={() => setPickOpen(false)}
+        />
+      ) : null}
 
       {lotForMove ? <WarehouseTransferDialog key={`${warehouseId}:${lotForMove.id}`} state={state} lot={lotForMove} onClose={() => setMoveLot(null)} onMoved={(destination) => { setSelectedLoc(destination); setLevel('all'); setWarehouseSearch(''); setMoveLot(null); }} /> : null}
     </div>

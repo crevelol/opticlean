@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Select } from '../../shared/components/Select';
 import { api } from '../../shared/api/client';
 import { Modal } from '../../shared/components/Modal';
 import { Btn } from '../../shared/components/ui';
@@ -194,14 +195,14 @@ export function FleetConfigModal({
           <div className="fleet-config-grid">
             <label>
               Tipo
-              <select
+              <Select
                 value={form.vehicleType}
                 onChange={(e) => setType(e.target.value as VehicleKind)}
               >
                 <option value="camion">Camión</option>
                 <option value="carro">Carro</option>
                 <option value="motocicleta">Motocicleta</option>
-              </select>
+              </Select>
             </label>
             <label>
               Placa
@@ -370,7 +371,7 @@ export function FleetConfigModal({
                       </td>
                       <td>{v.label}</td>
                       <td>
-                        <select
+                        <Select
                           value={v.vehicle_type || 'camion'}
                           disabled={busy}
                           onChange={(e) =>
@@ -382,7 +383,7 @@ export function FleetConfigModal({
                           <option value="camion">Camión</option>
                           <option value="carro">Carro</option>
                           <option value="motocicleta">Motocicleta</option>
-                        </select>
+                        </Select>
                       </td>
                       <td>
                         <div className="fleet-sector-chips">
@@ -407,7 +408,7 @@ export function FleetConfigModal({
                           )}
                         </div>
                         {knownSectors.length ? (
-                          <select
+                          <Select
                             disabled={busy}
                             defaultValue=""
                             onChange={(e) => {
@@ -425,7 +426,7 @@ export function FleetConfigModal({
                                 {s}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                         ) : null}
                       </td>
                       <td>{v.active ? 'Activo' : 'Inactivo'}</td>

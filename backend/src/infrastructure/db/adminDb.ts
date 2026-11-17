@@ -107,6 +107,14 @@ const SEED_MODULES: Array<Omit<ModuleRow, 'active'> & { active?: number }> = [
   },
   { id: 'mod-clients', code: 'clients', name: 'Clientes', description: 'Directorio de clientes', icon: 'users', sort_order: 120 },
   {
+    id: 'mod-commercial',
+    code: 'commercial',
+    name: 'Comercial',
+    description: 'Facturas, cartera, precios, conteo y traslados',
+    icon: 'orders',
+    sort_order: 125,
+  },
+  {
     id: 'mod-traceability',
     code: 'traceability',
     name: 'Trazabilidad',
@@ -234,6 +242,15 @@ const SEED_MENU: Array<Omit<MenuItem, 'active' | 'badge'> & { badge?: string | n
     icon: 'users',
     section: 'Gestión',
     sort_order: 10,
+  },
+  {
+    id: 'mi-commercial',
+    module_id: 'mod-commercial',
+    label: 'Comercial',
+    path: '/comercial',
+    icon: 'orders',
+    section: 'Gestión',
+    sort_order: 15,
   },
   {
     id: 'mi-trace',

@@ -1,7 +1,18 @@
-import type { AppState, Lot, Order, OrderLine, OrderPick, Product } from './types.js';
+import type { AppState, Lot, Order, OrderKit, OrderLine, OrderPick, Product } from './types.js';
 import { activeWarehouseId, lotsForActiveWarehouse } from './warehouse-admin.service.js';
 import { getWarehouseGeometry } from './warehouse-layout.js';
 import { normalizeProductBom, validateComponents } from './bom.service.js';
+import { placementBlockReason } from './hazard.js';
+import { stockQtyFromPack } from './packs.js';
+import { applyPurchaseReceipt } from './purchase-lines.js';
+import { vehicleByPlate } from './fleet.service.js';
+import {
+  invoicedOrderIds,
+  isSellableLoc,
+  outstandingReceivable,
+  overdueReceivable,
+  resolveUnitPrice,
+} from './ledger.js';
 
 export const uid = (prefix: string) =>
   `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -12,16 +23,61 @@ export const client = (s: AppState, id: string) => s.clients.find((c) => c.id ==
 
 export const stock = (s: AppState, id: string) =>
   lotsForActiveWarehouse(s)
-    .filter((l) => l.productId === id)
+    .filter((l) => l.productId === id && isSellableLoc(l.loc))
     .reduce((n, l) => n + l.qty, 0);
+
+function applyAverageCost(s: AppState, productId: string, qty: number, unitCost: number) {
+  const item = product(s, productId);
+  if (!item || !(unitCost > 0) || !(qty > 0)) return;
+  const prevQty = s.lots
+    .filter((lot) => lot.productId === productId && isSellableLoc(lot.loc))
+    .reduce((n, lot) => n + lot.qty, 0);
+  const prev = item.avgCost ?? 0;
+  const base = prev > 0 ? prevQty : 0;
+  item.avgCost = Math.round(((base * prev + qty * unitCost) / (base + qty)) * 10000) / 10000;
+}
+
+const CREDIT_STATUSES = new Set(['Por preparar', 'Preparado', 'En ruta', 'Incidencia']);
+
+export const todayGuayaquil = () =>
+  new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+
+export function daysUntilExpiry(expiry: string, today = todayGuayaquil()) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(expiry) || !/^\d{4}-\d{2}-\d{2}$/.test(today)) return null;
+  const a = Date.parse(`${expiry}T12:00:00Z`);
+  const b = Date.parse(`${today}T12:00:00Z`);
+  return Math.round((a - b) / 864e5);
+}
+
+export function expandedDemand(
+  s: AppState,
+  order: { lines: OrderLine[]; kits?: OrderKit[] },
+): OrderLine[] {
+  const map = new Map<string, number>();
+  for (const line of order.lines) {
+    map.set(line.productId, (map.get(line.productId) ?? 0) + Number(line.qty));
+  }
+  for (const kit of order.kits ?? []) {
+    const bundle = s.bundles?.find((b) => b.id === kit.bundleId);
+    if (!bundle) continue;
+    for (const line of bundle.lines) {
+      map.set(line.productId, (map.get(line.productId) ?? 0) + line.qty * kit.qty);
+    }
+  }
+  return [...map.entries()].map(([productId, qty]) => ({ productId, qty }));
+}
+
+export function bundlePrice(s: AppState, bundleId: string) {
+  const bundle = s.bundles?.find((b) => b.id === bundleId);
+  if (!bundle) return 0;
+  if (bundle.price != null && Number.isFinite(bundle.price)) return bundle.price;
+  return bundle.lines.reduce((n, line) => n + line.qty * (product(s, line.productId)?.price ?? 0), 0);
+}
 
 export const reserved = (s: AppState, id: string) =>
   s.orders
     .filter((o) => o.status === 'Por preparar')
-    .reduce(
-      (n, o) => n + o.lines.filter((l) => l.productId === id).reduce((a, l) => a + l.qty, 0),
-      0,
-    );
+    .reduce((n, o) => n + expandedDemand(s, o).filter((l) => l.productId === id).reduce((a, l) => a + l.qty, 0), 0);
 
 export const available = (s: AppState, id: string) => stock(s, id) - reserved(s, id);
 
@@ -30,11 +86,19 @@ export const qtyAt = (s: AppState, loc: string) =>
     .filter((l) => l.loc === loc)
     .reduce((n, l) => n + l.qty, 0);
 
-export const orderValue = (s: AppState, o: { lines: OrderLine[] }) =>
-  o.lines.reduce((n, l) => n + l.qty * (product(s, l.productId)?.price ?? 0), 0);
+export const orderValue = (s: AppState, o: { lines: OrderLine[]; kits?: OrderKit[] }) =>
+  o.lines.reduce((n, l) => n + l.qty * (l.unitPrice ?? product(s, l.productId)?.price ?? 0), 0) +
+  (o.kits ?? []).reduce((n, kit) => n + kit.qty * bundlePrice(s, kit.bundleId), 0);
 
 export const orderWeight = (s: AppState, o: Order) =>
-  o.lines.reduce((n, l) => n + l.qty * (product(s, l.productId)?.weight ?? 0), 0);
+  expandedDemand(s, o).reduce((n, l) => n + l.qty * (product(s, l.productId)?.weight ?? 0), 0);
+
+export const creditUsed = (s: AppState, clientId: string) => {
+  const invoiced = invoicedOrderIds(s);
+  return s.orders
+    .filter((o) => o.clientId === clientId && CREDIT_STATUSES.has(o.status) && !o.id.startsWith('PED-H') && !invoiced.has(o.id))
+    .reduce((n, o) => n + orderValue(s, o), 0);
+};
 
 export function addEvent(
   s: AppState,
@@ -60,9 +124,6 @@ export function addEvent(
   });
 }
 
-const todayGuayaquil = () =>
-  new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
-
 export function receive(
   s: AppState,
   data: {
@@ -72,26 +133,40 @@ export function receive(
     batch: string;
     expiry: string;
     supplier: string;
+    purchaseId?: string;
+    packCode?: string;
+    packQty?: number | string;
   },
 ) {
-  const qty = Number(data.qty);
+  const item = product(s, data.productId);
+  const packQty = data.packQty != null && data.packQty !== '' ? Number(data.packQty) : null;
+  const qty =
+    packQty != null && data.packCode
+      ? stockQtyFromPack(item, packQty, data.packCode)
+      : Number(data.qty);
   const target = getWarehouseGeometry(s).locations.find((l) => l.id === data.loc);
-  if (!product(s, data.productId) || !Number.isInteger(qty) || qty <= 0 || !target) {
+  if (!item || !Number.isInteger(qty) || qty <= 0 || !target) {
     throw new Error('Selecciona un producto, una ubicación y una cantidad entera mayor a cero.');
   }
   if (qtyAt(s, data.loc) + qty > target.capacity) {
     throw new Error(`La cantidad supera la capacidad de esta ubicación (${target.capacity} unidades).`);
-  }
-  if (
-    lotsForActiveWarehouse(s).some((l) => l.loc === data.loc && l.productId !== data.productId)
-  ) {
-    throw new Error('Esta ubicación contiene otro producto. Selecciona una ubicación compatible.');
   }
   if (!data.batch?.trim() || !data.expiry) {
     throw new Error('Completa el lote y la fecha de vencimiento.');
   }
   if (data.expiry < todayGuayaquil()) {
     throw new Error('La fecha de vencimiento no puede estar en el pasado.');
+  }
+  const blocked = placementBlockReason(s, data.productId, target, { expiry: data.expiry });
+  if (blocked) throw new Error(blocked);
+  if (data.purchaseId) {
+    const po = s.purchases.find((p) => p.id === data.purchaseId);
+    if (!po) throw new Error('Orden de compra no encontrada.');
+    const line = po.lines?.find((item) => item.productId === data.productId);
+    if (line && line.unitPrice > 0 && line.unitsPerPack > 0) {
+      applyAverageCost(s, data.productId, qty, line.unitPrice / line.unitsPerPack);
+    }
+    applyPurchaseReceipt(po, data.productId, qty);
   }
   const id = `REC-${String(84 + s.receipts.length - 1).padStart(4, '0')}`;
   s.lots.push({
@@ -130,11 +205,8 @@ export function move(
   if (qtyAt(s, data.to) + qty > target.capacity) {
     throw new Error('La ubicación de destino no tiene capacidad suficiente.');
   }
-  if (
-    lotsForActiveWarehouse(s).some((l) => l.loc === data.to && l.productId !== lot.productId)
-  ) {
-    throw new Error('El destino contiene otro producto.');
-  }
+  const blocked = placementBlockReason(s, lot.productId, target, { expiry: lot.expiry });
+  if (blocked) throw new Error(blocked);
   const from = lot.loc;
   lot.qty -= qty;
   s.lots.push({ ...lot, id: uid('lot'), qty, loc: data.to });
@@ -144,27 +216,57 @@ export function move(
 
 export function createOrder(
   s: AppState,
-  data: { clientId: string; lines: OrderLine[]; priority?: string; notes?: string },
+  data: { clientId: string; lines?: OrderLine[]; kits?: OrderKit[]; priority?: string; notes?: string },
 ) {
-  if (!client(s, data.clientId) || !data.lines.length) {
-    throw new Error('Selecciona un cliente y al menos un producto.');
-  }
+  const buyer = client(s, data.clientId);
   const grouped = new Map<string, number>();
-  for (const l of data.lines) {
+  for (const l of data.lines ?? []) {
     grouped.set(l.productId, (grouped.get(l.productId) ?? 0) + Number(l.qty));
   }
   const lines = [...grouped.entries()].map(([productId, qty]) => ({ productId, qty }));
-  for (const l of lines) {
+  const kits: OrderKit[] = [];
+  for (const kit of data.kits ?? []) {
+    const qty = Number(kit.qty);
+    if (!s.bundles?.some((b) => b.id === kit.bundleId)) throw new Error('Paquete no encontrado.');
+    if (!Number.isInteger(qty) || qty <= 0) throw new Error('La cantidad del paquete debe ser un entero mayor que cero.');
+    const existing = kits.find((k) => k.bundleId === kit.bundleId);
+    if (existing) existing.qty += qty;
+    else kits.push({ bundleId: kit.bundleId, qty });
+  }
+  if (!buyer || (!lines.length && !kits.length)) {
+    throw new Error('Selecciona un cliente y al menos un producto.');
+  }
+  const priced = lines.map((line) => ({
+    ...line,
+    unitPrice: resolveUnitPrice(s, buyer.id, line.productId, line.qty),
+  }));
+  const draft = { lines: priced, kits };
+  for (const l of expandedDemand(s, draft)) {
+    const item = product(s, l.productId);
+    if (item?.sanitaryExpires && item.sanitaryExpires < todayGuayaquil()) {
+      throw new Error(`El registro sanitario de ${item.name} está vencido.`);
+    }
     if (
-      !product(s, l.productId) ||
+      !item ||
       !Number.isInteger(l.qty) ||
       l.qty <= 0 ||
       l.qty > available(s, l.productId)
     ) {
       throw new Error(
-        `Stock insuficiente o cantidad inválida para ${product(s, l.productId)?.name ?? 'el producto'}.`,
+        `Stock insuficiente o cantidad inválida para ${item?.name ?? 'el producto'}.`,
       );
     }
+  }
+  if (overdueReceivable(s, buyer.id, todayGuayaquil()) > 0.009) {
+    throw new Error('El cliente tiene cartera vencida. Regulariza el saldo antes de pedir.');
+  }
+  const limit = buyer.creditLimit ?? 0;
+  const nextCredit = creditUsed(s, buyer.id) + outstandingReceivable(s, buyer.id) + orderValue(s, draft);
+  if (nextCredit > limit + 0.009) {
+    const left = Math.max(0, limit - creditUsed(s, buyer.id) - outstandingReceivable(s, buyer.id));
+    throw new Error(
+      `El pedido supera el cupo de crédito. Disponible $${left.toFixed(2)}, pedido $${orderValue(s, draft).toFixed(2)}.`,
+    );
   }
   const numericIds = s.orders
     .map((o) => Number(String(o.id).replace(/^PED-H?/, '')))
@@ -173,7 +275,8 @@ export function createOrder(
   const o: Order = {
     id: `PED-${n}`,
     clientId: data.clientId,
-    lines,
+    lines: priced,
+    kits: kits.length ? kits : undefined,
     priority: data.priority ?? 'Normal',
     status: 'Por preparar',
     date: new Date().toISOString().slice(0, 10),
@@ -185,13 +288,20 @@ export function createOrder(
 
 export type PickPlanLine = Lot & { qty: number };
 
+function lotSellable(s: AppState, lot: Lot, today: string) {
+  const days = daysUntilExpiry(lot.expiry, today);
+  if (days == null || days < 0) return false;
+  const minDays = product(s, lot.productId)?.minShelfLifeDays ?? 0;
+  return days >= minDays;
+}
+
 export function pickPlan(s: AppState, order: Order): PickPlanLine[] {
   const plan: PickPlanLine[] = [];
   const today = todayGuayaquil();
-  for (const line of order.lines) {
+  for (const line of expandedDemand(s, order)) {
     let left = line.qty;
     const lots = lotsForActiveWarehouse(s)
-      .filter((l) => l.productId === line.productId && l.qty > 0 && l.expiry >= today)
+      .filter((l) => l.productId === line.productId && l.qty > 0 && isSellableLoc(l.loc) && lotSellable(s, l, today))
       .sort((a, b) => a.expiry.localeCompare(b.expiry));
     for (const l of lots) {
       if (!left) break;
@@ -229,6 +339,31 @@ export function prepare(s: AppState, orderId: string) {
   return o;
 }
 
+export function assertFitsVehicle(
+  s: AppState,
+  plate: string,
+  orders: Order[],
+  limits?: { maxKg?: number; maxM3?: number },
+) {
+  const registered = vehicleByPlate(s, plate);
+  if (!registered) throw new Error('El vehículo no está registrado en la flota.');
+  const maxKg = Number.isFinite(limits?.maxKg) ? Number(limits!.maxKg) : registered.maxKg;
+  const maxM3 = Number.isFinite(limits?.maxM3) ? Number(limits!.maxM3) : registered.maxM3;
+  const totalKg = orders.reduce((n, o) => n + orderWeight(s, o), 0);
+  const totalM3 =
+    orders.reduce(
+      (n, o) =>
+        n + expandedDemand(s, o).reduce((v, l) => v + l.qty * (product(s, l.productId)?.volume ?? 0), 0),
+      0,
+    ) / 1000;
+  if (totalKg > maxKg + 0.01) {
+    throw new Error(`La carga supera la capacidad de ${Math.round(maxKg)} kg del vehículo.`);
+  }
+  if (totalM3 > maxM3 + 0.01) {
+    throw new Error(`La carga supera la capacidad de ${maxM3} m³ del vehículo.`);
+  }
+}
+
 export function dispatch(
   s: AppState,
   ids: string[],
@@ -240,27 +375,14 @@ export function dispatch(
     throw new Error('Selecciona pedidos preparados.');
   }
   const current = s.orders.filter(
-    (o) => o.vehicle === vehicle && ['En ruta', 'Incidencia'].includes(o.status),
+    (o) => o.vehicle?.toUpperCase() === vehicle.trim().toUpperCase() && ['En ruta', 'Incidencia'].includes(o.status),
   );
   const all = [...current, ...orders];
-  const maxKg = Number.isFinite(limits?.maxKg) && (limits?.maxKg ?? 0) > 0 ? Number(limits!.maxKg) : 650;
-  const maxM3 = Number.isFinite(limits?.maxM3) && (limits?.maxM3 ?? 0) > 0 ? Number(limits!.maxM3) : 8;
-  const totalKg = all.reduce((n, o) => n + orderWeight(s, o), 0);
-  const totalM3 =
-    all.reduce(
-      (n, o) =>
-        n + o.lines.reduce((v, l) => v + l.qty * (product(s, l.productId)?.volume ?? 0), 0),
-      0,
-    ) / 1000;
-  if (totalKg > maxKg + 0.01) {
-    throw new Error(`La carga supera la capacidad de ${Math.round(maxKg)} kg del vehículo.`);
-  }
-  if (totalM3 > maxM3 + 0.01) {
-    throw new Error(`La carga supera la capacidad de ${maxM3} m³ del vehículo.`);
-  }
+  assertFitsVehicle(s, vehicle, all, limits);
   for (const o of orders) {
     o.status = 'En ruta';
-    o.vehicle = vehicle;
+    o.vehicle = vehicle.trim().toUpperCase();
+    o.stagedPlate = undefined;
     const lines: OrderPick[] = o.picks ?? o.lines;
     for (const line of lines) {
       addEvent(
@@ -275,6 +397,27 @@ export function dispatch(
       );
     }
   }
+}
+
+export function deleteProduct(s: AppState, id: string) {
+  const item = product(s, id);
+  if (!item) throw new Error('Producto no encontrado.');
+  if (s.lots.some((lot) => lot.productId === id && lot.qty > 0)) {
+    throw new Error('El producto tiene stock. Vacía las ubicaciones antes de eliminarlo.');
+  }
+  if (s.orders.some((order) => order.lines.some((line) => line.productId === id) || order.kits?.some((kit) => kit.bundleId === id))) {
+    throw new Error('El producto está en pedidos y se conserva para la trazabilidad.');
+  }
+  if (s.purchases.some((po) => po.status !== 'Cancelada' && po.status !== 'Recibida' && (po.productId === id || po.lines?.some((line) => line.productId === id)))) {
+    throw new Error('El producto tiene una orden de compra abierta.');
+  }
+  if (s.bundles?.some((bundle) => bundle.lines.some((line) => line.productId === id))) {
+    throw new Error('El producto forma parte de un paquete.');
+  }
+  if (s.products.some((parent) => parent.components?.some((component) => component.productId === id))) {
+    throw new Error('El producto es insumo de otro producto.');
+  }
+  s.products = s.products.filter((entry) => entry.id !== id);
 }
 
 export function upsertProduct(s: AppState, p: Product, originalId?: string) {

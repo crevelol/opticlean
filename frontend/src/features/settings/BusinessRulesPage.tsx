@@ -50,6 +50,10 @@ export function BusinessRulesPage() {
     setDraft((d) => ({ ...d, [key]: value }));
   };
 
+  const setFlag = (key: keyof Draft, value: boolean) => {
+    setDraft((d) => ({ ...d, [key]: value }));
+  };
+
   const save = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (busy) return;
@@ -68,6 +72,7 @@ export function BusinessRulesPage() {
       creditOkMaxPct: Math.min(100, Math.max(1, num(data.get('creditOkMaxPct'), draft.creditOkMaxPct))),
       creditTightMaxPct: Math.min(100, Math.max(1, num(data.get('creditTightMaxPct'), draft.creditTightMaxPct))),
       defaultCreditLimit: Math.max(0, num(data.get('defaultCreditLimit'), draft.defaultCreditLimit)),
+      separateExpiryLots: draft.separateExpiryLots,
     };
     if (next.creditOkMaxPct >= next.creditTightMaxPct) {
       setError('El umbral “cupo holgado” debe ser menor que “cupo ajustado”.');
@@ -278,6 +283,15 @@ export function BusinessRulesPage() {
                   step={50}
                   value={draft.defaultCreditLimit}
                   onChange={(e) => setField('defaultCreditLimit', Number(e.target.value))}
+                />
+              </label>
+              <label className="field">
+                <span>Un lote por casilla</span>
+                <input
+                  name="separateExpiryLots"
+                  type="checkbox"
+                  checked={draft.separateExpiryLots}
+                  onChange={(e) => setFlag('separateExpiryLots', e.target.checked)}
                 />
               </label>
             </div>

@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Select } from '../../shared/components/Select';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
@@ -156,7 +157,7 @@ export function InventoryWorkspace({
       );
     }
   };
-  const receive = (id: string) => navigate('/recepcion', { state: { productId: id } });
+  const receive = (id: string) => navigate('/recepcion/nueva', { state: { productId: id } });
   const purchase = (id: string, qty?: number) =>
     navigate('/compras', {
       state: { productId: id, qty: qty && qty > 0 ? Math.ceil(qty) : undefined },
@@ -289,7 +290,7 @@ export function InventoryWorkspace({
                     role="menuitem"
                     onClick={() => {
                       setCreateOpen(false);
-                      navigate('/recepcion');
+                      navigate('/recepcion/nueva');
                     }}
                   >
                     Registrar entrada
@@ -302,7 +303,7 @@ export function InventoryWorkspace({
       >
         <label className="inv-wh-select">
           <Icon name="building" />
-          <select
+          <Select
             value={activeWarehouseId(state)}
             disabled={whBusy}
             aria-label="Bodega"
@@ -314,7 +315,7 @@ export function InventoryWorkspace({
                 {w.code ? ` • ${w.code}` : ''}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </PageHead>
 
@@ -437,7 +438,7 @@ export function InventoryWorkspace({
             </div>
             <label className="inv-select">
               <span>Tipo</span>
-              <select
+              <Select
                 value={kind}
                 onChange={(e) =>
                   updateParams({ tipo: e.target.value === 'all' ? '' : e.target.value })
@@ -446,18 +447,18 @@ export function InventoryWorkspace({
                 <option value="all">Todos</option>
                 <option value="finished">Productos</option>
                 <option value="raw">Insumos</option>
-              </select>
+              </Select>
             </label>
             <label className="inv-select">
               <span>Familia</span>
-              <select value={category} onChange={(e) => updateParams({ linea: e.target.value })}>
+              <Select value={category} onChange={(e) => updateParams({ linea: e.target.value })}>
                 <option value="">Todas</option>
                 {categoryNames.map((name) => (
                   <option key={name} value={name}>
                     {name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <button
               type="button"
@@ -470,7 +471,7 @@ export function InventoryWorkspace({
             </button>
             <label className="inv-select inv-sort-select">
               <span>Orden</span>
-              <select
+              <Select
                 aria-label="Ordenar productos"
                 value={sort}
                 onChange={(event) =>
@@ -484,7 +485,7 @@ export function InventoryWorkspace({
                     {option.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
 
@@ -492,7 +493,7 @@ export function InventoryWorkspace({
             <div className="inv-extra-filters" id="inv-extra-filters">
               <label>
                 Proveedor
-                <select
+                <Select
                   value={supplier}
                   onChange={(event) => updateParams({ proveedor: event.target.value })}
                 >
@@ -500,7 +501,7 @@ export function InventoryWorkspace({
                   {suppliers.map((name) => (
                     <option key={name}>{name}</option>
                   ))}
-                </select>
+                </Select>
               </label>
               {hasFilters ? (
                 <button type="button" className="inv-text-button" onClick={resetFilters}>

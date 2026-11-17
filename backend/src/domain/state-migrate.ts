@@ -2,6 +2,11 @@ import { seed } from './seed.js';
 import { ensureFamilies } from './families.service.js';
 import { ensureVehicles } from './fleet.service.js';
 import { ensureBundles } from './bundles.service.js';
+import { inferHazard, isHazardClass } from './hazard.js';
+import { defaultPacksFor } from './packs.js';
+import { refreshPurchase } from './purchase-lines.js';
+import { ensureSuppliers } from './suppliers.service.js';
+import { ensureCommercial } from './commercial.service.js';
 import type { AppState } from './types.js';
 import { mergeBusinessRules } from './business-rules.js';
 import { DEFAULT_WAREHOUSE_ID, syncSettingsWarehouseLabel } from './warehouse-admin.service.js';
@@ -96,13 +101,59 @@ export function migrateState(raw: AppState): AppState {
   ensureFamilies(base);
   ensureVehicles(base);
   ensureBundles(base);
+  const suppliers = ensureSuppliers(base);
+  for (const name of [...new Set(base.products.map((p) => p.supplier).filter(Boolean))]) {
+    if (!suppliers.some((supplier) => supplier.name.toLowerCase() === name.toLowerCase())) {
+      const n = suppliers.reduce((max, supplier) => Math.max(max, Number(supplier.id.replace(/\D/g, '')) || 0), 0) + 1;
+      suppliers.push({
+        id: `PR-${String(n).padStart(3, '0')}`,
+        name,
+        taxId: '',
+        contact: '',
+        email: '',
+        phone: '',
+        leadTimeDays: 7,
+        terms: 'Mayorista',
+      });
+    }
+  }
   for (const po of base.purchases ?? []) {
     po.received ??= 0;
-    po.status ??= po.received >= po.qty ? 'Recibida' : po.received > 0 ? 'Parcial' : 'Abierta';
+    if (!po.lines?.length && po.productId) {
+      po.lines = [
+        {
+          productId: po.productId,
+          qty: po.qty,
+          packCode: 'unidad',
+          unitsPerPack: 1,
+          unitPrice: 0,
+          receivedUnits: po.received ?? 0,
+        },
+      ];
+    }
+    if (po.lines?.length) refreshPurchase(po);
+    else po.status ??= po.received >= po.qty ? 'Recibida' : po.received > 0 ? 'Parcial' : 'Abierta';
   }
   for (const p of base.products) {
     if (p.fragile === undefined) {
       p.fragile = p.category === 'Hospitalaria' || p.kind === 'raw';
+    }
+    if (!isHazardClass(p.hazardClass)) p.hazardClass = inferHazard(p.name, p.id);
+    if (!p.packs?.length) p.packs = defaultPacksFor(p.name);
+    if (!p.stockUnit) p.stockUnit = p.packs[0]?.label ?? 'unidad';
+    if (p.minShelfLifeDays == null || !Number.isFinite(p.minShelfLifeDays)) {
+      p.minShelfLifeDays = p.category === 'Hospitalaria' ? 30 : 0;
+    }
+    if (!p.supplierId && p.supplier) {
+      p.supplierId = suppliers.find((supplier) => supplier.name.toLowerCase() === p.supplier.toLowerCase())?.id;
+    }
+  }
+  for (const bundle of base.bundles ?? []) {
+    if (bundle.price == null || !Number.isFinite(bundle.price)) {
+      bundle.price = bundle.lines.reduce((n, line) => {
+        const item = base.products.find((p) => p.id === line.productId);
+        return n + line.qty * (item?.price ?? 0);
+      }, 0);
     }
   }
 
@@ -128,6 +179,7 @@ export function migrateState(raw: AppState): AppState {
   }
 
   base.settings.businessRules = mergeBusinessRules(base.settings.businessRules, undefined);
+  ensureCommercial(base);
 
   syncSettingsWarehouseLabel(base);
   return base;

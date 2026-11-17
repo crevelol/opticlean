@@ -145,7 +145,7 @@ export function OrdersPage() {
                       <td>
                         <strong>{money(orderValue(state, o))}</strong>
                         <small>
-                          {o.lines.length} ítems · {orderWeight(state, o).toFixed(0)} kg
+                          {o.lines.length + (o.kits?.length ?? 0)} ítems · {orderWeight(state, o).toFixed(0)} kg
                         </small>
                       </td>
                       <td>
@@ -247,7 +247,7 @@ export function OrdersPage() {
               <article>
                 <span>Ítems</span>
                 <strong>
-                  {detail.lines.length} líneas · {detail.lines.reduce((n, l) => n + l.qty, 0)} u.
+                  {detail.lines.length + (detail.kits?.length ?? 0)} líneas · {detail.lines.reduce((n, l) => n + l.qty, 0) + (detail.kits ?? []).reduce((n, kit) => n + kit.qty, 0)} u.
                 </strong>
               </article>
             </div>
@@ -266,6 +266,18 @@ export function OrdersPage() {
             ) : null}
 
             <ul className="ord-lines">
+              {(detail.kits ?? []).map((kit) => {
+                const bundle = state.bundles?.find((item) => item.id === kit.bundleId);
+                return (
+                  <li key={kit.bundleId}>
+                    <div>
+                      <strong>{bundle?.name ?? kit.bundleId}</strong>
+                      <small>Paquete × {kit.qty} · reserva componentes</small>
+                    </div>
+                    <em>{money((bundle?.price ?? 0) * kit.qty)}</em>
+                  </li>
+                );
+              })}
               {detail.lines.map((l) => {
                 const p = product(state, l.productId);
                 const lineTotal = (p?.price ?? 0) * l.qty;

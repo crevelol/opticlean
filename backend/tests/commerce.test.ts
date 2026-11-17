@@ -71,11 +71,12 @@ test('Vehicles validate plates and cannot be removed while on route', () => {
 test('Receiving against a purchase order tracks partial and full reception', () => {
   const s = seed();
   const po = createPurchase(s, { productId: 'P015', qty: 10 });
-  const loc = suggest(s, 'P015', 6)[0].id;
+  const empty = (id: string) => !s.lots.some((lot) => lot.loc === id && lot.qty > 0);
+  const loc = suggest(s, 'P015', 6).find((item) => empty(item.id))!.id;
   receive(s, { productId: 'P015', qty: 6, loc, batch: 'OC-T1', expiry: '2099-01-01', supplier: 'Q', purchaseId: po.id });
   assert.equal(po.status, 'Parcial');
   assert.equal(po.received, 6);
-  const loc2 = suggest(s, 'P015', 4)[0].id;
+  const loc2 = suggest(s, 'P015', 4).find((item) => empty(item.id))!.id;
   receive(s, { productId: 'P015', qty: 4, loc: loc2, batch: 'OC-T2', expiry: '2099-01-01', supplier: 'Q', purchaseId: po.id });
   assert.equal(po.status, 'Recibida');
   assert.throws(() => cancelPurchase(s, po.id), /recibida/);
@@ -88,7 +89,7 @@ test('Receiving against a purchase order tracks partial and full reception', () 
 test('Purchase reception rejects another product and cancelled orders', () => {
   const s = seed();
   const po = createPurchase(s, { productId: 'P015', qty: 5 });
-  const loc = suggest(s, 'P001', 1)[0].id;
+  const loc = suggest(s, 'P001', 1).find((item) => !s.lots.some((lot) => lot.loc === item.id && lot.qty > 0))!.id;
   assert.throws(
     () => receive(s, { productId: 'P001', qty: 1, loc, batch: 'X', expiry: '2099-01-01', supplier: 'Q', purchaseId: po.id }),
     /otro producto/,

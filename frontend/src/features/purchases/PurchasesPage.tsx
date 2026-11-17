@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Select } from '../../shared/components/Select';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
@@ -6,6 +7,8 @@ import { product, statusColor } from '../../shared/lib/inventory';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import { can } from '../../shared/auth/permissions';
 import { isRaw } from '../../shared/lib/bom';
+import { packsOf, purchaseLines } from '../../shared/lib/wholesale';
+import { ImportDialog } from '../imports/ImportDialog';
 import { buildForecast, suggestedPurchaseQty, type ConfidenceLevel } from '../../shared/lib/forecast';
 import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead, ProductCell } from '../../shared/components/ui';
 import { Modal, ModalActions } from '../../shared/components/Modal';
@@ -25,8 +28,12 @@ export function PurchasesPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [modalOpen, setModalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [supplierOpen, setSupplierOpen] = useState(false);
   const [prefillProduct, setPrefillProduct] = useState('');
   const [prefillQty, setPrefillQty] = useState(12);
+  const [supplierId, setSupplierId] = useState('');
+  const [lines, setLines] = useState<Array<{ productId: string; qty: number; packCode: string; unitPrice: number }>>([]);
   const [error, setError] = useState('');
 
   const forecast = useMemo(() => (state ? buildForecast(state) : null), [state]);
@@ -54,16 +61,39 @@ export function PurchasesPage() {
     try {
       applyResponse(
         await api.addPurchase({
-          productId: data.productId,
-          qty: Number(data.qty),
+          supplierId: supplierId || undefined,
           date: data.date,
+          expectedDate: data.expectedDate,
           notes: data.notes,
+          lines,
         }),
       );
-      toast('Solicitud registrada. El modelo seguirá aprendiendo con la operación.');
+      toast('Orden de compra registrada.');
       setModalOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error');
+    }
+  };
+
+  const saveSupplier = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.currentTarget));
+    try {
+      applyResponse(
+        await api.addSupplier({
+          name: data.name,
+          taxId: data.taxId,
+          contact: data.contact,
+          email: data.email,
+          phone: data.phone,
+          leadTimeDays: Number(data.leadTimeDays || 7),
+          terms: data.terms,
+        }),
+      );
+      toast('Proveedor guardado.');
+      setSupplierOpen(false);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'No se pudo guardar el proveedor.');
     }
   };
 
@@ -79,8 +109,12 @@ export function PurchasesPage() {
 
   const openNew = (productId?: string, qty?: number) => {
     const id = productId ?? state.products[0]?.id ?? '';
+    const amount = qty ?? (id ? suggestedPurchaseQty(state, id) : 12);
+    const item = state.products.find((p) => p.id === id);
     setPrefillProduct(id);
-    setPrefillQty(qty ?? (id ? suggestedPurchaseQty(state, id) : 12));
+    setPrefillQty(amount);
+    setSupplierId(item?.supplierId ?? state.suppliers?.[0]?.id ?? '');
+    setLines([{ productId: id, qty: Math.max(1, Math.round(amount)), packCode: 'unidad', unitPrice: item?.price ?? 0 }]);
     setModalOpen(true);
     setError('');
   };
@@ -93,9 +127,17 @@ export function PurchasesPage() {
         desc="La previsión mejora con cada pedido y despacho para anticipar faltantes y proteger la producción."
         actions={
           canManage ? (
-            <Btn variant="primary" icon="plus" onClick={() => openNew()}>
-              Nueva solicitud
-            </Btn>
+            <>
+              <Btn icon="receive" onClick={() => setImportOpen(true)}>
+                Importar
+              </Btn>
+              <Btn icon="plus" onClick={() => setSupplierOpen(true)}>
+                Proveedor
+              </Btn>
+              <Btn variant="primary" icon="plus" onClick={() => openNew()}>
+                Nueva orden
+              </Btn>
+            </>
           ) : null
         }
       />
@@ -203,7 +245,8 @@ export function PurchasesPage() {
               <thead>
                 <tr>
                   <th>Orden</th>
-                  <th>Producto</th>
+                  <th>Proveedor</th>
+                  <th>Líneas</th>
                   <th>Recibido</th>
                   <th>Estado</th>
                   <th />
@@ -213,13 +256,26 @@ export function PurchasesPage() {
                 {state.purchases.map((o) => {
                   const status = o.status ?? 'Abierta';
                   const open = status === 'Abierta' || status === 'Parcial';
+                  const linesOf = purchaseLines(o);
+                  const supplier = state.suppliers?.find((item) => item.id === o.supplierId);
                   return (
                     <tr key={o.id}>
                       <td>
                         <strong>{o.id}</strong>
                         <span className="sub">{dateShort(o.date)}</span>
                       </td>
-                      <td>{product(state, o.productId)?.name}</td>
+                      <td>{supplier?.name ?? 'Sin proveedor'}</td>
+                      <td>
+                        {linesOf.map((line) => (
+                          <div key={`${o.id}-${line.productId}`}>
+                            {product(state, line.productId)?.name ?? line.productId}
+                            <span className="sub">
+                              {' '}
+                              {line.qty} {line.packCode}
+                            </span>
+                          </div>
+                        ))}
+                      </td>
                       <td>
                         {o.received ?? 0} / {o.qty} u.
                       </td>
@@ -233,8 +289,12 @@ export function PurchasesPage() {
                               variant="small"
                               icon="receive"
                               onClick={() =>
-                                navigate('/recepcion', {
-                                  state: { productId: o.productId, purchaseId: o.id, qty: o.qty - (o.received ?? 0) },
+                                navigate('/recepcion/nueva', {
+                                  state: {
+                                    productId: linesOf.find((line) => line.qty * line.unitsPerPack > (line.receivedUnits ?? 0))?.productId ?? o.productId,
+                                    purchaseId: o.id,
+                                    qty: 1,
+                                  },
                                 })
                               }
                             >
@@ -269,31 +329,110 @@ export function PurchasesPage() {
           <form id="purchase-form" onSubmit={submit} key={`${prefillProduct}-${prefillQty}`}>
             <div className="form-grid">
               <div className="field full">
-                <label htmlFor="pur-product">Producto / Insumo</label>
-                <select
-                  id="pur-product"
-                  name="productId"
-                  defaultValue={prefillProduct}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    setPrefillProduct(id);
-                    setPrefillQty(suggestedPurchaseQty(state, id));
-                  }}
-                >
-                  {state.products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {isRaw(p) ? 'MP' : 'PT'} · {p.id} / {p.name}
+                <label htmlFor="pur-supplier">Proveedor</label>
+                <Select id="pur-supplier" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+                  <option value="">Sin proveedor</option>
+                  {(state.suppliers ?? []).map((supplier) => (
+                    <option key={supplier.id} value={supplier.id}>
+                      {supplier.name}
+                      {supplier.taxId ? ` · ${supplier.taxId}` : ''}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
-              <div className="field">
-                <label htmlFor="pur-qty">Cantidad sugerida</label>
-                <input id="pur-qty" name="qty" type="number" min={1} defaultValue={prefillQty} required />
-              </div>
+              {lines.map((line, index) => {
+                const item = state.products.find((p) => p.id === line.productId);
+                const packs = packsOf(item);
+                return (
+                  <div className="field full" key={`${line.productId}-${index}`}>
+                    <label>Línea {index + 1}</label>
+                    <div className="form-grid">
+                      <Select
+                        aria-label={`Producto ${index + 1}`}
+                        value={line.productId}
+                        onChange={(e) => {
+                          const next = state.products.find((p) => p.id === e.target.value);
+                          setLines((current) =>
+                            current.map((row, i) =>
+                              i === index
+                                ? { ...row, productId: e.target.value, unitPrice: next?.price ?? row.unitPrice }
+                                : row,
+                            ),
+                          );
+                        }}
+                      >
+                        {state.products.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {isRaw(p) ? 'MP' : 'PT'} · {p.name}
+                          </option>
+                        ))}
+                      </Select>
+                      <input
+                        aria-label={`Cantidad ${index + 1}`}
+                        type="number"
+                        min={1}
+                        value={line.qty}
+                        onChange={(e) =>
+                          setLines((current) =>
+                            current.map((row, i) => (i === index ? { ...row, qty: Number(e.target.value) } : row)),
+                          )
+                        }
+                        required
+                      />
+                      <Select
+                        aria-label={`Empaque ${index + 1}`}
+                        value={line.packCode}
+                        onChange={(e) =>
+                          setLines((current) =>
+                            current.map((row, i) => (i === index ? { ...row, packCode: e.target.value } : row)),
+                          )
+                        }
+                      >
+                        {packs.map((pack) => (
+                          <option key={pack.code} value={pack.code}>
+                            {pack.label} × {pack.units}
+                          </option>
+                        ))}
+                      </Select>
+                      <input
+                        aria-label={`Precio ${index + 1}`}
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={line.unitPrice}
+                        onChange={(e) =>
+                          setLines((current) =>
+                            current.map((row, i) => (i === index ? { ...row, unitPrice: Number(e.target.value) } : row)),
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                );
+              })}
               <div className="field">
                 <label htmlFor="pur-date">Fecha</label>
                 <input id="pur-date" name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
+              </div>
+              <div className="field">
+                <label htmlFor="pur-expected">Llegada esperada</label>
+                <input id="pur-expected" name="expectedDate" type="date" />
+              </div>
+              <div className="field full">
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    const item = state.products[0];
+                    if (!item) return;
+                    setLines((current) => [
+                      ...current,
+                      { productId: item.id, qty: 1, packCode: 'unidad', unitPrice: item.price },
+                    ]);
+                  }}
+                >
+                  Añadir línea
+                </button>
               </div>
               <div className="field full">
                 <label htmlFor="pur-notes">Observaciones</label>
@@ -308,6 +447,57 @@ export function PurchasesPage() {
               </div>
             </div>
             {error ? <div className="form-error visible">{error}</div> : null}
+          </form>
+        </Modal>
+      ) : null}
+      {importOpen ? (
+        <ImportDialog
+          kind="purchase"
+          onClose={() => setImportOpen(false)}
+          onDone={(message) => {
+            setImportOpen(false);
+            toast(message);
+          }}
+        />
+      ) : null}
+      {supplierOpen ? (
+        <Modal
+          title="Nuevo proveedor"
+          subtitle="RUC, contacto y tiempo de entrega para las compras al por mayor."
+          onClose={() => setSupplierOpen(false)}
+          footer={<ModalActions onCancel={() => setSupplierOpen(false)} submitLabel="Guardar" formId="supplier-form" icon="save" />}
+        >
+          <form id="supplier-form" onSubmit={(e) => void saveSupplier(e)}>
+            <div className="form-grid">
+              <div className="field full">
+                <label htmlFor="sup-name">Nombre</label>
+                <input id="sup-name" name="name" required />
+              </div>
+              <div className="field">
+                <label htmlFor="sup-tax">RUC</label>
+                <input id="sup-tax" name="taxId" />
+              </div>
+              <div className="field">
+                <label htmlFor="sup-lead">Días de entrega</label>
+                <input id="sup-lead" name="leadTimeDays" type="number" min={0} defaultValue={7} />
+              </div>
+              <div className="field">
+                <label htmlFor="sup-contact">Contacto</label>
+                <input id="sup-contact" name="contact" />
+              </div>
+              <div className="field">
+                <label htmlFor="sup-phone">Teléfono</label>
+                <input id="sup-phone" name="phone" />
+              </div>
+              <div className="field full">
+                <label htmlFor="sup-email">Correo</label>
+                <input id="sup-email" name="email" type="email" />
+              </div>
+              <div className="field full">
+                <label htmlFor="sup-terms">Condiciones</label>
+                <input id="sup-terms" name="terms" placeholder="Crédito 30 días, pedido mínimo…" />
+              </div>
+            </div>
           </form>
         </Modal>
       ) : null}

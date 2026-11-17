@@ -39,7 +39,32 @@ import {
   deleteWarehouse,
   upsertWarehouse,
 } from '../../domain/warehouse-admin.service.js';
-import type { WarehouseFamily, WarehouseSite } from '../../domain/types.js';
+import type { Bundle, Supplier, WarehouseFamily, WarehouseSite } from '../../domain/types.js';
+import { deleteBundle, ensureBundles, saveBundle } from '../../domain/bundles.service.js';
+import { cancelPurchase, createPurchase } from '../../domain/commerce.service.js';
+import { commitImport, previewCsv, previewXlsx, previewXml, type ImportKind } from '../../domain/import-docs.service.js';
+import { assembleBundle } from '../../domain/kits.service.js';
+import { createSupplier, updateSupplier } from '../../domain/suppliers.service.js';
+import {
+  applyCycleCount,
+  approveAdjustment,
+  createSuggestedPurchases,
+  issueCreditNote,
+  issueGuide,
+  issueInvoice,
+  openCycleCount,
+  recallBatch,
+  receiveTransfer,
+  registerCustomerPayment,
+  registerSupplierBill,
+  registerSupplierPayment,
+  requestAdjustment,
+  returnToSupplier,
+  saveClientPrice,
+  savePriceList,
+  shipTransfer,
+  suggestReplenishment,
+} from '../../domain/commercial.service.js';
 
 export const BUNDLES = [
   {
@@ -80,12 +105,13 @@ export class OperationsUseCases {
   async getMeta() {
     const s = await this.repo.load();
     const geo = getWarehouseGeometry(s);
+    ensureBundles(s);
     return {
       categories,
       racks: geo.racks,
       locations: geo.locations,
       layout: geo.layout,
-      bundles: BUNDLES,
+      bundles: s.bundles ?? [],
     };
   }
 
@@ -161,6 +187,7 @@ export class OperationsUseCases {
     let result: ReturnType<typeof applyParsedInvoice> | null = null;
     await this.mutate((s) => {
       result = applyParsedInvoice(s, invoice);
+      if (result.blocked?.length) throw new Error(result.blocked.join(' '));
     });
     if (!result) throw new Error('No se pudo importar la factura.');
     return result;
@@ -258,18 +285,169 @@ export class OperationsUseCases {
     });
   }
 
-  async addPurchase(body: { productId: string; qty: number; date: string; notes?: string }) {
-    const qty = Number(body.qty);
-    if (!Number.isInteger(qty) || qty <= 0) {
-      throw new Error('La cantidad debe ser un entero mayor que cero.');
-    }
+  async addPurchase(body: Parameters<typeof createPurchase>[1]) {
     return this.mutate((s) => {
-      s.purchases.unshift({
-        ...body,
-        qty,
-        id: `OC-${String(s.purchases.length + 1).padStart(4, '0')}`,
-      });
+      createPurchase(s, body);
     });
+  }
+
+  async cancelPurchaseOrder(id: string) {
+    return this.mutate((s) => {
+      cancelPurchase(s, id);
+    });
+  }
+
+  async addSupplier(body: Partial<Supplier>) {
+    return this.mutate((s) => {
+      createSupplier(s, body);
+    });
+  }
+
+  async editSupplier(id: string, body: Partial<Supplier>) {
+    return this.mutate((s) => {
+      updateSupplier(s, id, body);
+    });
+  }
+
+  async saveBundle(body: Partial<Bundle>) {
+    return this.mutate((s) => {
+      saveBundle(s, body);
+    });
+  }
+
+  async removeBundle(id: string) {
+    return this.mutate((s) => {
+      deleteBundle(s, id);
+    });
+  }
+
+  async assembleKit(body: { bundleId: string; qty: number | string; loc?: string; batch: string; expiry: string }) {
+    return this.mutate((s) => {
+      assembleBundle(s, body);
+    });
+  }
+
+  async previewImport(body: { kind?: ImportKind; format?: string; text?: string; base64?: string }) {
+    const state = await this.repo.load();
+    const kind: ImportKind = body.kind === 'sale' ? 'sale' : 'purchase';
+    const format = String(body.format || 'csv').toLowerCase();
+    if (format === 'xml') return previewXml(state, String(body.text ?? ''), kind);
+    if (format === 'xlsx' || format === 'xls') return previewXlsx(state, String(body.base64 ?? ''), kind);
+    return previewCsv(state, String(body.text ?? ''), kind);
+  }
+
+  async commitImport(body: Parameters<typeof commitImport>[1]) {
+    let result: ReturnType<typeof commitImport> | null = null;
+    const state = await this.mutate((s) => {
+      result = commitImport(s, body);
+    });
+    return { state, import: result };
+  }
+
+  async issueSalesInvoice(orderId: string) {
+    return this.mutate((s) => {
+      issueInvoice(s, orderId);
+    });
+  }
+
+  async issueSalesCreditNote(body: Parameters<typeof issueCreditNote>[1]) {
+    return this.mutate((s) => {
+      issueCreditNote(s, body);
+    });
+  }
+
+  async issueDeliveryGuide(body: Parameters<typeof issueGuide>[1]) {
+    return this.mutate((s) => {
+      issueGuide(s, body);
+    });
+  }
+
+  async collectInvoice(body: Parameters<typeof registerCustomerPayment>[1]) {
+    return this.mutate((s) => {
+      registerCustomerPayment(s, body);
+    });
+  }
+
+  async billSupplier(body: Parameters<typeof registerSupplierBill>[1]) {
+    return this.mutate((s) => {
+      registerSupplierBill(s, body);
+    });
+  }
+
+  async paySupplier(body: Parameters<typeof registerSupplierPayment>[1]) {
+    return this.mutate((s) => {
+      registerSupplierPayment(s, body);
+    });
+  }
+
+  async savePriceList(body: Parameters<typeof savePriceList>[1]) {
+    return this.mutate((s) => {
+      savePriceList(s, body);
+    });
+  }
+
+  async saveClientPrice(body: Parameters<typeof saveClientPrice>[1]) {
+    return this.mutate((s) => {
+      saveClientPrice(s, body);
+    });
+  }
+
+  async requestStockAdjustment(body: Parameters<typeof requestAdjustment>[1]) {
+    return this.mutate((s) => {
+      requestAdjustment(s, body);
+    });
+  }
+
+  async approveStockAdjustment(id: string) {
+    return this.mutate((s) => {
+      approveAdjustment(s, id);
+    });
+  }
+
+  async returnStockToSupplier(body: Parameters<typeof returnToSupplier>[1]) {
+    return this.mutate((s) => {
+      returnToSupplier(s, body);
+    });
+  }
+
+  async startCycleCount() {
+    return this.mutate((s) => {
+      openCycleCount(s);
+    });
+  }
+
+  async applyStockCount(body: Parameters<typeof applyCycleCount>[1]) {
+    return this.mutate((s) => {
+      applyCycleCount(s, body);
+    });
+  }
+
+  async shipWarehouseTransfer(body: Parameters<typeof shipTransfer>[1]) {
+    return this.mutate((s) => {
+      shipTransfer(s, body);
+    });
+  }
+
+  async receiveWarehouseTransfer(body: Parameters<typeof receiveTransfer>[1]) {
+    return this.mutate((s) => {
+      receiveTransfer(s, body);
+    });
+  }
+
+  async replenishment() {
+    const state = await this.repo.load();
+    return suggestReplenishment(state);
+  }
+
+  async createReplenishment() {
+    return this.mutate((s) => {
+      createSuggestedPurchases(s);
+    });
+  }
+
+  async recall(batch: string) {
+    const state = await this.repo.load();
+    return recallBatch(state, batch);
   }
 
   /** Consultas derivadas para asistente / KPIs */

@@ -12,6 +12,7 @@ export const DEFAULT_BUSINESS_RULES: BusinessRules = {
   creditOkMaxPct: 60,
   creditTightMaxPct: 90,
   defaultCreditLimit: 3000,
+  separateExpiryLots: true,
 };
 
 export function resolveBusinessRules(settings?: Settings | null): BusinessRules {

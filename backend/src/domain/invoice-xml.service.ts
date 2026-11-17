@@ -7,13 +7,15 @@ import {
   upsertProduct,
 } from './inventory.service.js';
 import { openaiConfigured } from './logistics-ai.service.js';
-import { activeWarehouseId } from './warehouse-admin.service.js';
 
 export type ParsedInvoiceLine = {
   code: string;
   name: string;
   qty: number;
   unitPrice: number;
+  batch?: string;
+  expiry?: string;
+  packCode?: string;
 };
 
 export type ParsedInvoice = {
@@ -21,6 +23,8 @@ export type ParsedInvoice = {
   buyerId: string;
   buyerAddress: string;
   buyerEmail: string;
+  sellerName?: string;
+  sellerTaxId?: string;
   issueDate: string;
   accessKey: string;
   docNumber: string;
@@ -106,7 +110,17 @@ function normalizeInvoice(raw: Partial<ParsedInvoice> & { lines?: Array<Partial<
     const qty = parseQty(line.qty as string | number);
     const unitPrice = parsePrice(line.unitPrice as string | number);
     if (!qty) continue;
-    lines.push({ code, name, qty, unitPrice });
+    const expiry = String(line.expiry || '').trim();
+    const batch = String(line.batch || '').trim();
+    lines.push({
+      code,
+      name,
+      qty,
+      unitPrice,
+      ...(batch ? { batch } : {}),
+      ...(expiry ? { expiry } : {}),
+      ...(line.packCode ? { packCode: line.packCode } : {}),
+    });
   }
   if (!lines.length) throw new Error('No se encontraron líneas de producto en el XML.');
 
@@ -117,6 +131,8 @@ function normalizeInvoice(raw: Partial<ParsedInvoice> & { lines?: Array<Partial<
     buyerId,
     buyerAddress: String(raw.buyerAddress || 'Sin dirección').slice(0, 200),
     buyerEmail: String(raw.buyerEmail || '').slice(0, 120),
+    sellerName: String(raw.sellerName || '').slice(0, 120),
+    sellerTaxId: String(raw.sellerTaxId || '').replace(/\D/g, ''),
     issueDate: String(raw.issueDate || new Date().toISOString().slice(0, 10)).slice(0, 32),
     accessKey: String(raw.accessKey || '').slice(0, 80),
     docNumber: String(raw.docNumber || 'XML').slice(0, 40),
@@ -143,6 +159,8 @@ export function parseFacturaXmlHeuristic(xmlRaw: string): ParsedInvoice {
     '';
   const buyerAddress = tagText(xml, 'direccionComprador') || 'Sin dirección';
   const buyerEmail = tagText(xml, 'email') || tagText(xml, 'correoComprador') || '';
+  const sellerName = tagText(xml, 'razonSocial') || tagText(xml, 'nombreComercial') || '';
+  const sellerTaxId = tagText(xml, 'ruc') || '';
   const issueDate = tagText(xml, 'fechaEmision') || new Date().toISOString().slice(0, 10);
   const accessKey = tagText(xml, 'claveAcceso');
   const estab = tagText(xml, 'estab');
@@ -165,15 +183,32 @@ export function parseFacturaXmlHeuristic(xmlRaw: string): ParsedInvoice {
     const qty = parseQty(tagText(block, 'cantidad'));
     const unitPrice = parsePrice(tagText(block, 'precioUnitario'));
     if (!qty) continue;
+    const expiry = tagText(block, 'fechaCaducidad') || tagText(block, 'fechaVencimiento') || '';
+    const batch = tagText(block, 'lote') || tagText(block, 'numeroLote') || '';
+    const packCode = tagText(block, 'unidadMedida') || '';
     lines.push({
       code: sanitizeCode(code || name.slice(0, 16)),
       name: name.slice(0, 120),
       qty,
       unitPrice,
+      ...(batch ? { batch } : {}),
+      ...(expiry ? { expiry } : {}),
+      ...(packCode ? { packCode } : {}),
     });
   }
   return normalizeInvoice(
-    { buyerName, buyerId, buyerAddress, buyerEmail, issueDate, accessKey, docNumber, lines },
+    {
+      buyerName,
+      buyerId,
+      buyerAddress,
+      buyerEmail,
+      sellerName,
+      sellerTaxId,
+      issueDate,
+      accessKey,
+      docNumber,
+      lines,
+    },
     'heuristic',
   );
 }
@@ -336,21 +371,6 @@ function ensureProduct(s: AppState, line: ParsedInvoiceLine): Product {
   });
 }
 
-function ensureStock(s: AppState, productId: string, needed: number) {
-  const gap = needed - available(s, productId);
-  if (gap <= 0) return;
-  const year = new Date().getFullYear() + 1;
-  s.lots.push({
-    id: uid('lot'),
-    productId,
-    loc: 'A-01-01',
-    qty: gap,
-    batch: `XML-${new Date().toISOString().slice(0, 10)}`,
-    expiry: `${year}-12-31`,
-    warehouseId: activeWarehouseId(s),
-  });
-}
-
 export type InvoiceImportResult = {
   orderId: string;
   clientId: string;
@@ -360,6 +380,8 @@ export type InvoiceImportResult = {
   invoice: ParsedInvoice;
   source: 'openai' | 'heuristic';
   openai: boolean;
+  /** Líneas que no se convirtieron en pedido porque no había stock real. */
+  blocked?: string[];
 };
 
 export function applyParsedInvoice(s: AppState, invoice: ParsedInvoice): InvoiceImportResult {
@@ -380,14 +402,32 @@ export function applyParsedInvoice(s: AppState, invoice: ParsedInvoice): Invoice
       productsUpdated.push(p.id);
     }
     lines.push({ productId: p.id, qty: line.qty });
-    ensureStock(s, p.id, line.qty);
   }
 
   const grouped = new Map<string, number>();
   for (const l of lines) grouped.set(l.productId, (grouped.get(l.productId) ?? 0) + l.qty);
   const orderLines = [...grouped.entries()].map(([productId, qty]) => ({ productId, qty }));
-
   const source = invoice.source ?? 'heuristic';
+  const blocked = orderLines
+    .filter((line) => available(s, line.productId) < line.qty)
+    .map(
+      (line) =>
+        `${product(s, line.productId)?.name ?? line.productId}: sin stock suficiente. No se inventó caducidad ni existencias.`,
+    );
+  if (blocked.length) {
+    return {
+      orderId: '',
+      clientId: cl.id,
+      clientCreated,
+      productsCreated,
+      productsUpdated,
+      invoice,
+      source,
+      openai: openaiConfigured(),
+      blocked,
+    };
+  }
+
   const notes = [
     `Importado desde XML (${source === 'openai' ? 'IA' : 'parser local'}) ${invoice.docNumber}`,
     invoice.accessKey ? `Clave: ${invoice.accessKey}` : '',

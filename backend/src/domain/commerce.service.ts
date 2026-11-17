@@ -1,5 +1,7 @@
-import type { AppState, Client, OrderPick } from './types.js';
+import type { AppState, Client, OrderPick, PurchaseLine } from './types.js';
 import { addEvent, assertFitsVehicle, product, qtyAt, uid } from './inventory.service.js';
+import { stockQtyFromPack, unitsPerPack } from './packs.js';
+import { refreshPurchase } from './purchase-lines.js';
 import { vehicleByPlate } from './fleet.service.js';
 import { suggest } from './placement.service.js';
 import { activeWarehouseId, lotsForActiveWarehouse } from './warehouse-admin.service.js';
@@ -29,6 +31,9 @@ export function cancelOrder(s: AppState, orderId: string, reason: string) {
   if (!o) throw new Error('Pedido no encontrado.');
   if (!['Por preparar', 'Preparado'].includes(o.status)) {
     throw new Error('Solo se pueden cancelar pedidos por preparar o preparados.');
+  }
+  if (s.invoices?.some((invoice) => invoice.orderId === orderId && invoice.status === 'Emitida')) {
+    throw new Error('El pedido tiene factura emitida. Emite una nota de crédito.');
   }
   const why = reason?.trim();
   if (!why) throw new Error('Indica el motivo de la cancelación.');
@@ -175,23 +180,67 @@ export function deleteClient(s: AppState, id: string) {
 
 export function createPurchase(
   s: AppState,
-  body: { productId: string; qty: number | string; date?: string; notes?: string },
+  body: {
+    productId?: string;
+    qty?: number | string;
+    date?: string;
+    expectedDate?: string;
+    notes?: string;
+    supplierId?: string;
+    lines?: Array<{
+      productId: string;
+      qty: number | string;
+      packCode?: string;
+      unitPrice?: number | string;
+      batch?: string;
+      expiry?: string;
+    }>;
+  },
 ) {
-  const qty = Number(body.qty);
-  if (!product(s, body.productId)) throw new Error('Selecciona un producto válido.');
-  if (!Number.isInteger(qty) || qty <= 0) {
-    throw new Error('La cantidad debe ser un entero mayor que cero.');
+  const rawLines = body.lines?.length
+    ? body.lines
+    : body.productId
+      ? [{ productId: body.productId, qty: body.qty ?? 0, packCode: 'unidad', unitPrice: 0 }]
+      : [];
+  if (!rawLines.length) throw new Error('La orden necesita al menos un producto.');
+  if (body.supplierId && !s.suppliers?.some((supplier) => supplier.id === body.supplierId)) {
+    throw new Error('Proveedor no encontrado.');
   }
+  const lines: PurchaseLine[] = rawLines.map((line) => {
+    const item = product(s, line.productId);
+    if (!item) throw new Error('Selecciona un producto válido.');
+    const packCode = line.packCode || 'unidad';
+    const packQty = Number(line.qty);
+    if (!Number.isInteger(packQty) || packQty <= 0) {
+      throw new Error('La cantidad debe ser un entero mayor que cero.');
+    }
+    const perPack = unitsPerPack(item, packCode);
+    stockQtyFromPack(item, packQty, packCode);
+    const unitPrice = Number(line.unitPrice ?? item.price);
+    return {
+      productId: line.productId,
+      qty: packQty,
+      packCode,
+      unitsPerPack: perPack,
+      unitPrice: Number.isFinite(unitPrice) && unitPrice >= 0 ? unitPrice : 0,
+      receivedUnits: 0,
+      batch: line.batch?.trim() || undefined,
+      expiry: line.expiry?.trim() || undefined,
+    };
+  });
   const n = Math.max(0, ...s.purchases.map((p) => Number(p.id.replace(/\D/g, '')) || 0)) + 1;
-  const purchase = {
+  const purchase = refreshPurchase({
     id: `OC-${String(n).padStart(4, '0')}`,
-    productId: body.productId,
-    qty,
+    supplierId: body.supplierId || undefined,
+    productId: lines[0].productId,
+    qty: 0,
     date: body.date || new Date().toISOString().slice(0, 10),
+    expectedDate: body.expectedDate || undefined,
     notes: body.notes?.trim() || undefined,
     received: 0,
-    status: 'Abierta' as const,
-  };
+    status: 'Abierta',
+    lines,
+  });
   s.purchases.unshift(purchase);
   return purchase;
 }

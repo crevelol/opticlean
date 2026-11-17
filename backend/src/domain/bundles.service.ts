@@ -65,10 +65,17 @@ export function saveBundle(s: AppState, body: Partial<Bundle>) {
     existing.name = name;
     existing.description = description;
     existing.lines = lines;
+    if (body.price != null) existing.price = Number(body.price);
     return existing;
   }
   const n = s.bundles!.reduce((max, b) => Math.max(max, Number(b.id.replace(/\D/g, '')) || 0), 0) + 1;
-  const created: Bundle = { id: `KIT${String(n).padStart(2, '0')}`, name, description, lines };
+  const created: Bundle = {
+    id: `KIT${String(n).padStart(2, '0')}`,
+    name,
+    description,
+    lines,
+    price: body.price != null && Number(body.price) >= 0 ? Number(body.price) : undefined,
+  };
   s.bundles!.push(created);
   return created;
 }

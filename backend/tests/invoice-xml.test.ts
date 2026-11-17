@@ -94,12 +94,13 @@ describe('invoice xml', () => {
     const s = emptyState();
     const inv = parseFacturaXmlHeuristic(SAMPLE);
     const result = applyParsedInvoice(s, inv);
-    assert.ok(result.orderId.startsWith('PED-'));
+    assert.equal(result.orderId, '');
     assert.equal(result.clientCreated, true);
     assert.equal(result.productsCreated.length, 2);
     assert.equal(s.clients.length, 1);
     assert.equal(s.products.length, 2);
-    assert.equal(s.orders.length, 1);
-    assert.equal(s.orders[0].lines.length, 2);
+    assert.equal(s.orders.length, 0);
+    assert.equal(s.lots.length, 0);
+    assert.ok(result.blocked?.length);
   });
 });

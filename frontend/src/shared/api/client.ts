@@ -98,6 +98,45 @@ export const api = {
     }),
   addPurchase: (body: Record<string, unknown>) =>
     request<StateResponse>('/api/purchases', { method: 'POST', body: JSON.stringify(body) }),
+  cancelPurchase: (id: string) =>
+    request<StateResponse>(`/api/purchases/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  addSupplier: (body: Record<string, unknown>) =>
+    request<StateResponse>('/api/suppliers', { method: 'POST', body: JSON.stringify(body) }),
+  saveBundle: (body: Record<string, unknown>) =>
+    request<StateResponse>('/api/bundles', { method: 'POST', body: JSON.stringify(body) }),
+  assembleBundle: (id: string, body: Record<string, unknown>) =>
+    request<StateResponse>(`/api/bundles/${encodeURIComponent(id)}/assemble`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  previewImport: (body: { kind: 'purchase' | 'sale'; format: string; text?: string; base64?: string }) =>
+    request<{
+      kind: 'purchase' | 'sale';
+      source: string;
+      partyName: string;
+      partyTaxId: string;
+      partyAddress: string;
+      docNumber: string;
+      issueDate: string;
+      warnings: string[];
+      rows: Array<{
+        code: string;
+        name: string;
+        qty: number;
+        packCode: string;
+        unitPrice: number;
+        batch: string;
+        expiry: string;
+        productId: string | null;
+        status: 'matched' | 'new' | 'invalid';
+        message: string;
+      }>;
+    }>('/api/imports/preview', { method: 'POST', body: JSON.stringify(body) }),
+  commitImport: (body: Record<string, unknown>) =>
+    request<StateResponse & { import: { kind: string; purchaseId: string; orderId: string } }>(
+      '/api/imports/commit',
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
   assistant: (query: 'stock' | 'warehouse' | 'orders') =>
     request<{ lines: string[] }>(`/api/assistant/${query}`),
   addWarehouse: (body: Record<string, unknown>) =>
@@ -305,4 +344,55 @@ export const api = {
         source: 'openai' | 'heuristic';
       };
     }>('/api/logistics/auto-assign', { method: 'POST', body: JSON.stringify(body) }),
+  issueInvoice: (orderId: string) =>
+    request<StateResponse>('/api/invoices', { method: 'POST', body: JSON.stringify({ orderId }) }),
+  issueCreditNote: (body: { invoiceId: string; reason: string; lines: Array<{ productId: string; qty: number; restock?: boolean }> }) =>
+    request<StateResponse>('/api/credit-notes', { method: 'POST', body: JSON.stringify(body) }),
+  issueGuide: (body: { orderId?: string; transferId?: string }) =>
+    request<StateResponse>('/api/guides', { method: 'POST', body: JSON.stringify(body) }),
+  collectPayment: (body: Record<string, unknown>) =>
+    request<StateResponse>('/api/payments', { method: 'POST', body: JSON.stringify(body) }),
+  billSupplier: (body: Record<string, unknown>) =>
+    request<StateResponse>('/api/supplier-bills', { method: 'POST', body: JSON.stringify(body) }),
+  paySupplier: (body: Record<string, unknown>) =>
+    request<StateResponse>('/api/supplier-payments', { method: 'POST', body: JSON.stringify(body) }),
+  savePriceList: (body: Record<string, unknown>) =>
+    request<StateResponse>('/api/price-lists', { method: 'POST', body: JSON.stringify(body) }),
+  saveClientPrice: (body: Record<string, unknown>) =>
+    request<StateResponse>('/api/client-prices', { method: 'POST', body: JSON.stringify(body) }),
+  requestAdjustment: (body: Record<string, unknown>) =>
+    request<StateResponse>('/api/adjustments', { method: 'POST', body: JSON.stringify(body) }),
+  approveAdjustment: (id: string) =>
+    request<StateResponse>(`/api/adjustments/${encodeURIComponent(id)}/approve`, { method: 'POST' }),
+  returnToSupplier: (body: Record<string, unknown>) =>
+    request<StateResponse>('/api/supplier-returns', { method: 'POST', body: JSON.stringify(body) }),
+  startCycleCount: () => request<StateResponse>('/api/cycle-counts', { method: 'POST' }),
+  applyCycleCount: (id: string, lines: Array<{ lotId: string; countedQty: number }>) =>
+    request<StateResponse>(`/api/cycle-counts/${encodeURIComponent(id)}/apply`, {
+      method: 'POST',
+      body: JSON.stringify({ lines }),
+    }),
+  shipTransfer: (body: { toWarehouseId: string; lines: Array<{ lotId: string; qty: number }> }) =>
+    request<StateResponse>('/api/transfers', { method: 'POST', body: JSON.stringify(body) }),
+  receiveTransfer: (id: string, lines: Array<{ lotId: string; loc: string }>) =>
+    request<StateResponse>(`/api/transfers/${encodeURIComponent(id)}/receive`, {
+      method: 'POST',
+      body: JSON.stringify({ lines }),
+    }),
+  replenishment: () =>
+    request<{
+      groups: Array<{
+        supplierId: string;
+        supplierName: string;
+        leadTimeDays: number;
+        lines: Array<{ productId: string; name: string; gap: number; packCode: string; packQty: number; unitsPerPack: number; unitPrice: number }>;
+      }>;
+    }>('/api/replenishment'),
+  createReplenishment: () => request<StateResponse>('/api/replenishment', { method: 'POST' }),
+  recall: (batch: string) =>
+    request<{
+      batch: string;
+      clients: Array<{ orderId: string; clientId: string; clientName: string; productId: string; qty: number; date: string; status: string }>;
+      stock: Array<{ lotId: string; productId: string; qty: number; loc: string; warehouseId: string; expiry: string }>;
+    }>(`/api/recall?batch=${encodeURIComponent(batch)}`),
 };

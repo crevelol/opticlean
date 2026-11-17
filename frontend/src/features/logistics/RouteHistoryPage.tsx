@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Select } from '../../shared/components/Select';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { client, money, orderWeight } from '../../shared/lib/inventory';
@@ -111,25 +112,25 @@ export function RouteHistoryPage() {
           </label>
           <label>
             Vehículo
-            <select value={truckId} onChange={(e) => setTruckId(e.target.value)}>
+            <Select value={truckId} onChange={(e) => setTruckId(e.target.value)}>
               <option value="all">Todos los vehículos</option>
               {fleet.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label} · {t.plate}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label>
             Bodega
-            <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+            <Select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
               <option value="all">Todas las bodegas</option>
               {state.warehouses.map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.name} · {w.city}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         </div>
       </section>
