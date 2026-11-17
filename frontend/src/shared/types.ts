@@ -6,6 +6,17 @@ export type ProductComponent = {
 
 export type ProductKind = 'finished' | 'raw';
 
+export type HazardClass =
+  | 'none'
+  | 'acid'
+  | 'base'
+  | 'oxidizer'
+  | 'flammable'
+  | 'chlorinated'
+  | 'aerosol';
+
+export type ProductPack = { code: string; label: string; units: number };
+
 export type Product = {
   id: string;
   sku: string;
@@ -22,6 +33,14 @@ export type Product = {
   components?: ProductComponent[];
   familyId?: string;
   fragile?: boolean;
+  hazardClass?: HazardClass;
+  stockUnit?: string;
+  packs?: ProductPack[];
+  minShelfLifeDays?: number;
+  supplierId?: string;
+  avgCost?: number;
+  sanitaryRegistration?: string;
+  sanitaryExpires?: string;
 };
 
 export type WarehouseFamily = {
@@ -81,9 +100,11 @@ export type Client = {
   sector?: string;
   /** Límite de crédito autorizado (USD) */
   creditLimit?: number;
+  paymentTermsDays?: number;
 };
 
-export type OrderLine = { productId: string; qty: number };
+export type OrderLine = { productId: string; qty: number; unitPrice?: number };
+export type OrderKit = { bundleId: string; qty: number };
 export type OrderPick = OrderLine & { batch?: string; loc?: string; expiry?: string };
 
 export type Order = {
@@ -92,14 +113,18 @@ export type Order = {
   status: string;
   date: string;
   lines: OrderLine[];
+  kits?: OrderKit[];
   priority: string;
   vehicle?: string;
+  stagedPlate?: string;
   picks?: OrderPick[];
   incident?: string;
   notes?: string;
   deliveredTo?: string;
   deliveryNotes?: string;
   deliveredAt?: string;
+  cancelledAt?: string;
+  cancelReason?: string;
 };
 
 export type TraceEvent = {
@@ -125,12 +150,54 @@ export type Receipt = {
   batch: string;
 };
 
+export type PurchaseStatus = 'Abierta' | 'Parcial' | 'Recibida' | 'Cancelada';
+
+export type PurchaseLine = {
+  productId: string;
+  qty: number;
+  packCode: string;
+  unitsPerPack: number;
+  unitPrice: number;
+  receivedUnits?: number;
+  batch?: string;
+  expiry?: string;
+};
+
 export type Purchase = {
   id: string;
+  supplierId?: string;
   productId: string;
   qty: number;
   date: string;
+  expectedDate?: string;
   notes?: string;
+  received?: number;
+  status?: PurchaseStatus;
+  lines?: PurchaseLine[];
+};
+
+export type Supplier = {
+  id: string;
+  name: string;
+  taxId: string;
+  contact: string;
+  email: string;
+  phone: string;
+  leadTimeDays: number;
+  terms: string;
+  notes?: string;
+};
+
+export type Vehicle = {
+  id: string;
+  plate: string;
+  label: string;
+  city: string;
+  driver: string;
+  maxKg: number;
+  maxM3: number;
+  costPerKm: number;
+  active: boolean;
 };
 
 export type BusinessRules = {
@@ -145,6 +212,7 @@ export type BusinessRules = {
   creditOkMaxPct: number;
   creditTightMaxPct: number;
   defaultCreditLimit: number;
+  separateExpiryLots: boolean;
 };
 
 export type Settings = {
@@ -167,6 +235,148 @@ export type AppState = {
   receipts: Receipt[];
   settings: Settings;
   families?: WarehouseFamily[];
+  vehicles?: Vehicle[];
+  bundles?: Bundle[];
+  suppliers?: Supplier[];
+  invoices?: SalesInvoice[];
+  creditNotes?: CreditNote[];
+  guides?: DeliveryGuide[];
+  customerPayments?: CustomerPayment[];
+  supplierBills?: SupplierBill[];
+  supplierPayments?: SupplierPayment[];
+  priceLists?: PriceList[];
+  clientPrices?: ClientPrice[];
+  supplierReturns?: SupplierReturn[];
+  adjustments?: StockAdjustment[];
+  cycleCounts?: CycleCount[];
+  transfers?: WarehouseTransfer[];
+};
+
+export type SalesInvoice = {
+  id: string;
+  number: string;
+  accessKey: string;
+  orderId: string;
+  clientId: string;
+  date: string;
+  status: 'Emitida' | 'Anulada';
+  lines: Array<{ productId: string; qty: number; unitPrice: number; ivaRate: number }>;
+  kits?: Array<{ bundleId: string; qty: number; unitPrice: number; ivaRate: number }>;
+  subtotal: number;
+  iva: number;
+  total: number;
+};
+
+export type CreditNote = {
+  id: string;
+  number: string;
+  accessKey: string;
+  invoiceId: string;
+  clientId: string;
+  date: string;
+  reason: string;
+  status: 'Emitida' | 'Anulada';
+  lines: Array<{ productId: string; qty: number; unitPrice: number; ivaRate: number; batch?: string; expiry?: string; restock?: boolean }>;
+  subtotal: number;
+  iva: number;
+  total: number;
+};
+
+export type DeliveryGuide = {
+  id: string;
+  number: string;
+  accessKey: string;
+  date: string;
+  kind: 'Venta' | 'Traslado';
+  orderId?: string;
+  transferId?: string;
+  invoiceId?: string;
+  origin: string;
+  destination: string;
+  plate?: string;
+  driver?: string;
+  lines: Array<{ productId: string; qty: number; batch?: string }>;
+  status: 'Emitida' | 'Anulada';
+};
+
+export type CustomerPayment = {
+  id: string;
+  clientId: string;
+  invoiceId: string;
+  date: string;
+  amount: number;
+  method: string;
+  reference: string;
+};
+
+export type SupplierBill = {
+  id: string;
+  supplierId: string;
+  purchaseId: string;
+  number: string;
+  date: string;
+  total: number;
+};
+
+export type SupplierPayment = {
+  id: string;
+  supplierId: string;
+  billId: string;
+  date: string;
+  amount: number;
+  method: string;
+  reference: string;
+};
+
+export type PriceList = {
+  id: string;
+  name: string;
+  clientType: string;
+  items: Array<{ productId: string; price: number; minQty: number }>;
+};
+
+export type ClientPrice = { clientId: string; productId: string; price: number };
+
+export type SupplierReturn = {
+  id: string;
+  supplierId: string;
+  purchaseId?: string;
+  date: string;
+  productId: string;
+  lotId: string;
+  qty: number;
+  batch: string;
+  reason: string;
+};
+
+export type StockAdjustment = {
+  id: string;
+  date: string;
+  kind: string;
+  lotId: string;
+  productId: string;
+  qty: number;
+  direction: 'Salida' | 'Entrada';
+  reason: string;
+  status: 'Pendiente' | 'Aplicado';
+  warehouseId: string;
+};
+
+export type CycleCount = {
+  id: string;
+  date: string;
+  warehouseId: string;
+  status: 'Borrador' | 'Aplicado';
+  lines: Array<{ lotId: string; productId: string; loc: string; batch: string; systemQty: number; countedQty: number }>;
+};
+
+export type WarehouseTransfer = {
+  id: string;
+  fromWarehouseId: string;
+  toWarehouseId: string;
+  date: string;
+  status: 'En tránsito' | 'Recibido' | 'Cancelado';
+  lines: Array<{ productId: string; qty: number; batch: string; expiry: string; lotId: string }>;
 };
 
 export type Location = {
@@ -192,6 +402,7 @@ export type Bundle = {
   name: string;
   description: string;
   lines: OrderLine[];
+  price?: number;
 };
 
 export type Metrics = {

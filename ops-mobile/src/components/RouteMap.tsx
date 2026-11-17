@@ -1,8 +1,9 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { AppState, Order } from '../types';
 import { clientOf, depotGeo, stopGeo } from '../lib/fleet';
+import { geocodeAddress, type LatLng } from '../lib/geocode';
 
 const stopIcon = (n: number, active: boolean) =>
   L.divIcon({
@@ -42,6 +43,30 @@ export function RouteMap({
   const layerRef = useRef<L.LayerGroup | null>(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const [pins, setPins] = useState<Record<string, LatLng>>({});
+  const queries = orders
+    .map((order) => {
+      const person = clientOf(state, order.clientId);
+      return `${order.id}\t${person?.address ?? ''}\t${person?.city || city}`;
+    })
+    .join('\n');
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const next: Record<string, LatLng> = {};
+      for (const row of queries.split('\n').filter(Boolean)) {
+        if (cancelled) return;
+        const [id, address, place] = row.split('\t');
+        const point = await geocodeAddress([address, place, 'Ecuador'].filter(Boolean).join(', '));
+        if (point && id) next[id] = point;
+      }
+      if (!cancelled) setPins(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [queries]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -78,7 +103,11 @@ export function RouteMap({
 
     layer.clearLayers();
     const depot = depotGeo(city);
-    const points = orders.map((o, i) => ({ order: o, ...stopGeo(state, o, i), index: i }));
+    const points = orders.map((o, i) => {
+      const fallback = stopGeo(state, o, i);
+      const pin = pins[o.id];
+      return { order: o, lat: pin?.lat ?? fallback.lat, lng: pin?.lng ?? fallback.lng, sector: fallback.sector, index: i, approximate: !pin };
+    });
     const latLngs: L.LatLngExpression[] = [[depot.lat, depot.lng]];
     for (const p of points) latLngs.push([p.lat, p.lng]);
 
@@ -88,12 +117,14 @@ export function RouteMap({
     L.marker([depot.lat, depot.lng], { icon: truckIcon, title: `Salida · ${city}` }).addTo(layer);
 
     for (const p of points) {
-      const name = clientOf(state, p.order.clientId)?.name ?? p.order.id;
+      const person = clientOf(state, p.order.clientId);
+      const name = person?.name ?? p.order.id;
       const marker = L.marker([p.lat, p.lng], {
         icon: stopIcon(p.index + 1, activeId === p.order.id),
         title: name,
       }).addTo(layer);
-      marker.bindPopup(`<strong>${p.index + 1}. ${name}</strong><br/>${p.sector} · ${p.order.id}`);
+      const where = person?.address ? `${person.address}${p.approximate ? ' · aprox.' : ''}` : p.sector;
+      marker.bindPopup(`<strong>${p.index + 1}. ${name}</strong><br/>${where}<br/>${p.order.id}`);
       marker.on('click', () => onSelectRef.current?.(p.order.id));
       if (activeId === p.order.id) marker.openPopup();
     }
@@ -101,7 +132,7 @@ export function RouteMap({
     if (latLngs.length === 1) map.setView(latLngs[0], 12);
     else map.fitBounds(L.latLngBounds(latLngs), { padding: [28, 28], maxZoom: 14 });
     requestAnimationFrame(() => map.invalidateSize());
-  }, [state, orders, activeId, city]);
+  }, [state, orders, activeId, city, pins]);
 
   return (
     <div className="drv-map">

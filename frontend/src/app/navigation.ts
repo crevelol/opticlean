@@ -22,6 +22,7 @@ export const routeMeta: Record<string, RouteMeta> = {
   '/': { title: 'Inicio' },
   '/inventario': { title: 'Inventario' },
   '/recepcion': { title: 'Recepción' },
+  '/recepcion/nueva': { title: 'Registrar recepción', parent: '/recepcion' },
   '/bodega': { title: 'Bodega visual' },
   '/bodegas': { title: 'Bodegas' },
   '/familias': { title: 'Familias' },
@@ -32,6 +33,7 @@ export const routeMeta: Record<string, RouteMeta> = {
   '/logistica/rutas': { title: 'Mi ruta', parent: '/logistica' },
   '/logistica/historial': { title: 'Historial de rutas', parent: '/logistica' },
   '/clientes': { title: 'Clientes' },
+  '/comercial': { title: 'Comercial' },
   '/trazabilidad': { title: 'Trazabilidad' },
   '/reportes': { title: 'Reportes' },
   '/reglas': { title: 'Reglas de negocio' },
@@ -55,6 +57,7 @@ export const fallbackMenu: MenuSection[] = [
     section: 'Gestión',
     items: [
       { id: 'f-cli', label: 'Clientes', path: '/clientes', icon: 'users', badge: null },
+      { id: 'f-com', label: 'Comercial', path: '/comercial', icon: 'orders', badge: null },
       { id: 'f-rules', label: 'Reglas de negocio', path: '/reglas', icon: 'shield', badge: null },
       {
         id: 'f-cfg',

@@ -174,17 +174,21 @@
   align-items: center;
   margin-bottom: 10px;
 }
-.inv-page .inv-line-icon {
+.inv-page .inv-line-card > header > .inv-line-icon {
   width: 34px;
   height: 34px;
+  margin-top: 0;
   border-radius: var(--radius-md);
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: color-mix(in srgb, var(--inv-tone, var(--steel-500)) 14%, var(--slate-0));
   color: var(--inv-tone, var(--steel-500));
   flex-shrink: 0;
+  line-height: 0;
 }
 .inv-page .inv-line-icon .icon {
+  display: block;
   width: 17px;
   height: 17px;
 }
@@ -193,7 +197,7 @@
   font-size: var(--text-base);
   letter-spacing: -0.2px;
 }
-.inv-page .inv-line-card > header span {
+.inv-page .inv-line-card > header > div span {
   display: block;
   font-size: var(--text-xs);
   color: var(--color-text-muted);

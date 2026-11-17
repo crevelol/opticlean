@@ -13,8 +13,11 @@ const DashboardPage = lazy(() =>
 const InventoryPage = lazy(() =>
   import('../features/inventory/InventoryPage').then((m) => ({ default: m.InventoryPage })),
 );
-const ReceptionPage = lazy(() =>
-  import('../features/reception/ReceptionPage').then((m) => ({ default: m.ReceptionPage })),
+const ReceptionListPage = lazy(() =>
+  import('../features/reception/ReceptionListPage').then((m) => ({ default: m.ReceptionListPage })),
+);
+const ReceptionNewPage = lazy(() =>
+  import('../features/reception/ReceptionPage').then((m) => ({ default: m.ReceptionNewPage })),
 );
 const WarehousePage = lazy(() =>
   import('../features/warehouse/WarehousePage').then((m) => ({ default: m.WarehousePage })),
@@ -62,6 +65,9 @@ const WarehousesAdminPage = lazy(() =>
 const FamiliesPage = lazy(() =>
   import('../features/families/FamiliesPage').then((m) => ({ default: m.FamiliesPage })),
 );
+const CommercialPage = lazy(() =>
+  import('../features/commercial/CommercialPage').then((m) => ({ default: m.CommercialPage })),
+);
 
 function LoadingShell({ label = 'Cargando operación…' }: { label?: string }) {
   return (
@@ -96,7 +102,8 @@ function ProtectedApp() {
       <Route element={<AppLayout />}>
         <Route index element={<DashboardPage />} />
         <Route path="inventario" element={<InventoryPage />} />
-        <Route path="recepcion" element={<ReceptionPage />} />
+        <Route path="recepcion" element={<ReceptionListPage />} />
+        <Route path="recepcion/nueva" element={<ReceptionNewPage />} />
         <Route path="bodega" element={<WarehousePage />} />
         <Route path="bodegas" element={<WarehousesAdminPage />} />
         <Route path="familias" element={<FamiliesPage />} />
@@ -107,6 +114,7 @@ function ProtectedApp() {
         <Route path="logistica/rutas" element={<RoutesPage />} />
         <Route path="logistica/historial" element={<RouteHistoryPage />} />
         <Route path="clientes" element={<ClientsPage />} />
+        <Route path="comercial" element={<CommercialPage />} />
         <Route path="trazabilidad" element={<TraceabilityPage />} />
         <Route path="reportes" element={<ReportsPage />} />
         <Route path="reglas" element={<BusinessRulesPage />} />

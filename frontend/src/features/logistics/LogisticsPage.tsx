@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Select } from '../../shared/components/Select';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
@@ -1152,12 +1153,12 @@ export function LogisticsPage() {
             <input type="hidden" name="orderId" value={incidentOrder} />
             <div className="field">
               <label htmlFor="incident-reason">Motivo</label>
-              <select id="incident-reason" name="reason">
+              <Select id="incident-reason" name="reason">
                 <option>Cliente ausente</option>
                 <option>Dirección no localizada</option>
                 <option>Recepción no autorizada</option>
                 <option>Producto con novedad</option>
-              </select>
+              </Select>
             </div>
             <div className="field">
               <label htmlFor="incident-notes">Detalle</label>

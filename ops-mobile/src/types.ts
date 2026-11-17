@@ -56,6 +56,9 @@ export type Order = {
   lines: OrderLine[];
   priority: string;
   vehicle?: string;
+  stagedPlate?: string;
+  deliveredTo?: string;
+  deliveredAt?: string;
 };
 
 export type Receipt = {
@@ -81,14 +84,35 @@ export type TraceEvent = {
   batch?: string;
 };
 
+export type Purchase = {
+  id: string;
+  productId: string;
+  qty: number;
+  date: string;
+  received?: number;
+  status?: 'Abierta' | 'Parcial' | 'Recibida' | 'Cancelada';
+};
+
 export type AppState = {
   products: Product[];
   lots: Lot[];
   clients: Client[];
   orders: Order[];
+  purchases?: Purchase[];
   receipts: Receipt[];
   events: TraceEvent[];
   families?: WarehouseFamily[];
+  vehicles?: Array<{
+    id: string;
+    plate: string;
+    label: string;
+    city: string;
+    driver: string;
+    maxKg: number;
+    maxM3: number;
+    costPerKm: number;
+    active: boolean;
+  }>;
   settings: {
     company: string;
     warehouse: string;

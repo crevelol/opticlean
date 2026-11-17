@@ -1,0 +1,60 @@
+.commercial-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.commercial-tabs button {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.commercial-tabs button.is-on {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+
+.commercial-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.commercial-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.commercial-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.commercial-check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.commercial-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.commercial-count {
+  max-height: 420px;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+}

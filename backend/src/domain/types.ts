@@ -6,6 +6,22 @@ export type ProductComponent = {
 
 export type ProductKind = 'finished' | 'raw';
 
+export type HazardClass =
+  | 'none'
+  | 'acid'
+  | 'base'
+  | 'oxidizer'
+  | 'flammable'
+  | 'chlorinated'
+  | 'aerosol';
+
+/** Empaque de compra. `units` son unidades de stock que entran por cada empaque. */
+export type ProductPack = {
+  code: string;
+  label: string;
+  units: number;
+};
+
 export type Product = {
   id: string;
   sku: string;
@@ -24,6 +40,20 @@ export type Product = {
   familyId?: string;
   /** Producto frágil: prioriza zonas bajas y racks de familia frágil */
   fragile?: boolean;
+  /** Clase química. `none` se puede mezclar con cualquiera. */
+  hazardClass?: HazardClass;
+  /** Nombre de la unidad en la que se cuenta el stock y se vende. */
+  stockUnit?: string;
+  packs?: ProductPack[];
+  /** Días mínimos de vida útil para poder vender el lote. */
+  minShelfLifeDays?: number;
+  supplierId?: string;
+  /** Costo promedio por unidad de stock. */
+  avgCost?: number;
+  /** Registro o notificación sanitaria (ARCSA). */
+  sanitaryRegistration?: string;
+  /** Vencimiento del registro sanitario (YYYY-MM-DD). */
+  sanitaryExpires?: string;
 };
 
 /** Familia operativa de bodega: agrupa líneas y racks para ubicación inteligente. */
@@ -87,9 +117,13 @@ export type Client = {
   sector?: string;
   /** Límite de crédito autorizado (USD) */
   creditLimit?: number;
+  /** Días de plazo para pagar una factura antes de bloquear pedidos. */
+  paymentTermsDays?: number;
 };
 
-export type OrderLine = { productId: string; qty: number };
+export type OrderLine = { productId: string; qty: number; unitPrice?: number };
+
+export type OrderKit = { bundleId: string; qty: number };
 
 export type OrderPick = OrderLine & {
   batch?: string;
@@ -103,14 +137,20 @@ export type Order = {
   status: string;
   date: string;
   lines: OrderLine[];
+  /** Paquetes vendidos sin armar: reservan sus componentes. */
+  kits?: OrderKit[];
   priority: string;
   vehicle?: string;
+  /** Placa del camión donde está cargado, antes de despachar. */
+  stagedPlate?: string;
   picks?: OrderPick[];
   incident?: string;
   notes?: string;
   deliveredTo?: string;
   deliveryNotes?: string;
   deliveredAt?: string;
+  cancelledAt?: string;
+  cancelReason?: string;
 };
 
 export type TraceEvent = {
@@ -136,12 +176,68 @@ export type Receipt = {
   batch: string;
 };
 
+export type PurchaseStatus = 'Abierta' | 'Parcial' | 'Recibida' | 'Cancelada';
+
+export type PurchaseLine = {
+  productId: string;
+  /** Cantidad pedida en el empaque (`packCode`), no en unidades de stock. */
+  qty: number;
+  packCode: string;
+  unitsPerPack: number;
+  unitPrice: number;
+  /** Unidades de stock ya ingresadas. */
+  receivedUnits?: number;
+  batch?: string;
+  expiry?: string;
+};
+
 export type Purchase = {
   id: string;
+  supplierId?: string;
+  /** Primera línea, para listados y compatibilidad. */
   productId: string;
+  /** Total pedido en unidades de stock. */
   qty: number;
   date: string;
+  expectedDate?: string;
   notes?: string;
+  /** Unidades de stock ya recibidas. */
+  received?: number;
+  status?: PurchaseStatus;
+  lines?: PurchaseLine[];
+};
+
+export type Supplier = {
+  id: string;
+  name: string;
+  taxId: string;
+  contact: string;
+  email: string;
+  phone: string;
+  leadTimeDays: number;
+  terms: string;
+  notes?: string;
+};
+
+export type Bundle = {
+  id: string;
+  name: string;
+  description: string;
+  lines: OrderLine[];
+  /** Precio de venta del paquete. Si falta, se suma el de sus componentes. */
+  price?: number;
+};
+
+export type Vehicle = {
+  id: string;
+  plate: string;
+  label: string;
+  city: string;
+  driver: string;
+  maxKg: number;
+  maxM3: number;
+  costPerKm: number;
+  active: boolean;
 };
 
 /** Parámetros operativos editables (costo envío, asignación, crédito). */
@@ -164,6 +260,8 @@ export type BusinessRules = {
   creditTightMaxPct: number;
   /** Límite sugerido al crear cliente (USD) */
   defaultCreditLimit: number;
+  /** Una casilla no mezcla lotes con distinta caducidad. */
+  separateExpiryLots: boolean;
 };
 
 export type Settings = {
@@ -187,6 +285,187 @@ export type AppState = {
   settings: Settings;
   /** Familias de bodega para reglas de ubicación */
   families?: WarehouseFamily[];
+  vehicles?: Vehicle[];
+  bundles?: Bundle[];
+  suppliers?: Supplier[];
+  invoices?: SalesInvoice[];
+  creditNotes?: CreditNote[];
+  guides?: DeliveryGuide[];
+  customerPayments?: CustomerPayment[];
+  supplierBills?: SupplierBill[];
+  supplierPayments?: SupplierPayment[];
+  priceLists?: PriceList[];
+  clientPrices?: ClientPrice[];
+  supplierReturns?: SupplierReturn[];
+  adjustments?: StockAdjustment[];
+  cycleCounts?: CycleCount[];
+  transfers?: WarehouseTransfer[];
+};
+
+export type SalesInvoiceLine = {
+  productId: string;
+  qty: number;
+  unitPrice: number;
+  ivaRate: number;
+};
+
+export type SalesInvoiceKit = {
+  bundleId: string;
+  qty: number;
+  unitPrice: number;
+  ivaRate: number;
+};
+
+export type SalesInvoice = {
+  id: string;
+  number: string;
+  accessKey: string;
+  orderId: string;
+  clientId: string;
+  date: string;
+  status: 'Emitida' | 'Anulada';
+  lines: SalesInvoiceLine[];
+  kits?: SalesInvoiceKit[];
+  subtotal: number;
+  iva: number;
+  total: number;
+};
+
+export type CreditNoteLine = {
+  productId: string;
+  qty: number;
+  unitPrice: number;
+  ivaRate: number;
+  batch?: string;
+  expiry?: string;
+  restock?: boolean;
+};
+
+export type CreditNote = {
+  id: string;
+  number: string;
+  accessKey: string;
+  invoiceId: string;
+  clientId: string;
+  date: string;
+  reason: string;
+  status: 'Emitida' | 'Anulada';
+  lines: CreditNoteLine[];
+  subtotal: number;
+  iva: number;
+  total: number;
+};
+
+export type DeliveryGuide = {
+  id: string;
+  number: string;
+  accessKey: string;
+  date: string;
+  kind: 'Venta' | 'Traslado';
+  orderId?: string;
+  transferId?: string;
+  invoiceId?: string;
+  origin: string;
+  destination: string;
+  plate?: string;
+  driver?: string;
+  lines: Array<{ productId: string; qty: number; batch?: string }>;
+  status: 'Emitida' | 'Anulada';
+};
+
+export type PayMethod = 'Transferencia' | 'Efectivo' | 'Cheque' | 'Retención';
+
+export type CustomerPayment = {
+  id: string;
+  clientId: string;
+  invoiceId: string;
+  date: string;
+  amount: number;
+  method: PayMethod;
+  reference: string;
+};
+
+export type SupplierBill = {
+  id: string;
+  supplierId: string;
+  purchaseId: string;
+  number: string;
+  date: string;
+  total: number;
+};
+
+export type SupplierPayment = {
+  id: string;
+  supplierId: string;
+  billId: string;
+  date: string;
+  amount: number;
+  method: PayMethod;
+  reference: string;
+};
+
+export type PriceListItem = { productId: string; price: number; minQty: number };
+
+export type PriceList = {
+  id: string;
+  name: string;
+  clientType: string;
+  items: PriceListItem[];
+};
+
+export type ClientPrice = { clientId: string; productId: string; price: number };
+
+export type SupplierReturn = {
+  id: string;
+  supplierId: string;
+  purchaseId?: string;
+  date: string;
+  productId: string;
+  lotId: string;
+  qty: number;
+  batch: string;
+  reason: string;
+};
+
+export type AdjustmentKind = 'Merma' | 'Daño' | 'Vencimiento' | 'Conteo' | 'Cuarentena';
+
+export type StockAdjustment = {
+  id: string;
+  date: string;
+  kind: AdjustmentKind;
+  lotId: string;
+  productId: string;
+  qty: number;
+  direction: 'Salida' | 'Entrada';
+  reason: string;
+  status: 'Pendiente' | 'Aplicado';
+  warehouseId: string;
+};
+
+export type CycleCountLine = {
+  lotId: string;
+  productId: string;
+  loc: string;
+  batch: string;
+  systemQty: number;
+  countedQty: number;
+};
+
+export type CycleCount = {
+  id: string;
+  date: string;
+  warehouseId: string;
+  status: 'Borrador' | 'Aplicado';
+  lines: CycleCountLine[];
+};
+
+export type WarehouseTransfer = {
+  id: string;
+  fromWarehouseId: string;
+  toWarehouseId: string;
+  date: string;
+  status: 'En tránsito' | 'Recibido' | 'Cancelado';
+  lines: Array<{ productId: string; qty: number; batch: string; expiry: string; lotId: string }>;
 };
 
 export type Location = {

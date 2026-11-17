@@ -1,4 +1,5 @@
 import { familyOf } from './families.service.js';
+import { placementBlockReason } from './hazard.js';
 import { product, qtyAt } from './inventory.service.js';
 import type { AppState, Location } from './types.js';
 import { lotsForActiveWarehouse } from './warehouse-admin.service.js';
@@ -34,7 +35,8 @@ export function suggestPlacement(
     .locations.filter((l) => {
       if (l.id === exclude) return false;
       if (qtyAt(s, l.id) + qty > l.capacity) return false;
-      return lots.filter((t) => t.loc === l.id).every((t) => t.productId === productId);
+      if (!lots.filter((t) => t.loc === l.id).every((t) => t.productId === productId)) return false;
+      return !placementBlockReason(s, productId, l);
     })
     .map((l) => {
       const occupied = qtyAt(s, l.id);

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Select } from '../../shared/components/Select';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
@@ -13,6 +14,7 @@ import {
   stock,
 } from '../../shared/lib/inventory';
 import { buildForecast } from '../../shared/lib/forecast';
+import { expiryAlerts } from '../../shared/lib/wholesale';
 import { Badge, Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import '../../styles/dashboard.css';
@@ -42,6 +44,9 @@ export function DashboardPage() {
     forecast.productionRisks.length ||
     forecast.recommendations.filter((r) => r.urgency === 'now').length;
   const activeWh = activeWarehouseId(state);
+  const expiry = expiryAlerts(state);
+  const expired = expiry.filter((item) => item.band === 'vencido');
+  const soon = expiry.filter((item) => item.band !== 'vencido');
 
   const onWarehouseChange = async (value: string) => {
     if (whBusy) return;
@@ -74,7 +79,7 @@ export function DashboardPage() {
         desc="Pedidos, stock y movimientos de tu operación de un vistazo."
         actions={
           <>
-            <Btn icon="receive" onClick={() => navigate('/recepcion')}>
+            <Btn icon="receive" onClick={() => navigate('/recepcion/nueva')}>
               Registrar entrada
             </Btn>
             <Btn variant="primary" icon="plus" onClick={() => navigate('/pedidos/nuevo')}>
@@ -85,7 +90,7 @@ export function DashboardPage() {
       >
         <label className="dash-wh">
           <Icon name="warehouse" />
-          <select
+          <Select
             value={whFilter}
             disabled={whBusy}
             onChange={(e) => void onWarehouseChange(e.target.value)}
@@ -97,7 +102,7 @@ export function DashboardPage() {
                 {w.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </PageHead>
       <KpiGrid label="Resumen de la operación">
@@ -237,6 +242,25 @@ export function DashboardPage() {
                   <small>Consulta posiciones y lotes.</small>
                   <button type="button" onClick={() => navigate('/bodega')}>
                     Ir a preparación
+                  </button>
+                </div>
+              </article>
+              <article className="dash-prio-item">
+                <div className="dash-prio-icon">
+                  <Icon name="alert" />
+                </div>
+                <div className="dash-prio-body">
+                  <strong>
+                    {expired.length} vencido{expired.length === 1 ? '' : 's'} · {soon.length} por vencer
+                  </strong>
+                  <small>
+                    {expiry[0]
+                      ? `${expiry[0].name} · ${expiry[0].days < 0 ? 'vencido' : `vence en ${expiry[0].days} días`}`
+                      : 'Sin lotes en los próximos 90 días.'}{' '}
+                    El vencido queda en cuarentena y no se puede preparar.
+                  </small>
+                  <button type="button" onClick={() => navigate('/inventario')}>
+                    Revisar caducidades
                   </button>
                 </div>
               </article>

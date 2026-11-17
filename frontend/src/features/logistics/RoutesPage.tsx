@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Select } from '../../shared/components/Select';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
@@ -419,7 +420,7 @@ export function RoutesPage() {
           <form id="route-incident-form" onSubmit={submitIncident}>
             <div className="field">
               <label htmlFor="route-reason">Motivo</label>
-              <select id="route-reason" name="reason" required defaultValue="">
+              <Select id="route-reason" name="reason" required defaultValue="">
                 <option value="" disabled>
                   Selecciona…
                 </option>
@@ -428,7 +429,7 @@ export function RoutesPage() {
                 <option>Rechazo parcial</option>
                 <option>Problema de acceso</option>
                 <option>Otro</option>
-              </select>
+              </Select>
             </div>
             <div className="field">
               <label htmlFor="route-inc-notes">Detalle</label>

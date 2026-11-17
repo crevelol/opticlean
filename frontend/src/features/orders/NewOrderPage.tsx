@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { Select } from '../../shared/components/Select';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
@@ -6,17 +7,21 @@ import {
   available,
   client,
   creditAvailable,
+  expandedDemand,
   creditLimitOf,
   creditUsed,
   money,
   orderValue,
+  outstandingReceivable,
   product,
 } from '../../shared/lib/inventory';
 import { Btn, Empty, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
+import { ImportDialog } from '../imports/ImportDialog';
 import '../../styles/new-order.css';
 
 type Line = { productId: string; qty: number };
+type KitLine = { bundleId: string; qty: number };
 
 const STEPS = [
   { id: 1, title: 'Cliente', desc: 'Datos y entrega' },
@@ -43,14 +48,14 @@ export function NewOrderPage() {
   const [priority, setPriority] = useState('Normal');
   const [requestedDate, setRequestedDate] = useState('');
   const [lines, setLines] = useState<Line[]>([]);
+  const [kits, setKits] = useState<KitLine[]>([]);
   const [search, setSearch] = useState('');
   const [catalogMode, setCatalogMode] = useState<'products' | 'bundles'>('products');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
-  const [xmlBusy, setXmlBusy] = useState(false);
   const [error, setError] = useState('');
-  const [xmlName, setXmlName] = useState('');
-  const xmlInputRef = useRef<HTMLInputElement>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [arming, setArming] = useState<{ id: string; qty: number; batch: string; expiry: string } | null>(null);
 
   const selected = state && clientId ? client(state, clientId) : undefined;
 
@@ -78,16 +83,16 @@ export function NewOrderPage() {
   const bundleResults = useMemo(() => {
     if (!meta) return [];
     const q = search.trim().toLowerCase();
-    return meta.bundles.filter(
+    return (state?.bundles?.length ? state.bundles : meta.bundles).filter(
       (b) => !q || (b.name + b.id + b.description).toLowerCase().includes(q),
     );
-  }, [search, meta]);
+  }, [search, meta, state]);
 
   if (!state || !meta) return null;
 
-  const draft = { clientId, lines, priority };
-  const total = orderValue(state, draft);
-  const units = lines.reduce((n, l) => n + l.qty, 0);
+  const catalogBundles = state.bundles?.length ? state.bundles : meta.bundles;
+  const total = orderValue({ ...state, bundles: catalogBundles }, { lines, kits });
+  const units = lines.reduce((n, l) => n + l.qty, 0) + kits.reduce((n, kit) => n + kit.qty, 0);
   const limit = clientId ? creditLimitOf(state, clientId) : 0;
   const used = clientId ? creditUsed(state, clientId) : 0;
   const availableCredit = clientId ? creditAvailable(state, clientId) : 0;
@@ -118,25 +123,40 @@ export function NewOrderPage() {
   };
 
   const addBundle = (bundleId: string) => {
-    const b = meta.bundles.find((x) => x.id === bundleId);
-    if (!b) return;
-    for (const line of b.lines) {
-      const current = lines.find((l) => l.productId === line.productId)?.qty ?? 0;
-      if (current + line.qty > available(state, line.productId)) {
-        toast('Stock insuficiente para el paquete.');
+    const bundle = catalogBundles.find((item) => item.id === bundleId);
+    if (!bundle) return;
+    const nextKits = kits.some((kit) => kit.bundleId === bundleId)
+      ? kits.map((kit) => (kit.bundleId === bundleId ? { ...kit, qty: kit.qty + 1 } : kit))
+      : [...kits, { bundleId, qty: 1 }];
+    const probe = { ...state, bundles: catalogBundles };
+    for (const line of expandedDemand(probe, { lines, kits: nextKits })) {
+      if (line.qty > available(state, line.productId)) {
+        toast('Stock insuficiente para reservar los componentes del paquete.');
         return;
       }
     }
-    setLines((prev) => {
-      const next = prev.map((l) => ({ ...l }));
-      for (const line of b.lines) {
-        const ex = next.find((l) => l.productId === line.productId);
-        if (ex) ex.qty += line.qty;
-        else next.push({ ...line });
-      }
-      return next;
-    });
-    toast(`${b.name} añadido.`);
+    setKits(nextKits);
+    toast(`${bundle.name} reserva sus componentes.`);
+  };
+
+  const armBundle = async () => {
+    if (!arming || busy) return;
+    setBusy(true);
+    try {
+      applyResponse(
+        await api.assembleBundle(arming.id, {
+          qty: arming.qty,
+          batch: arming.batch,
+          expiry: arming.expiry,
+        }),
+      );
+      toast('Paquete armado y ubicado en bodega.');
+      setArming(null);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'No se pudo armar el paquete.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const goProducts = () => {
@@ -148,8 +168,13 @@ export function NewOrderPage() {
   };
 
   const goConfirm = () => {
-    if (!lines.length) {
-      toast('Agrega al menos un producto.');
+    if (!lines.length && !kits.length) {
+      toast('Agrega al menos un producto o un paquete.');
+      return;
+    }
+    const value = orderValue({ ...state, bundles: catalogBundles }, { lines, kits });
+    if (value > creditAvailable(state, clientId) + 0.009) {
+      toast('El pedido supera el cupo de crédito del cliente.');
       return;
     }
     setStep(3);
@@ -168,6 +193,7 @@ export function NewOrderPage() {
         await api.createOrder({
           clientId,
           lines,
+          kits,
           priority,
           notes: noteParts.join(' · ') || undefined,
         }),
@@ -178,38 +204,6 @@ export function NewOrderPage() {
       setError(e instanceof Error ? e.message : 'Error');
     } finally {
       setBusy(false);
-    }
-  };
-
-  const importXml = async (file: File) => {
-    if (xmlBusy) return;
-    if (
-      !file.name.toLowerCase().endsWith('.xml') &&
-      file.type !== 'text/xml' &&
-      file.type !== 'application/xml'
-    ) {
-      toast('Selecciona un archivo .xml de factura.');
-      return;
-    }
-    setXmlBusy(true);
-    setError('');
-    setXmlName(file.name);
-    try {
-      const xml = await file.text();
-      const res = await api.importOrderXml(xml);
-      applyResponse(res);
-      const created = res.import.productsCreated.length;
-      const clientMsg = res.import.clientCreated ? 'cliente nuevo' : 'cliente existente';
-      const via = res.import.source === 'openai' ? 'IA' : 'parser local';
-      toast(
-        `${res.import.orderId} · ${via} · ${clientMsg} · ${created} producto(s) nuevo(s) · ${res.import.invoice.docNumber}`,
-      );
-      navigate('/pedidos');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo importar el XML');
-    } finally {
-      setXmlBusy(false);
-      if (xmlInputRef.current) xmlInputRef.current.value = '';
     }
   };
 
@@ -231,24 +225,24 @@ export function NewOrderPage() {
             <Btn icon="back" onClick={() => navigate('/pedidos')}>
               Volver a pedidos
             </Btn>
-            <input
-              ref={xmlInputRef}
-              type="file"
-              accept=".xml,text/xml,application/xml"
-              hidden
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void importXml(f);
-              }}
-            />
-            <Btn icon="file" disabled={xmlBusy} onClick={() => xmlInputRef.current?.click()}>
-              {xmlBusy ? 'Importando…' : 'Importar XML'}
+            <Btn icon="file" onClick={() => setImportOpen(true)}>
+              Importar
             </Btn>
           </>
         }
       />
 
-      {xmlName ? <p className="no-xml-file">Archivo: {xmlName}</p> : null}
+      {importOpen ? (
+        <ImportDialog
+          kind="sale"
+          onClose={() => setImportOpen(false)}
+          onDone={(message) => {
+            setImportOpen(false);
+            toast(message);
+            navigate('/pedidos');
+          }}
+        />
+      ) : null}
       {error && step === 1 ? <div className="form-error visible">{error}</div> : null}
 
       <nav className="no-steps" aria-label="Pasos del pedido">
@@ -361,7 +355,7 @@ export function NewOrderPage() {
 
                 <label className="field">
                   <span>Dirección de entrega</span>
-                  <select
+                  <Select
                     value={selected?.address ?? ''}
                     disabled={!selected}
                     onChange={() => undefined}
@@ -371,7 +365,7 @@ export function NewOrderPage() {
                     ) : (
                       <option value="">Selecciona un cliente</option>
                     )}
-                  </select>
+                  </Select>
                 </label>
 
                 <div className="no-info-grid">
@@ -487,22 +481,51 @@ export function NewOrderPage() {
                       );
                     })
                   : bundleResults.map((b) => (
-                      <button
-                        key={b.id}
-                        type="button"
-                        className="no-product"
-                        onClick={() => addBundle(b.id)}
-                      >
-                        <span>
-                          <strong>{b.name}</strong>
-                          <small>{b.description}</small>
-                        </span>
-                        <em>
-                          <Icon name="plus" />
-                        </em>
-                      </button>
+                      <div key={b.id} className="no-product" style={{ display: 'grid', gap: 8 }}>
+                        <button type="button" className="no-product" onClick={() => addBundle(b.id)}>
+                          <span>
+                            <strong>{b.name}</strong>
+                            <small>
+                              {b.description} · reserva componentes
+                              {b.price != null ? ` · ${money(b.price)}` : ''}
+                            </small>
+                          </span>
+                          <em>
+                            <Icon name="plus" />
+                          </em>
+                        </button>
+                        <button type="button" className="btn" onClick={() => setArming({ id: b.id, qty: 1, batch: '', expiry: '' })}>
+                          Armar en bodega
+                        </button>
+                      </div>
                     ))}
               </div>
+
+              {arming ? (
+                <form
+                  className="form-grid"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void armBundle();
+                  }}
+                >
+                  <div className="field">
+                    <label htmlFor="arm-qty">Cantidad a armar</label>
+                    <input id="arm-qty" type="number" min={1} value={arming.qty} onChange={(event) => setArming({ ...arming, qty: Number(event.target.value) })} />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="arm-batch">Lote del paquete</label>
+                    <input id="arm-batch" value={arming.batch} onChange={(event) => setArming({ ...arming, batch: event.target.value })} required />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="arm-expiry">Caducidad</label>
+                    <input id="arm-expiry" type="date" value={arming.expiry} onChange={(event) => setArming({ ...arming, expiry: event.target.value })} required />
+                  </div>
+                  <div className="field">
+                    <button type="submit" className="btn primary" disabled={busy}>Armar</button>
+                  </div>
+                </form>
+              ) : null}
 
               {!productResults.length && catalogMode === 'products' ? (
                 <Empty title="Sin resultados" desc="Prueba otro término de búsqueda." />
@@ -528,6 +551,20 @@ export function NewOrderPage() {
                         <small>{l.productId}</small>
                       </div>
                       <span>{money((p?.price ?? 0) * l.qty)}</span>
+                    </li>
+                  );
+                })}
+                {kits.map((kit) => {
+                  const bundle = catalogBundles.find((item) => item.id === kit.bundleId);
+                  return (
+                    <li key={kit.bundleId}>
+                      <div>
+                        <strong>
+                          {bundle?.name ?? kit.bundleId} × {kit.qty}
+                        </strong>
+                        <small>Paquete · reserva {bundle?.lines.map((line) => `${line.qty * kit.qty} ${line.productId}`).join(', ')}</small>
+                      </div>
+                      <span>{money((bundle?.price ?? 0) * kit.qty)}</span>
                     </li>
                   );
                 })}
@@ -582,10 +619,10 @@ export function NewOrderPage() {
                   </div>
                   <div>
                     <dt>Comprometido</dt>
-                    <dd>{money(used)}</dd>
+                    <dd>{money(used + (clientId ? outstandingReceivable(state, clientId) : 0))}</dd>
                   </div>
                 </dl>
-                <small className="no-credit-note">Comprometido en pedidos abiertos</small>
+                <small className="no-credit-note">Pedidos abiertos y facturas por cobrar</small>
                 {total > 0 ? (
                   <p className="no-credit-after">
                     Tras este pedido quedarían <strong>{money(remainingAfter)}</strong>
@@ -599,9 +636,21 @@ export function NewOrderPage() {
 
           <section className="no-card no-summary-card">
             <h3>Resumen del pedido</h3>
-            {lines.length ? (
+            {lines.length || kits.length ? (
               <>
                 <ul className="no-lines">
+                  {kits.map((kit) => {
+                    const bundle = catalogBundles.find((item) => item.id === kit.bundleId);
+                    return (
+                      <li key={kit.bundleId} className="no-line">
+                        <div>
+                          <strong>{bundle?.name ?? kit.bundleId}</strong>
+                          <small>Paquete · {money(bundle?.price ?? 0)}</small>
+                        </div>
+                        <strong>× {kit.qty}</strong>
+                      </li>
+                    );
+                  })}
                   {lines.map((l) => {
                     const p = product(state, l.productId);
                     const max = available(state, l.productId);
@@ -646,7 +695,7 @@ export function NewOrderPage() {
                 </ul>
                 <div className="no-total">
                   <span>
-                    {lines.length} ítems · {units} u.
+                    {lines.length + kits.length} ítems · {units} u.
                   </span>
                   <strong>{money(total)}</strong>
                 </div>
@@ -698,7 +747,7 @@ export function NewOrderPage() {
               <Btn
                 variant="primary"
                 icon="check"
-                disabled={busy || !lines.length}
+                disabled={busy || (!lines.length && !kits.length)}
                 onClick={() => void confirm()}
               >
                 {busy ? 'Creando…' : 'Confirmar pedido'}

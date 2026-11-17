@@ -27,6 +27,7 @@ export function ReceivePage({
   });
   const [options, setOptions] = useState<PlacementOption[]>([]);
   const [guidance, setGuidance] = useState('');
+  const [purchaseId, setPurchaseId] = useState('');
   const [selectedLoc, setSelectedLoc] = useState('');
   const [loadingPlace, setLoadingPlace] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -44,6 +45,7 @@ export function ReceivePage({
   const selectProduct = (p: Product) => {
     setProduct(p);
     setQuery('');
+    setPurchaseId('');
     setScanOpen(false);
     setError('');
     setDone(null);
@@ -89,6 +91,20 @@ export function ReceivePage({
     };
   }, [product, qty]);
 
+  const openPurchases = useMemo(
+    () =>
+      product
+        ? (state.purchases ?? []).filter(
+            (p) =>
+              p.productId === product.id &&
+              p.status !== 'Cancelada' &&
+              p.status !== 'Recibida' &&
+              (p.received ?? 0) < p.qty,
+          )
+        : [],
+    [product, state.purchases],
+  );
+
   const confirm = async () => {
     if (!product || !selectedLoc || saving) return;
     setSaving(true);
@@ -101,6 +117,7 @@ export function ReceivePage({
         batch,
         expiry,
         supplier: product.supplier,
+        purchaseId: purchaseId || undefined,
       });
       await onRefresh();
       setDone({ loc: selectedLoc, qty, name: product.name });
@@ -199,6 +216,17 @@ export function ReceivePage({
 
           <section className="panel">
             <div className="panel-body form-stack">
+              <label className="field">
+                <span>Orden de compra</span>
+                <select value={purchaseId} onChange={(e) => setPurchaseId(e.target.value)}>
+                  <option value="">Sin orden de compra</option>
+                  {openPurchases.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.id} · pendiente {p.qty - (p.received ?? 0)} u.
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="field">
                 <span>Cantidad</span>
                 <input

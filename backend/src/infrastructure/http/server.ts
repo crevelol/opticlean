@@ -6,7 +6,7 @@ import { JsonStateRepository } from '../persistence/JsonStateRepository.js';
 import { OperationsUseCases } from '../../application/use-cases/OperationsUseCases.js';
 import { suggest, suggestPlacement } from '../../domain/placement.service.js';
 import { autoAssignLogistics, openaiConfigured } from '../../domain/logistics-ai.service.js';
-import { adminRequired, authRequired, login, publicUserFromRequest } from '../auth/auth.js';
+import { adminRequired, authRequired, login, publicUserFromRequest, type AuthRole } from '../auth/auth.js';
 import {
   companyMobileRoleIds,
   companyModuleIds,
@@ -86,7 +86,55 @@ const repo = new JsonStateRepository();
 const ops = new OperationsUseCases(repo);
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '8mb' }));
+
+function roleDenied(req: express.Request) {
+  const role = req.user?.role;
+  if (!role || role === 'admin') return null;
+  if (req.method === 'GET' || req.method === 'HEAD') return null;
+  const path = req.path;
+  const allow = (roles: AuthRole[]) =>
+    roles.includes(role) ? null : 'Tu rol no tiene permiso para esta acción.';
+  if (path === '/api/delivery' || path === '/api/incidents') return allow(['dispatch', 'driver', 'ops']);
+  if (path === '/api/dispatch' || path.startsWith('/api/logistics')) return allow(['dispatch']);
+  if (path.startsWith('/api/guides')) return allow(['dispatch', 'ops']);
+  if (
+    path.startsWith('/api/invoices') ||
+    path.startsWith('/api/credit-notes') ||
+    path.startsWith('/api/payments') ||
+    path.startsWith('/api/supplier-bills') ||
+    path.startsWith('/api/supplier-payments') ||
+    path.startsWith('/api/price-lists') ||
+    path.startsWith('/api/client-prices') ||
+    path.startsWith('/api/settings') ||
+    path === '/api/state/reset'
+  ) {
+    return allow([]);
+  }
+  if (req.method === 'PATCH' && /^\/api\/clients\/[^/]+$/.test(path)) {
+    const body = req.body ?? {};
+    if (body.creditLimit != null || body.paymentTermsDays != null) {
+      return 'Solo administración cambia el cupo o el plazo de crédito.';
+    }
+  }
+  if (role === 'ops') return null;
+  return 'Tu rol no tiene permiso para esta acción.';
+}
+
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/')) return next();
+  if (req.path === '/api/health' || req.path === '/api/auth/login') return next();
+  if (req.path.startsWith('/api/admin')) return next();
+  authRequired(req, res, () => {
+    if (res.headersSent) return;
+    const denied = roleDenied(req);
+    if (denied) {
+      res.status(403).json({ error: denied });
+      return;
+    }
+    next();
+  });
+});
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
@@ -352,6 +400,81 @@ app.post('/api/purchases', async (req, res, next) => {
   try {
     const state = await ops.addPurchase(req.body);
     res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/purchases/:id/cancel', async (req, res, next) => {
+  try {
+    const state = await ops.cancelPurchaseOrder(req.params.id);
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/suppliers', async (req, res, next) => {
+  try {
+    const state = await ops.addSupplier(req.body ?? {});
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.patch('/api/suppliers/:id', async (req, res, next) => {
+  try {
+    const state = await ops.editSupplier(req.params.id, req.body ?? {});
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/bundles', async (req, res, next) => {
+  try {
+    const state = await ops.saveBundle(req.body ?? {});
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.delete('/api/bundles/:id', async (req, res, next) => {
+  try {
+    const state = await ops.removeBundle(req.params.id);
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/bundles/:id/assemble', async (req, res, next) => {
+  try {
+    const state = await ops.assembleKit({ ...req.body, bundleId: req.params.id });
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/imports/preview', async (req, res, next) => {
+  try {
+    res.json(await ops.previewImport(req.body ?? {}));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/imports/commit', async (req, res, next) => {
+  try {
+    const result = await ops.commitImport(req.body ?? {});
+    res.status(201).json({
+      state: result.state,
+      metrics: ops.metricsSnapshot(result.state),
+      import: result.import,
+    });
   } catch (e) {
     next(e);
   }
@@ -691,6 +814,154 @@ app.patch('/api/admin/menu/:id', adminRequired, (req, res, next) => {
       active: typeof req.body?.active === 'boolean' ? req.body.active : undefined,
     });
     res.json({ item });
+  } catch (e) {
+    next(e);
+  }
+});
+
+function stateJson(res: express.Response, state: Awaited<ReturnType<typeof ops.getState>>) {
+  res.json({ state, metrics: ops.metricsSnapshot(state) });
+}
+
+app.post('/api/invoices', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.issueSalesInvoice(String(req.body?.orderId ?? '')));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/credit-notes', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.issueSalesCreditNote(req.body));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/guides', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.issueDeliveryGuide(req.body));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/payments', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.collectInvoice(req.body));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/supplier-bills', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.billSupplier(req.body));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/supplier-payments', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.paySupplier(req.body));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/price-lists', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.savePriceList(req.body));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/client-prices', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.saveClientPrice(req.body));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/adjustments', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.requestStockAdjustment(req.body));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/adjustments/:id/approve', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.approveStockAdjustment(req.params.id));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/supplier-returns', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.returnStockToSupplier(req.body));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/cycle-counts', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.startCycleCount());
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/cycle-counts/:id/apply', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.applyStockCount({ id: req.params.id, lines: req.body?.lines ?? [] }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/transfers', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.shipWarehouseTransfer(req.body));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/transfers/:id/receive', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.receiveWarehouseTransfer({ id: req.params.id, lines: req.body?.lines ?? [] }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/replenishment', async (_req, res, next) => {
+  try {
+    res.json({ groups: await ops.replenishment() });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/replenishment', async (_req, res, next) => {
+  try {
+    stateJson(res, await ops.createReplenishment());
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/recall', async (req, res, next) => {
+  try {
+    res.json(await ops.recall(String(req.query.batch ?? '')));
   } catch (e) {
     next(e);
   }

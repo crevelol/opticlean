@@ -28,17 +28,20 @@ test('Every seeded location respects capacity and one-product storage', () => {
 test('Receiving and transferring preserve product totals', () => {
   const s = seed();
   const before = stock(s, 'P015');
+  const loc = suggest(s, 'P015', 12).find((item) => qtyAt(s, item.id) === 0);
+  assert.ok(loc);
   receive(s, {
     productId: 'P015',
     qty: 12,
-    loc: 'A-01-01-D',
+    loc: loc.id,
     batch: 'TEST-001',
     expiry: '2099-12-31',
     supplier: 'Test',
   });
   assert.equal(stock(s, 'P015'), before + 12);
   const lot = s.lots.find((l) => l.batch === 'TEST-001')!;
-  const dest = suggest(s, 'P015', 7, lot.loc)[0].id;
+  const dest = suggest(s, 'P015', 7, lot.loc).find((item) => qtyAt(s, item.id) === 0)?.id;
+  assert.ok(dest);
   move(s, { lotId: lot.id, qty: 7, to: dest });
   assert.equal(stock(s, 'P015'), before + 12);
 });
@@ -60,7 +63,7 @@ test('Orders aggregate duplicate lines and reserve stock', () => {
 
 test('Picking uses earliest expiry', () => {
   const s = seed();
-  const o = s.orders.find((x) => x.id === 'PED-1048')!;
+  const o = createOrder(s, { clientId: 'CL001', lines: [{ productId: 'P001', qty: 2 }] });
   const plan = pickPlan(s, o);
   const first = plan.find((l) => l.productId === 'P001')!;
   const earliest = s.lots

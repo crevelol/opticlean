@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Select } from '../../shared/components/Select';
 import type { AppState, WarehouseLayout, WarehouseSite } from '../../shared/types';
 import { faceLabel, layoutSummary, normalizeLayout } from '../../shared/lib/warehouseLayout';
 import { WarehouseLayoutSchematic } from './WarehouseLayoutSchematic';
@@ -207,9 +208,9 @@ export function WarehouseDesigner({ draft, onChange }: Props) {
         <div className="designer-location-detail">
           <div className="designer-location-picker">
             <label htmlFor="designer-location">Ubicación de ejemplo</label>
-            <select id="designer-location" value={selected.id} onChange={(event) => setSelectedId(event.target.value)}>
+            <Select id="designer-location" value={selected.id} onChange={(event) => setSelectedId(event.target.value)}>
               {summary.locations.map((location) => <option key={location.id} value={location.id}>{location.id}</option>)}
-            </select>
+            </Select>
           </div>
           <p>Rack {selected.rack} · Nivel {selected.level} · Casilla {selected.pos}{selected.face ? ` · ${faceLabel(selected.face)}` : ''}<strong>{layout.capacityPerCell} unidades de capacidad</strong></p>
         </div>
