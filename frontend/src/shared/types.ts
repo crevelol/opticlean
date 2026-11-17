@@ -79,6 +79,8 @@ export type Client = {
   type: string;
   city?: string;
   sector?: string;
+  /** Límite de crédito autorizado (USD) */
+  creditLimit?: number;
 };
 
 export type OrderLine = { productId: string; qty: number };
@@ -95,6 +97,7 @@ export type Order = {
   stagedPlate?: string;
   picks?: OrderPick[];
   incident?: string;
+  notes?: string;
   deliveredTo?: string;
   deliveryNotes?: string;
   deliveredAt?: string;
@@ -149,11 +152,26 @@ export type Vehicle = {
   active: boolean;
 };
 
+export type BusinessRules = {
+  shippingMinKm: number;
+  shippingStopsDivisor: number;
+  shippingEtaBaseFactor: number;
+  shippingEtaPerStop: number;
+  assignCostReference: number;
+  assignCostWeight: number;
+  assignIdealFillMax: number;
+  assignNearFullFill: number;
+  creditOkMaxPct: number;
+  creditTightMaxPct: number;
+  defaultCreditLimit: number;
+};
+
 export type Settings = {
   company: string;
   warehouse: string;
   operator: string;
   activeWarehouseId?: string;
+  businessRules?: BusinessRules;
 };
 
 export type AppState = {

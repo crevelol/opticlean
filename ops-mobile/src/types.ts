@@ -43,6 +43,7 @@ export type Client = {
   type: string;
   city?: string;
   sector?: string;
+  creditLimit?: number;
 };
 
 export type OrderLine = { productId: string; qty: number };

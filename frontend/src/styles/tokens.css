@@ -1,0 +1,218 @@
+/*
+ * OPTICLEAN · Design tokens
+ * ------------------------------------------------------------------
+ * Única fuente de verdad para color, tipografía, radios, sombras y
+ * espaciado. No escribas colores hex ni tamaños sueltos en los CSS de
+ * cada feature: usa estas variables.
+ *
+ *  1. Paleta base (escalas)   → --slate-*, --blue-*, --green-* …
+ *  2. Tokens semánticos       → --color-text, --color-border … (preferidos
+ *                               en componentes nuevos)
+ *  3. Tipografía, radios, sombras, espaciado, z-index
+ */
+
+:root {
+  /* ── 1. Paleta base ───────────────────────────────────────────── */
+
+  /* Slate: neutro azulado (fondos, bordes, texto) */
+  --slate-0: #ffffff;
+  --slate-25: #fbfdff;
+  --slate-50: #f7fafd;
+  --slate-75: #f4f7fb;
+  --slate-100: #eef3f8;
+  --slate-150: #e7eef5;
+  --slate-200: #e1e9f2;
+  --slate-250: #d8e3ee;
+  --slate-300: #c8d6e4;
+  --slate-350: #b1c4d7;
+  --slate-400: #9cafc2;
+  --slate-500: #8b9db0;
+  --slate-550: #7a90a5;
+  --slate-600: #6b8298;
+  --slate-650: #5d7690;
+  --slate-700: #4d6880;
+  --slate-750: #3c5a75;
+  --slate-800: #2a4964;
+  --slate-850: #1c3a57;
+  --slate-900: #16304c;
+  --slate-950: #062344;
+  --slate-975: #03182f; /* fondo profundo del sidebar */
+
+  /* Blue: marca / acción principal */
+  --blue-50: #eef6ff;
+  --blue-100: #e2effd;
+  --blue-200: #c4e0fa;
+  --blue-300: #8fc4f2;
+  --blue-400: #45a6f2;
+  --blue-500: #1a8de8;
+  --blue-600: #087af0;
+  --blue-700: #0870d2;
+  --blue-800: #0a5ca8;
+  --blue-900: #0a4479;
+
+  /* Steel: azul apagado para iconos e ilustraciones */
+  --steel-300: #8cb9e0;
+  --steel-400: #64a0d6;
+  --steel-500: #5088b8;
+  --steel-600: #3f6f9a;
+
+  /* Cyan: acento de marca ("AI") */
+  --cyan-300: #7ad4f5;
+  --cyan-400: #40c4f4;
+  --cyan-500: #28b8ed;
+  --cyan-700: #2a7f9f;
+
+  /* Green: éxito / disponible */
+  --green-50: #ebf8f2;
+  --green-100: #d3efe3;
+  --green-300: #8fd0b6;
+  --green-400: #4fb895;
+  --green-500: #24a074;
+  --green-600: #1a8a62;
+  --green-700: #16765a;
+
+  /* Teal: recepción / detalle de inventario */
+  --teal-50: #e9f7f3;
+  --teal-500: #11937c;
+  --teal-600: #0b806c;
+  --teal-700: #0c6f5f;
+
+  /* Amber: advertencia / por reponer */
+  --amber-50: #fff8ec;
+  --amber-100: #fff1d8;
+  --amber-200: #f2e0bd;
+  --amber-300: #e8c78d;
+  --amber-400: #e2a52a;
+  --amber-500: #d9921d;
+  --amber-600: #b77814;
+  --amber-700: #9a6510;
+  --amber-800: #7c5618;
+
+  /* Red: error / peligro */
+  --red-50: #fff1f2;
+  --red-100: #ffe6ea;
+  --red-200: #f2c6cc;
+  --red-400: #e25f6a;
+  --red-500: #d24b4b;
+  --red-600: #b5404f;
+  --red-700: #9e3442;
+
+  /* Purple: categorías */
+  --purple-50: #f2effb;
+  --purple-500: #8870bc;
+  --purple-600: #7b4fc4;
+
+  /* ── 2. Tokens semánticos ─────────────────────────────────────── */
+
+  --color-bg: var(--slate-75);
+  --color-surface: var(--slate-0);
+  --color-surface-subtle: var(--slate-25);
+  --color-surface-muted: var(--slate-50);
+  --color-surface-hover: var(--slate-100);
+
+  --color-border: var(--slate-200);
+  --color-border-subtle: var(--slate-150);
+  --color-border-strong: var(--slate-250);
+  --color-border-input: var(--slate-250);
+
+  --color-text: var(--slate-900);
+  --color-text-secondary: var(--slate-700);
+  --color-text-muted: var(--slate-600);
+  --color-text-subtle: var(--slate-500);
+  --color-text-placeholder: var(--slate-500);
+  --color-text-inverse: var(--slate-0);
+
+  --color-primary: var(--blue-600);
+  --color-primary-hover: var(--blue-700);
+  --color-primary-soft: var(--blue-50);
+  --color-primary-border: var(--blue-200);
+  --color-link: var(--blue-600);
+  --color-focus-ring: var(--blue-100);
+  --color-focus-outline: #65c6ff;
+
+  --color-success: var(--green-600);
+  --color-success-soft: var(--green-50);
+  --color-success-border: var(--green-100);
+  --color-warning: var(--amber-700);
+  --color-warning-soft: var(--amber-100);
+  --color-warning-border: var(--amber-200);
+  --color-danger: var(--red-500);
+  --color-danger-soft: var(--red-50);
+  --color-danger-border: var(--red-200);
+  --color-info: var(--blue-600);
+  --color-info-soft: var(--blue-50);
+
+  --color-sidebar-bg: var(--slate-950);
+  --color-overlay: #061d35aa;
+
+  /* ── 3. Tipografía ────────────────────────────────────────────── */
+
+  --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+
+  --text-2xs: 9px; /* overlines, etiquetas mínimas */
+  --text-xs: 10px; /* metadatos, cabeceras de tabla */
+  --text-sm: 11px; /* texto secundario, controles compactos */
+  --text-md: 12px; /* texto de UI por defecto */
+  --text-base: 13px; /* cuerpo */
+  --text-lg: 14px;
+  --text-xl: 16px; /* títulos de panel / modal */
+  --text-2xl: 18px;
+  --text-3xl: 22px; /* cifras destacadas */
+  --text-4xl: 26px; /* KPI / título de página */
+  --text-5xl: 30px;
+  --text-6xl: 34px;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.7;
+
+  /* ── Radios ───────────────────────────────────────────────────── */
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-full: 999px;
+
+  /* ── Sombras ──────────────────────────────────────────────────── */
+
+  --shadow-xs: 0 1px 2px #0b2a4414;
+  --shadow-sm: 0 2px 8px #17324f1f;
+  --shadow-md: 0 10px 28px #0b2a4418;
+  --shadow-lg: 0 25px 100px #00172d30;
+  --shadow-focus: 0 0 0 3px var(--color-focus-ring);
+
+  /* ── Espaciado (base 4px) ─────────────────────────────────────── */
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* ── Movimiento ───────────────────────────────────────────────── */
+  /* Espejo de shared/motion/presets.ts: CSS y motion usan los mismos tiempos. */
+
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* ── Capas ────────────────────────────────────────────────────── */
+
+  --z-sidebar: 50;
+  --z-modal: 100;
+  --z-toast: 150;
+}

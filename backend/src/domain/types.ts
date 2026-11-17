@@ -85,6 +85,8 @@ export type Client = {
   city?: string;
   /** Sector / barrio de entrega */
   sector?: string;
+  /** Límite de crédito autorizado (USD) */
+  creditLimit?: number;
 };
 
 export type OrderLine = { productId: string; qty: number };
@@ -107,6 +109,7 @@ export type Order = {
   stagedPlate?: string;
   picks?: OrderPick[];
   incident?: string;
+  notes?: string;
   deliveredTo?: string;
   deliveryNotes?: string;
   deliveredAt?: string;
@@ -169,11 +172,34 @@ export type Vehicle = {
   active: boolean;
 };
 
+/** Parámetros operativos editables (costo envío, asignación, crédito). */
+export type BusinessRules = {
+  /** Km mínimos cobrados / estimados por ruta */
+  shippingMinKm: number;
+  /** Divisor en km ≈ routeKm × (paradas / max(divisor, paradas)) */
+  shippingStopsDivisor: number;
+  /** Factor base del ETA: eta ≈ baseEta × (factor + paradas × porParada) */
+  shippingEtaBaseFactor: number;
+  shippingEtaPerStop: number;
+  /** Score asignación: (referencia − costPerKm) × peso */
+  assignCostReference: number;
+  assignCostWeight: number;
+  /** Umbrales de ocupación útil al asignar (0–1) */
+  assignIdealFillMax: number;
+  assignNearFullFill: number;
+  /** % uso de cupo: ok < tight < full */
+  creditOkMaxPct: number;
+  creditTightMaxPct: number;
+  /** Límite sugerido al crear cliente (USD) */
+  defaultCreditLimit: number;
+};
+
 export type Settings = {
   company: string;
   warehouse: string;
   operator: string;
   activeWarehouseId?: string;
+  businessRules?: BusinessRules;
 };
 
 export type AppState = {

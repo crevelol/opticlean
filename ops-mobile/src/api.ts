@@ -113,6 +113,36 @@ export const api = {
         source: 'openai' | 'heuristic';
       };
     }>('/api/logistics/auto-assign', { method: 'POST', body: JSON.stringify(body) }),
+  fleet: () =>
+    request<{
+      trucks: Array<{
+        id: string;
+        plate: string;
+        label: string;
+        vehicleType?: 'carro' | 'camion' | 'motocicleta';
+        vehicleTypeLabel?: string;
+        city: string;
+        driver: string;
+        maxKg: number;
+        maxM3: number;
+        costPerKm: number;
+        etaHours: number;
+        routeKm: number;
+      }>;
+    }>('/api/fleet'),
+  mobileConfig: () =>
+    request<{
+      company: { id: string; name: string; slug: string } | null;
+      roles: Array<{
+        id: string;
+        code: string;
+        name: string;
+        description: string;
+        auth_role: string;
+        icon: string;
+      }>;
+      authRoles: string[];
+    }>('/api/mobile/config'),
 };
 
 export function findProduct(products: Product[], code: string) {

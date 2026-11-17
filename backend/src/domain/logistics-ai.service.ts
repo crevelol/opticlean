@@ -1,5 +1,5 @@
 import type { AppState, Order } from './types.js';
-import { activeVehicles } from './fleet.service.js';
+import { resolveBusinessRules } from './business-rules.js';
 
 export type FleetTruck = {
   id: string;
@@ -10,6 +10,8 @@ export type FleetTruck = {
   maxKg: number;
   maxM3: number;
   costPerKm: number;
+  /** Vacío = sin restricción de sectores */
+  allowedSectors?: string[];
 };
 
 export type AutoAssignItem = {
@@ -48,6 +50,49 @@ type TruckContext = FleetTruck & {
   freeM3: number;
   stopsOnRoute: number;
 };
+
+const DEFAULT_FLEET: FleetTruck[] = [
+  {
+    id: 'T01',
+    plate: 'GBA-2041',
+    label: 'Camión 01',
+    city: 'Quito',
+    driver: 'Carlos Sur',
+    maxKg: 5000,
+    maxM3: 20,
+    costPerKm: 0.85,
+  },
+  {
+    id: 'T02',
+    plate: 'GYE-1188',
+    label: 'Camión 02',
+    city: 'Guayaquil',
+    driver: 'María Costa',
+    maxKg: 4000,
+    maxM3: 16,
+    costPerKm: 0.8,
+  },
+  {
+    id: 'T03',
+    plate: 'CUE-3301',
+    label: 'Camión 03',
+    city: 'Cuenca',
+    driver: 'Luis Andes',
+    maxKg: 3000,
+    maxM3: 12,
+    costPerKm: 0.75,
+  },
+  {
+    id: 'T04',
+    plate: 'AMB-5520',
+    label: 'Camión 04',
+    city: 'Santo Domingo',
+    driver: 'Ana Rivera',
+    maxKg: 4500,
+    maxM3: 18,
+    costPerKm: 0.78,
+  },
+];
 
 function productOf(s: AppState, id: string) {
   return s.products.find((p) => p.id === id);
@@ -128,7 +173,22 @@ function buildContext(
   return { readyOrders, trucks };
 }
 
-function heuristicAssign(ready: ReadyOrder[], trucks: TruckContext[]): AutoAssignPlan {
+function allowsSector(t: FleetTruck, sector: string) {
+  const allowed = t.allowedSectors ?? [];
+  if (!allowed.length) return true;
+  const target = sector.trim().toLowerCase();
+  if (!target) return true;
+  return allowed.some((s) => {
+    const a = s.toLowerCase();
+    return a === target || a.includes(target) || target.includes(a);
+  });
+}
+
+function heuristicAssign(
+  ready: ReadyOrder[],
+  trucks: TruckContext[],
+  rules = resolveBusinessRules(),
+): AutoAssignPlan {
   const used = new Map(trucks.map((t) => [t.id, { kg: t.usedKg, m3: t.usedM3, count: t.stopsOnRoute }]));
   const sorted = [...ready].sort((a, b) => b.kg - a.kg || b.m3 - a.m3);
   const assignments: AutoAssignItem[] = [];
@@ -142,14 +202,22 @@ function heuristicAssign(ready: ReadyOrder[], trucks: TruckContext[]): AutoAssig
       const nextKg = cur.kg + o.kg;
       const nextM3 = cur.m3 + o.m3;
       if (nextKg > t.maxKg + 0.01 || nextM3 > t.maxM3 + 0.01) continue;
+      if (!allowsSector(t, o.sector)) continue;
       const fill = Math.max(nextKg / t.maxKg, nextM3 / t.maxM3);
-      const fillScore = fill <= 0.85 ? fill * 40 : fill <= 0.95 ? 28 : 10;
+      const fillScore =
+        fill <= rules.assignIdealFillMax
+          ? fill * 40
+          : fill <= rules.assignNearFullFill
+            ? 28
+            : 10;
       const cityScore = t.city === o.city ? 100 : 0;
-      const costScore = (1.2 - t.costPerKm) * 25;
+      const sectorBonus = t.allowedSectors?.length ? 35 : 0;
+      const costScore = (rules.assignCostReference - t.costPerKm) * rules.assignCostWeight;
       const balanceScore = Math.max(0, 18 - cur.count * 2);
-      const score = cityScore + fillScore + costScore + balanceScore;
+      const score = cityScore + fillScore + costScore + balanceScore + sectorBonus;
       const reason = [
         cityScore ? `misma ciudad (${t.city})` : 'capacidad libre',
+        t.allowedSectors?.length ? `sector ${o.sector}` : 'sin regla de sector',
         `${o.kg} kg / ${o.m3} m³ caben`,
         `costo $${t.costPerKm}/km`,
         `ocupación → ${Math.round(fill * 100)}%`,
@@ -162,7 +230,7 @@ function heuristicAssign(ready: ReadyOrder[], trucks: TruckContext[]): AutoAssig
         kg: Math.round(o.kg),
         m3: o.m3,
         city: o.city,
-        reason: 'Sin capacidad kg/m³ en la flota disponible',
+        reason: 'Sin capacidad o sector permitido en la flota disponible',
       });
       continue;
     }
@@ -278,8 +346,9 @@ async function callOpenAi(ready: ReadyOrder[], trucks: TruckContext[]): Promise<
 Asigna pedidos LISTOS a camiones respetando:
 1) Capacidad kg y m³ (no superar freeKg/freeM3 + used).
 2) Preferir misma ciudad del camión.
-3) Equilibrar carga y minimizar costo/km cuando haya empate.
-4) Cada pedido a un solo camión.
+3) Si el camión tiene allowedSectors (lista no vacía), SOLO puede recibir pedidos cuyo sector esté en esa lista. Si allowedSectors está vacío o ausente, no hay restricción de sector.
+4) Equilibrar carga y minimizar costo/km cuando haya empate.
+5) Cada pedido a un solo camión.
 Responde SOLO JSON válido con esta forma:
 {"assignments":[{"orderId":"PED-xxx","truckId":"T01","reason":"..."}],"unassigned":[{"orderId":"PED-yyy","reason":"..."}],"summary":"..."}`;
 
@@ -287,7 +356,6 @@ Responde SOLO JSON válido con esta forma:
 
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
-    signal: AbortSignal.timeout(Number(process.env.OPENAI_TIMEOUT_MS ?? 20000)),
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
@@ -330,20 +398,11 @@ export async function autoAssignLogistics(input: {
   stagedByTruck?: Record<string, string[]>;
   fleet?: FleetTruck[];
 }): Promise<AutoAssignPlan> {
-  const fleet = input.fleet?.length ? input.fleet : activeVehicles(input.state);
-  const stagedByTruck: Record<string, string[]> = {};
-  for (const truck of fleet) {
-    const fromState = input.state.orders
-      .filter((o) => o.status === 'Preparado' && o.stagedPlate === truck.plate)
-      .map((o) => o.id);
-    const extra = input.stagedByTruck?.[truck.id] ?? [];
-    const ids = [...new Set([...fromState, ...extra])];
-    if (ids.length) stagedByTruck[truck.id] = ids;
-  }
+  const fleet = input.fleet?.length ? input.fleet : DEFAULT_FLEET;
   const { readyOrders, trucks } = buildContext(
     input.state,
     input.orderIds,
-    stagedByTruck,
+    input.stagedByTruck,
     fleet,
   );
 
@@ -364,7 +423,11 @@ export async function autoAssignLogistics(input: {
     console.warn('[logistics-ai]', err instanceof Error ? err.message : err);
   }
 
-  const fallback = heuristicAssign(readyOrders, trucks);
+  const fallback = heuristicAssign(
+    readyOrders,
+    trucks,
+    resolveBusinessRules(input.state.settings),
+  );
   fallback.summary = `Fallback local · ${fallback.summary}`;
   return fallback;
 }

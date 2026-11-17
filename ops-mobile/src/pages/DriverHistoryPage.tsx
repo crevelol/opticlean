@@ -1,18 +1,37 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { api } from '../api';
 import type { AuthUser } from '../auth';
-import { clientOf, orderWeight, truckByPlate } from '../lib/fleet';
+import {
+  FLEET as DEFAULT_FLEET,
+  clientOf,
+  orderWeight,
+  truckByPlate,
+  type Truck,
+} from '../lib/fleet';
 import type { AppState } from '../types';
 
 export function DriverHistoryPage({ state, user }: { state: AppState; user: AuthUser }) {
-  const truck = truckByPlate(state, user.truckPlate);
-  const plate = truck?.plate;
+  const [fleet, setFleet] = useState<Truck[]>(DEFAULT_FLEET);
+  useEffect(() => {
+    void api
+      .fleet()
+      .then((r) => {
+        if (r.trucks?.length) setFleet(r.trucks);
+      })
+      .catch(() => {});
+  }, []);
+  const truck = truckByPlate(user.truckPlate, fleet);
   const delivered = useMemo(
     () =>
       state.orders
-        .filter((o) => !o.id.startsWith('PED-H') && o.status === 'Entregado' && !!plate && o.vehicle === plate)
-        .sort((a, b) => (b.deliveredAt ?? b.date).localeCompare(a.deliveredAt ?? a.date))
+        .filter(
+          (o) =>
+            !o.id.startsWith('PED-H') &&
+            o.status === 'Entregado' &&
+            (o.vehicle === truck.plate || !o.vehicle),
+        )
         .slice(0, 20),
-    [state.orders, plate],
+    [state.orders, truck.plate],
   );
 
   return (
@@ -21,7 +40,9 @@ export function DriverHistoryPage({ state, user }: { state: AppState; user: Auth
         <div>
           <div className="eyebrow">Conductor · Historial</div>
           <h1>Entregas recientes</h1>
-          <p>{truck ? `${truck.label} · ${truck.plate}` : 'Sin camión asignado'}</p>
+          <p>
+            {truck.label} · {truck.plate}
+          </p>
         </div>
       </header>
 
@@ -34,8 +55,7 @@ export function DriverHistoryPage({ state, user }: { state: AppState; user: Auth
                   {o.id} · {clientOf(state, o.clientId)?.name}
                 </strong>
                 <small>
-                  {(o.deliveredAt ?? o.date).slice(0, 10)} · {orderWeight(state, o).toFixed(1)} kg
-                  {o.deliveredTo ? ` · Recibió ${o.deliveredTo}` : ''}
+                  {o.date} · {orderWeight(state, o).toFixed(1)} kg · {o.status}
                 </small>
               </li>
             ))}

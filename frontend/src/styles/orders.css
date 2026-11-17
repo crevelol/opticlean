@@ -1,0 +1,141 @@
+.ord-page .tabs {
+  margin-bottom: 12px;
+}
+
+.ord-table td small {
+  display: block;
+  margin-top: 3px;
+  color: var(--slate-600);
+  font-size: var(--text-sm);
+}
+
+.ord-detail {
+  display: grid;
+  gap: 14px;
+}
+
+.ord-detail-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.ord-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ord-meta article {
+  padding: 10px 12px;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  background: var(--slate-50);
+}
+
+.ord-meta span {
+  display: block;
+  font-size: var(--text-xs);
+  letter-spacing: 0.35px;
+  text-transform: uppercase;
+  color: var(--slate-600);
+  margin-bottom: 3px;
+}
+
+.ord-meta strong {
+  font-size: var(--text-md);
+  color: var(--slate-900);
+  line-height: 1.35;
+}
+
+.ord-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
+.ord-lines li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--slate-100);
+  background: var(--slate-0);
+}
+
+.ord-lines li:last-child {
+  border-bottom: 0;
+}
+
+.ord-lines strong {
+  display: block;
+  font-size: var(--text-base);
+}
+
+.ord-lines small {
+  display: block;
+  margin-top: 2px;
+  color: var(--slate-600);
+  font-size: var(--text-sm);
+}
+
+.ord-lines em {
+  font-style: normal;
+  font-weight: var(--weight-bold);
+  font-size: var(--text-base);
+  color: var(--slate-900);
+  white-space: nowrap;
+}
+
+.ord-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 12px 14px;
+  border-radius: var(--radius-xl);
+  background: var(--slate-900);
+  color: var(--slate-0);
+}
+
+.ord-total span {
+  font-size: var(--text-md);
+  opacity: 0.8;
+}
+
+.ord-total strong {
+  font-size: var(--text-3xl);
+  letter-spacing: -0.4px;
+}
+
+.ord-notes {
+  padding: 10px 12px;
+  border-radius: var(--radius-lg);
+  background: var(--amber-50);
+  border: 1px solid var(--amber-200);
+  font-size: var(--text-md);
+  color: var(--amber-800);
+  line-height: 1.4;
+}
+
+.ord-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ord-actions .btn {
+  flex: 1;
+  justify-content: center;
+  min-width: 120px;
+}
+
+@media (max-width: 700px) {
+  .ord-meta {
+    grid-template-columns: 1fr;
+  }
+}

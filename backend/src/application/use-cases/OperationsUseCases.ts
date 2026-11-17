@@ -1,5 +1,6 @@
 import type { StateRepository } from '../ports/StateRepository.js';
-import type { AppState, Bundle, Client, Product, Settings } from '../../domain/types.js';
+import type { AppState, Client, Product, Settings } from '../../domain/types.js';
+import { mergeBusinessRules } from '../../domain/business-rules.js';
 import { categories } from '../../domain/warehouse.js';
 import { getWarehouseGeometry } from '../../domain/warehouse-layout.js';
 import {
@@ -7,7 +8,6 @@ import {
   client,
   confirmDelivery,
   createOrder,
-  deleteProduct,
   dispatch,
   move,
   orderValue,
@@ -23,6 +23,10 @@ import {
   upsertProduct,
 } from '../../domain/inventory.service.js';
 import { uid } from '../../domain/inventory.service.js';
+import {
+  applyParsedInvoice,
+  parseFacturaXml,
+} from '../../domain/invoice-xml.service.js';
 import { suggest } from '../../domain/placement.service.js';
 import {
   deleteFamily,
@@ -35,36 +39,53 @@ import {
   deleteWarehouse,
   upsertWarehouse,
 } from '../../domain/warehouse-admin.service.js';
-import type { Vehicle, WarehouseFamily, WarehouseSite } from '../../domain/types.js';
-import {
-  cancelOrder,
-  cancelPurchase,
-  createClient,
-  createPurchase,
-  deleteClient,
-  stageOrders,
-  unstageOrders,
-  updateClient,
-} from '../../domain/commerce.service.js';
-import { deleteBundle, ensureBundles, saveBundle } from '../../domain/bundles.service.js';
-import { deleteVehicle, upsertVehicle } from '../../domain/fleet.service.js';
+import type { WarehouseFamily, WarehouseSite } from '../../domain/types.js';
 
-/** Serializa las escrituras: cada mutación lee y guarda el estado completo. */
-let writeQueue: Promise<unknown> = Promise.resolve();
+export const BUNDLES = [
+  {
+    id: 'KIT01',
+    name: 'Kit Limpieza Básico',
+    description: 'Multiusos, limpiador de pisos y fundas',
+    lines: [
+      { productId: 'P001', qty: 4 },
+      { productId: 'P032', qty: 2 },
+      { productId: 'P078', qty: 2 },
+    ],
+  },
+  {
+    id: 'KIT02',
+    name: 'Kit Oficina',
+    description: 'Papel higiénico, toallas y jabón',
+    lines: [
+      { productId: 'P012', qty: 2 },
+      { productId: 'P025', qty: 2 },
+      { productId: 'P045', qty: 4 },
+    ],
+  },
+  {
+    id: 'KIT03',
+    name: 'Kit Hospitalario',
+    description: 'Desinfectante, guantes y jabón',
+    lines: [
+      { productId: 'P008', qty: 6 },
+      { productId: 'P052', qty: 2 },
+      { productId: 'P045', qty: 4 },
+    ],
+  },
+];
 
 export class OperationsUseCases {
   constructor(private readonly repo: StateRepository) {}
 
   async getMeta() {
     const s = await this.repo.load();
-    ensureBundles(s);
     const geo = getWarehouseGeometry(s);
     return {
       categories,
       racks: geo.racks,
       locations: geo.locations,
       layout: geo.layout,
-      bundles: s.bundles ?? [],
+      bundles: BUNDLES,
     };
   }
 
@@ -76,33 +97,20 @@ export class OperationsUseCases {
     return this.repo.reset();
   }
 
-  private actor: string | undefined;
-
-  /** Instancia con el nombre del usuario autenticado para firmar los eventos de trazabilidad. */
-  as(actor: string | undefined) {
-    const scoped = Object.create(this) as OperationsUseCases;
-    scoped.actor = actor;
-    return scoped;
-  }
-
-  private mutate(fn: (s: AppState) => void | Promise<void>) {
-    const run = writeQueue.then(async () => {
-      const state = await this.repo.load();
-      const eventsBefore = state.events.length;
-      await fn(state);
-      if (this.actor) {
-        for (const ev of state.events.slice(0, state.events.length - eventsBefore)) ev.by = this.actor;
-      }
-      await this.repo.save(state);
-      return state;
-    });
-    writeQueue = run.catch(() => undefined);
-    return run;
+  private async mutate(fn: (s: AppState) => void | Promise<void>) {
+    const state = await this.repo.load();
+    await fn(state);
+    await this.repo.save(state);
+    return state;
   }
 
   async updateSettings(settings: Partial<Settings>) {
     return this.mutate((s) => {
-      s.settings = { ...s.settings, ...settings };
+      const { businessRules, ...rest } = settings;
+      s.settings = { ...s.settings, ...rest };
+      if (businessRules) {
+        s.settings.businessRules = mergeBusinessRules(s.settings.businessRules, businessRules);
+      }
     });
   }
 
@@ -122,12 +130,6 @@ export class OperationsUseCases {
     const { originalId, ...rest } = body;
     return this.mutate((s) => {
       upsertProduct(s, rest, originalId);
-    });
-  }
-
-  async removeProduct(id: string) {
-    return this.mutate((s) => {
-      deleteProduct(s, id);
     });
   }
 
@@ -154,6 +156,16 @@ export class OperationsUseCases {
     return createdId;
   }
 
+  async importInvoiceXml(xml: string) {
+    const invoice = await parseFacturaXml(xml);
+    let result: ReturnType<typeof applyParsedInvoice> | null = null;
+    await this.mutate((s) => {
+      result = applyParsedInvoice(s, invoice);
+    });
+    if (!result) throw new Error('No se pudo importar la factura.');
+    return result;
+  }
+
   async getPickPlan(orderId: string) {
     const s = await this.repo.load();
     const order = s.orders.find((o) => o.id === orderId);
@@ -167,33 +179,13 @@ export class OperationsUseCases {
     });
   }
 
-  async confirmDispatch(orderIds: string[], vehicle = 'GBA-2041') {
+  async confirmDispatch(
+    orderIds: string[],
+    vehicle = 'GBA-2041',
+    limits?: { maxKg?: number; maxM3?: number },
+  ) {
     return this.mutate((s) => {
-      dispatch(s, orderIds, vehicle);
-    });
-  }
-
-  async stageLoad(orderIds: string[], plate: string) {
-    return this.mutate((s) => {
-      stageOrders(s, orderIds, plate);
-    });
-  }
-
-  async clearStage(orderIds: string[]) {
-    return this.mutate((s) => {
-      unstageOrders(s, orderIds);
-    });
-  }
-
-  async upsertBundle(body: Partial<Bundle>) {
-    return this.mutate((s) => {
-      saveBundle(s, body);
-    });
-  }
-
-  async removeBundle(id: string) {
-    return this.mutate((s) => {
-      deleteBundle(s, id);
+      dispatch(s, orderIds, vehicle, limits);
     });
   }
 
@@ -209,45 +201,36 @@ export class OperationsUseCases {
     });
   }
 
-  async cancelOrder(orderId: string, reason: string) {
+  async addClient(body: Omit<Client, 'id'> & { creditLimit?: number | string }) {
     return this.mutate((s) => {
-      cancelOrder(s, orderId, reason);
+      const creditLimit = Number(body.creditLimit);
+      s.clients.push({
+        ...body,
+        id: uid('CL'),
+        creditLimit: Number.isFinite(creditLimit) && creditLimit >= 0 ? creditLimit : 3000,
+      });
     });
   }
 
-  async addClient(body: Partial<Client>) {
+  async updateClient(
+    id: string,
+    body: Partial<Omit<Client, 'id'>> & { creditLimit?: number | string },
+  ) {
     return this.mutate((s) => {
-      createClient(s, body);
-    });
-  }
-
-  async editClient(id: string, body: Partial<Client>) {
-    return this.mutate((s) => {
-      updateClient(s, id, body);
-    });
-  }
-
-  async removeClient(id: string) {
-    return this.mutate((s) => {
-      deleteClient(s, id);
-    });
-  }
-
-  async saveVehicle(body: Partial<Vehicle>) {
-    return this.mutate((s) => {
-      upsertVehicle(s, body);
-    });
-  }
-
-  async removeVehicle(id: string) {
-    return this.mutate((s) => {
-      deleteVehicle(s, id);
-    });
-  }
-
-  async voidPurchase(id: string) {
-    return this.mutate((s) => {
-      cancelPurchase(s, id);
+      const c = s.clients.find((x) => x.id === id);
+      if (!c) throw new Error('Cliente no encontrado.');
+      if (body.name !== undefined) c.name = String(body.name).trim() || c.name;
+      if (body.contact !== undefined) c.contact = String(body.contact).trim() || c.contact;
+      if (body.address !== undefined) c.address = String(body.address).trim() || c.address;
+      if (body.email !== undefined) c.email = String(body.email).trim() || c.email;
+      if (body.type !== undefined) c.type = String(body.type).trim() || c.type;
+      if (body.city !== undefined) c.city = String(body.city).trim();
+      if (body.sector !== undefined) c.sector = String(body.sector).trim();
+      if (body.creditLimit !== undefined) {
+        const n = Number(body.creditLimit);
+        if (!Number.isFinite(n) || n < 0) throw new Error('Límite de crédito inválido.');
+        c.creditLimit = n;
+      }
     });
   }
 
@@ -275,9 +258,17 @@ export class OperationsUseCases {
     });
   }
 
-  async addPurchase(body: { productId: string; qty: number; date?: string; notes?: string }) {
+  async addPurchase(body: { productId: string; qty: number; date: string; notes?: string }) {
+    const qty = Number(body.qty);
+    if (!Number.isInteger(qty) || qty <= 0) {
+      throw new Error('La cantidad debe ser un entero mayor que cero.');
+    }
     return this.mutate((s) => {
-      createPurchase(s, body);
+      s.purchases.unshift({
+        ...body,
+        qty,
+        id: `OC-${String(s.purchases.length + 1).padStart(4, '0')}`,
+      });
     });
   }
 

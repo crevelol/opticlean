@@ -7,7 +7,7 @@ import { useAuth } from '../../shared/hooks/AuthProvider';
 import { can } from '../../shared/auth/permissions';
 import { isRaw } from '../../shared/lib/bom';
 import { buildForecast, suggestedPurchaseQty, type ConfidenceLevel } from '../../shared/lib/forecast';
-import { Badge, Btn, Empty, Kpi, PageHead, ProductCell } from '../../shared/components/ui';
+import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead, ProductCell } from '../../shared/components/ui';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import { dateShort, num } from '../../shared/lib/inventory';
 import { Icon } from '../../shared/components/Icon';
@@ -100,8 +100,8 @@ export function PurchasesPage() {
         }
       />
 
-      <div className="kpis">
-        <Kpi label="Urgente ahora" value={urgent.length} unit="SKU" foot="Quiebre o riesgo de producción" icon="alert" />
+      <KpiGrid>
+        <Kpi label="Urgente ahora" tone={urgent.length ? 'danger' : 'default'} value={urgent.length} unit="SKU" foot="Quiebre o riesgo de producción" icon="alert" />
         <Kpi label="Pronóstico pronto" value={soon.length} unit="SKU" foot={`Lead time ${forecast.leadDays} días`} icon="calendar" />
         <Kpi label="Riesgo producción" value={forecast.productionRisks.length} unit="" foot="BOM / materia prima" icon="layers" />
         <Kpi
@@ -111,7 +111,7 @@ export function PurchasesPage() {
           foot="Sube con más historial estable"
           icon="spark"
         />
-      </div>
+      </KpiGrid>
 
       <section className="fc-banner" aria-label="Insight de previsión">
         <Icon name="spark" />

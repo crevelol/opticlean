@@ -12,6 +12,8 @@ export type AuthUser = {
   email: string;
   name: string;
   role: AuthRole;
+  /** Empresa (tenant) para menú y módulos */
+  companyId: string;
   /** Placa asignada al conductor */
   truckPlate?: string;
   passwordHash: string;
@@ -22,6 +24,7 @@ export type PublicUser = {
   email: string;
   name: string;
   role: AuthRole;
+  companyId: string;
   truckPlate?: string;
 };
 
@@ -81,6 +84,7 @@ function signToken(user: PublicUser) {
       email: user.email,
       name: user.name,
       role: user.role,
+      companyId: user.companyId,
       truckPlate: user.truckPlate,
       iat: now,
       exp: now + TOKEN_TTL_SEC,
@@ -105,6 +109,7 @@ export function verifyToken(token: string): PublicUser | null {
       email: string;
       name: string;
       role: AuthRole;
+      companyId?: string;
       truckPlate?: string;
       exp: number;
     };
@@ -114,6 +119,7 @@ export function verifyToken(token: string): PublicUser | null {
       email: body.email,
       name: body.name,
       role: body.role,
+      companyId: body.companyId || 'co-innovamf',
       truckPlate: body.truckPlate,
     };
   } catch {
@@ -127,6 +133,7 @@ function toPublic(u: AuthUser): PublicUser {
     email: u.email,
     name: u.name,
     role: u.role,
+    companyId: u.companyId || 'co-innovamf',
     truckPlate: u.truckPlate,
   };
 }
@@ -138,12 +145,14 @@ function envPass(key: string, fallback: string) {
 function demoUsers(): AuthUser[] {
   const pass = envPass('OPTICLEAN_DEMO_PASSWORD', 'OptiClean2026!');
   const truckPlate = process.env.OPTICLEAN_DRIVER_TRUCK || 'GBA-2041';
+  const companyId = process.env.OPTICLEAN_DEFAULT_COMPANY || 'co-innovamf';
   return [
     {
       id: 'U-ADMIN',
       email: (process.env.OPTICLEAN_ADMIN_EMAIL || 'admin@innovamf.com').toLowerCase(),
       name: 'Administración',
       role: 'admin',
+      companyId,
       passwordHash: hashPassword(envPass('OPTICLEAN_ADMIN_PASSWORD', pass)),
     },
     {
@@ -151,6 +160,7 @@ function demoUsers(): AuthUser[] {
       email: (process.env.OPTICLEAN_BODEGA_EMAIL || 'bodega@innovamf.com').toLowerCase(),
       name: 'Bodega piso',
       role: 'ops',
+      companyId,
       passwordHash: hashPassword(envPass('OPTICLEAN_BODEGA_PASSWORD', pass)),
     },
     {
@@ -158,6 +168,7 @@ function demoUsers(): AuthUser[] {
       email: (process.env.OPTICLEAN_OPS_EMAIL || 'ops@innovamf.com').toLowerCase(),
       name: 'Bodega (alias)',
       role: 'ops',
+      companyId,
       passwordHash: hashPassword(envPass('OPTICLEAN_OPS_PASSWORD', pass)),
     },
     {
@@ -165,6 +176,7 @@ function demoUsers(): AuthUser[] {
       email: (process.env.OPTICLEAN_DISPATCH_EMAIL || 'despacho@innovamf.com').toLowerCase(),
       name: 'Despacho logística',
       role: 'dispatch',
+      companyId,
       passwordHash: hashPassword(envPass('OPTICLEAN_DISPATCH_PASSWORD', pass)),
     },
     {
@@ -172,8 +184,17 @@ function demoUsers(): AuthUser[] {
       email: (process.env.OPTICLEAN_DRIVER_EMAIL || 'conductor@innovamf.com').toLowerCase(),
       name: 'Carlos Sur',
       role: 'driver',
+      companyId,
       truckPlate,
       passwordHash: hashPassword(envPass('OPTICLEAN_DRIVER_PASSWORD', pass)),
+    },
+    {
+      id: 'U-DEMO-CO',
+      email: (process.env.OPTICLEAN_DEMO_CO_EMAIL || 'demo@cliente.com').toLowerCase(),
+      name: 'Operador Demo',
+      role: 'ops',
+      companyId: 'co-demo',
+      passwordHash: hashPassword(envPass('OPTICLEAN_DEMO_CO_PASSWORD', pass)),
     },
   ];
 }
@@ -230,6 +251,16 @@ export function authRequired(req: Request, res: Response, next: NextFunction) {
   }
   req.user = user;
   next();
+}
+
+export function adminRequired(req: Request, res: Response, next: NextFunction) {
+  authRequired(req, res, () => {
+    if (req.user?.role !== 'admin') {
+      res.status(403).json({ error: 'Solo administración' });
+      return;
+    }
+    next();
+  });
 }
 
 export function publicUserFromRequest(req: Request) {

@@ -1,9 +1,13 @@
 import type { AppState, Order } from '../types';
 
+export type VehicleKind = 'carro' | 'camion' | 'motocicleta';
+
 export type Truck = {
   id: string;
   plate: string;
   label: string;
+  vehicleType?: VehicleKind;
+  vehicleTypeLabel?: string;
   city: string;
   driver: string;
   maxKg: number;
@@ -11,31 +15,101 @@ export type Truck = {
   costPerKm: number;
   etaHours: number;
   routeKm: number;
+  allowedSectors?: string[];
 };
 
-const ROUTE_ESTIMATES: Record<string, Pick<Truck, 'etaHours' | 'routeKm'>> = {
-  'GBA-2041': { etaHours: 3.33, routeKm: 62 },
-  'GYE-1188': { etaHours: 4.17, routeKm: 65 },
-  'CUE-3301': { etaHours: 3.83, routeKm: 65 },
-  'AMB-5520': { etaHours: 4.08, routeKm: 66 },
-};
-
-const DEFAULT_ESTIMATE = { etaHours: 4, routeKm: 60 };
-
-/** Flota activa registrada en el backend, con estimaciones de ruta. */
-export function fleetOf(s: AppState): Truck[] {
-  return (s.vehicles ?? [])
-    .filter((v) => v.active)
-    .map((v) => ({ ...DEFAULT_ESTIMATE, ...ROUTE_ESTIMATES[v.plate], ...v }));
+export function vehicleAllowsSector(t: Pick<Truck, 'allowedSectors'>, sector: string) {
+  const allowed = t.allowedSectors ?? [];
+  if (!allowed.length) return true;
+  const target = sector.trim().toLowerCase();
+  if (!target) return true;
+  return allowed.some((s) => {
+    const a = s.toLowerCase();
+    return a === target || a.includes(target) || target.includes(a);
+  });
 }
+
+export function vehicleKindLabel(t: Truck) {
+  if (t.vehicleTypeLabel) return t.vehicleTypeLabel;
+  if (t.vehicleType === 'motocicleta') return 'Motocicleta';
+  if (t.vehicleType === 'carro') return 'Carro';
+  return 'Camión';
+}
+
+export function vehicleIconName(t: Pick<Truck, 'vehicleType'> | VehicleKind | undefined) {
+  const kind = typeof t === 'string' ? t : t?.vehicleType;
+  if (kind === 'motocicleta') return 'motorcycle';
+  if (kind === 'carro') return 'car';
+  return 'truck';
+}
+
+/** Fallback si /api/fleet no responde. */
+export const FLEET: Truck[] = [
+  {
+    id: 'veh-t01',
+    plate: 'GBA-2041',
+    label: 'Camión 01',
+    vehicleType: 'camion',
+    vehicleTypeLabel: 'Camión',
+    city: 'Quito',
+    driver: 'Carlos Sur',
+    maxKg: 5000,
+    maxM3: 20,
+    costPerKm: 0.85,
+    etaHours: 3.33,
+    routeKm: 62,
+  },
+  {
+    id: 'veh-t02',
+    plate: 'GYE-1188',
+    label: 'Camión 02',
+    vehicleType: 'camion',
+    vehicleTypeLabel: 'Camión',
+    city: 'Guayaquil',
+    driver: 'María Costa',
+    maxKg: 4000,
+    maxM3: 16,
+    costPerKm: 0.8,
+    etaHours: 4.17,
+    routeKm: 65,
+  },
+  {
+    id: 'veh-t03',
+    plate: 'CUE-3301',
+    label: 'Camión 03',
+    vehicleType: 'camion',
+    vehicleTypeLabel: 'Camión',
+    city: 'Cuenca',
+    driver: 'Luis Andes',
+    maxKg: 3000,
+    maxM3: 12,
+    costPerKm: 0.75,
+    etaHours: 3.83,
+    routeKm: 65,
+  },
+  {
+    id: 'veh-t04',
+    plate: 'AMB-5520',
+    label: 'Camión 04',
+    vehicleType: 'camion',
+    vehicleTypeLabel: 'Camión',
+    city: 'Santo Domingo',
+    driver: 'Ana Rivera',
+    maxKg: 4500,
+    maxM3: 18,
+    costPerKm: 0.78,
+    etaHours: 4.08,
+    routeKm: 66,
+  },
+];
 
 export const ROUTE_STATUSES = new Set(['En ruta', 'Incidencia']);
 
-export function truckByPlate(s: AppState, plate?: string) {
-  return (s.vehicles ?? [])
-    .map((v) => ({ ...DEFAULT_ESTIMATE, ...ROUTE_ESTIMATES[v.plate], ...v }))
-    .find((t) => t.plate === plate);
+export function truckByPlate(plate?: string, fleet: Truck[] = FLEET) {
+  if (!fleet.length) return FLEET[0];
+  return fleet.find((t) => t.plate === plate) ?? fleet[0];
 }
+
 export function clientOf(s: AppState, id: string) {
   return s.clients.find((c) => c.id === id);
 }
@@ -120,30 +194,4 @@ export function depotGeo(city: string) {
     'Santo Domingo': { lat: -0.26, lng: -79.19 },
   };
   return depots[city] ?? depots.Quito;
-}
-
-function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
-  const R = 6371;
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
-  const lat1 = (a.lat * Math.PI) / 180;
-  const lat2 = (b.lat * Math.PI) / 180;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-
-export function measureRoute(s: AppState, city: string, orders: Order[]) {
-  if (!orders.length) return { km: 0, etaHours: 0 };
-  const depot = depotGeo(city);
-  let km = 0;
-  let prev = depot;
-  orders.forEach((o, i) => {
-    const point = stopGeo(s, o, i);
-    km += haversineKm(prev, point);
-    prev = point;
-  });
-  km += haversineKm(prev, depot);
-  km = Math.round(km * 10) / 10;
-  const etaHours = Math.round((km / 22 + orders.length * 0.2) * 100) / 100;
-  return { km, etaHours };
 }

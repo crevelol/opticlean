@@ -26,6 +26,7 @@ import { WarehousePage } from './pages/WarehousePage';
 export function App() {
   const [user, setUser] = useState<AuthUser | null>(() => getStoredUser());
   const [authChecking, setAuthChecking] = useState(() => !!getToken());
+  const [roleAllowed, setRoleAllowed] = useState<boolean | null>(null);
   const [state, setState] = useState<AppState | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -55,6 +56,29 @@ export function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setRoleAllowed(null);
+      return;
+    }
+    if (user.role === 'admin') {
+      setRoleAllowed(true);
+      return;
+    }
+    let cancelled = false;
+    void api
+      .mobileConfig()
+      .then((r) => {
+        if (!cancelled) setRoleAllowed(r.authRoles.includes(user.role));
+      })
+      .catch(() => {
+        if (!cancelled) setRoleAllowed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const refresh = useCallback(async () => {
     if (!getToken()) return;
@@ -89,6 +113,25 @@ export function App() {
         <Route path="/login" element={<LoginPage user={null} onLogin={setUser} />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
+    );
+  }
+
+  if (roleAllowed === false) {
+    return (
+      <div className="boot">
+        <p>Tu rol móvil no está habilitado para esta empresa.</p>
+        <p className="subtle">Pide a administración que active el rol en Admin → Empresa → Roles móvil.</p>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => {
+            clearSession();
+            setUser(null);
+          }}
+        >
+          Cerrar sesión
+        </button>
+      </div>
     );
   }
 

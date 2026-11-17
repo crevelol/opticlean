@@ -1,54 +1,56 @@
-﻿import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
-import { client, money as moneyFmt, orderValue, orderWeight, product, statusColor } from '../../shared/lib/inventory';
-import { Badge, Btn, PageHead } from '../../shared/components/ui';
+import {
+  client,
+  money as moneyFmt,
+  orderValue,
+  orderWeight,
+  product,
+  statusColor,
+} from '../../shared/lib/inventory';
+import { Badge, Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import type { Order } from '../../shared/types';
 import { RouteMap } from './RouteMap';
+import { FleetConfigModal } from './FleetConfigModal';
 import {
-  fleetOf,
+  FLEET as DEFAULT_FLEET,
   activeOrders as getActiveOrders,
   cityOf,
   fmtHours,
   orderVolume,
   packagesOf,
-  measureRoute,
   routeOrders,
   sectorOf,
   statusLabel,
   statusTone,
   suggestAutoAssign,
   truckLoad as calcTruckLoad,
+  vehicleAllowsSector,
+  vehicleIconName,
+  vehicleKindLabel,
   type AutoAssignPlan,
+  type Truck,
 } from './fleet';
 import '../../styles/logistics.css';
 
 export function LogisticsPage() {
   const { state, applyResponse, toast } = useAppState();
   const navigate = useNavigate();
+  const [fleet, setFleet] = useState<Truck[]>(DEFAULT_FLEET);
   const [query, setQuery] = useState('');
   const [openCities, setOpenCities] = useState<Record<string, boolean>>({
     Quito: true,
     Guayaquil: true,
     Cuenca: true,
   });
-  const [selectedTruck, setSelectedTruck] = useState('T01');
+  const [selectedTruck, setSelectedTruck] = useState(DEFAULT_FLEET[0]?.id ?? '');
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
   const [listTab, setListTab] = useState<'pendientes' | 'listos' | 'en_ruta'>('listos');
-  const stagedByTruck = useMemo(() => {
-    const map: Record<string, string[]> = {};
-    if (!state) return map;
-    for (const truck of fleetOf(state)) {
-      const ids = state.orders
-        .filter((o) => o.status === 'Preparado' && o.stagedPlate === truck.plate)
-        .map((o) => o.id);
-      if (ids.length) map[truck.id] = ids;
-    }
-    return map;
-  }, [state]);
+  const [stagedByTruck, setStagedByTruck] = useState<Record<string, string[]>>({});
   const [pedidosTruckId, setPedidosTruckId] = useState<string | null>(null);
   const [expandedRoute, setExpandedRoute] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -61,18 +63,31 @@ export function LogisticsPage() {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiPlan, setAiPlan] = useState<AutoAssignPlan | null>(null);
   const [preparingId, setPreparingId] = useState<string | null>(null);
+  const [fleetConfigOpen, setFleetConfigOpen] = useState(false);
+
+  useEffect(() => {
+    void api
+      .fleet()
+      .then((r) => {
+        if (!r.trucks?.length) return;
+        setFleet(r.trucks);
+        setSelectedTruck((cur) => (r.trucks.some((t) => t.id === cur) ? cur : r.trucks[0].id));
+      })
+      .catch(() => {});
+  }, []);
 
   const activeOrders = useMemo(() => (state ? getActiveOrders(state) : []), [state]);
 
-  const stagedIds = useMemo(
-    () => new Set(Object.values(stagedByTruck).flat()),
-    [stagedByTruck],
-  );
+  const stagedIds = useMemo(() => new Set(Object.values(stagedByTruck).flat()), [stagedByTruck]);
 
   const tabCounts = useMemo(() => {
     const pendientes = activeOrders.filter((o) => o.status === 'Por preparar').length;
-    const listos = activeOrders.filter((o) => o.status === 'Preparado' && !stagedIds.has(o.id)).length;
-    const enRuta = activeOrders.filter((o) => o.status === 'En ruta' || o.status === 'Incidencia').length;
+    const listos = activeOrders.filter(
+      (o) => o.status === 'Preparado' && !stagedIds.has(o.id),
+    ).length;
+    const enRuta = activeOrders.filter(
+      (o) => o.status === 'En ruta' || o.status === 'Incidencia',
+    ).length;
     return { pendientes, listos, enRuta };
   }, [activeOrders, stagedIds]);
 
@@ -124,27 +139,18 @@ export function LogisticsPage() {
 
   if (!state) return null;
 
-  const fleet = fleetOf(state);
-  if (!fleet.length) {
-    return (
-      <div className="log-page">
-        <PageHead eyebrow="Logística" title="Sin vehículos activos" desc="Registra o activa un vehículo en Configuración → Flota." />
-      </div>
-    );
-  }
   const detail = detailId ? state.orders.find((o) => o.id === detailId) : null;
   const detailClient = detail ? client(state, detail.clientId) : null;
   const detailTruck = detail?.vehicle ? fleet.find((t) => t.plate === detail.vehicle) : null;
 
   const totalVolume = activeOrders.reduce((n, o) => n + orderVolume(state, o), 0);
   const totalWeight = activeOrders.reduce((n, o) => n + orderWeight(state, o), 0);
-  const fleetMaxVolume = fleet.reduce((n, t) => n + t.maxM3, 0);
-  const fleetMaxWeight = fleet.reduce((n, t) => n + t.maxKg, 0);
+  const fleetMaxVolume = 120;
+  const fleetMaxWeight = 10000;
   const trucksInUse = fleet.filter((t) => activeOrders.some((o) => o.vehicle === t.plate));
-  const liveEtas = trucksInUse
-    .map((t) => measureRoute(state, t.city, routeOrders(state, t.plate)).etaHours)
-    .filter((n) => n > 0);
-  const avgEta = liveEtas.length ? liveEtas.reduce((n, h) => n + h, 0) / liveEtas.length : 0;
+  const avgEta = trucksInUse.length
+    ? trucksInUse.reduce((n, t) => n + t.etaHours, 0) / trucksInUse.length
+    : 4.5;
 
   const truck = fleet.find((t) => t.id === selectedTruck) ?? fleet[0];
 
@@ -170,39 +176,47 @@ export function LogisticsPage() {
     activeOrders.some((o) => o.id === id && o.status === 'Preparado' && !stagedIds.has(id)),
   );
 
-  const stageToTruck = async (truckId: string, orderIds: string[]) => {
+  const stageToTruck = (truckId: string, orderIds: string[]) => {
+    const truck = fleet.find((t) => t.id === truckId);
     const ids = [...new Set(orderIds)].filter((id) =>
       activeOrders.some((o) => o.id === id && o.status === 'Preparado' && !stagedIds.has(id)),
     );
-    const target = fleet.find((t) => t.id === truckId);
-    if (!ids.length || !target || assigning) return;
-    setAssigning(true);
-    setError('');
-    try {
-      applyResponse(await api.stageOrders(ids, target.plate));
-      setSelectedOrders((prev) => prev.filter((id) => !ids.includes(id)));
-      setSelectedTruck(truckId);
-      toast(`${ids.length} pedido(s) cargado(s) en ${target.label}. Revisa Pedidos o Enviar camión.`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'No se pudo cargar el camión';
-      setError(msg);
-      toast(msg);
-    } finally {
-      setAssigning(false);
-      setDraggingId(null);
-      setDropTarget(null);
+    if (!ids.length || !truck) return;
+    const allowed: string[] = [];
+    const blocked: string[] = [];
+    for (const id of ids) {
+      const o = activeOrders.find((x) => x.id === id);
+      if (!o) continue;
+      if (vehicleAllowsSector(truck, sectorOf(state!, o))) allowed.push(id);
+      else blocked.push(id);
     }
+    if (blocked.length) {
+      toast(
+        `${blocked.length} pedido(s) fuera de zona de ${truck.label}` +
+          (truck.allowedSectors?.length ? ` (${truck.allowedSectors.join(', ')})` : ''),
+      );
+    }
+    if (!allowed.length) return;
+    setStagedByTruck((prev) => {
+      const next: Record<string, string[]> = {};
+      for (const [tid, list] of Object.entries(prev)) {
+        next[tid] = list.filter((id) => !allowed.includes(id));
+      }
+      next[truckId] = [...new Set([...(next[truckId] ?? []), ...allowed])];
+      return next;
+    });
+    setSelectedOrders((prev) => prev.filter((id) => !allowed.includes(id)));
+    setSelectedTruck(truckId);
+    setDraggingId(null);
+    setDropTarget(null);
+    toast(`${allowed.length} pedido(s) cargado(s) en ${truck.label}. Revisa Pedidos o Enviar.`);
   };
 
-  const unstageOrder = async (orderId: string) => {
-    setError('');
-    try {
-      applyResponse(await api.unstageOrders([orderId]));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'No se pudo retirar el pedido';
-      setError(msg);
-      toast(msg);
-    }
+  const unstageOrder = (truckId: string, orderId: string) => {
+    setStagedByTruck((prev) => ({
+      ...prev,
+      [truckId]: (prev[truckId] ?? []).filter((id) => id !== orderId),
+    }));
   };
 
   const markReady = async (orderId: string) => {
@@ -232,6 +246,7 @@ export function LogisticsPage() {
     try {
       applyResponse(await api.dispatch(ids, t.plate));
       toast(`${t.label} enviado con ${ids.length} pedido(s).`);
+      setStagedByTruck((prev) => ({ ...prev, [truckId]: [] }));
       setPedidosTruckId(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error');
@@ -243,7 +258,9 @@ export function LogisticsPage() {
 
   const runAiAutoAssign = async () => {
     if (!state || aiBusy) return;
-    const ready = activeOrders.filter((o) => o.status === 'Preparado' && !stagedIds.has(o.id) && !o.vehicle);
+    const ready = activeOrders.filter(
+      (o) => o.status === 'Preparado' && !stagedIds.has(o.id) && !o.vehicle,
+    );
     if (!ready.length) {
       toast('No hay pedidos listos para autoasignar.');
       setListTab('listos');
@@ -257,23 +274,33 @@ export function LogisticsPage() {
         const res = await api.logisticsAutoAssign({
           orderIds: ready.map((o) => o.id),
           stagedByTruck,
+          fleet: fleet.map((t) => ({
+            id: t.id,
+            plate: t.plate,
+            label: t.label,
+            city: t.city,
+            driver: t.driver,
+            maxKg: t.maxKg,
+            maxM3: t.maxM3,
+            costPerKm: t.costPerKm,
+            allowedSectors: t.allowedSectors ?? [],
+          })),
         });
         plan = res.plan;
       } catch {
-        plan = suggestAutoAssign(state, ready, stagedByTruck);
+        plan = suggestAutoAssign(state, ready, stagedByTruck, fleet);
         plan.source = 'heuristic';
         plan.summary = `Sin respuesta de IA · ${plan.summary}`;
       }
 
       if (plan.assignments.length) {
-        let latest = state;
-        for (const [truckId, ids] of Object.entries(plan.byTruck)) {
-          const target = fleetOf(latest).find((t) => t.id === truckId);
-          if (!target || !ids.length) continue;
-          const saved = await api.stageOrders(ids, target.plate);
-          applyResponse(saved);
-          latest = saved.state;
-        }
+        setStagedByTruck((prev) => {
+          const next: Record<string, string[]> = { ...prev };
+          for (const [truckId, ids] of Object.entries(plan.byTruck)) {
+            next[truckId] = [...new Set([...(next[truckId] ?? []), ...ids])];
+          }
+          return next;
+        });
         const firstTruck = Object.keys(plan.byTruck)[0];
         if (firstTruck) setSelectedTruck(firstTruck);
         setSelectedOrders([]);
@@ -348,50 +375,42 @@ export function LogisticsPage() {
         }
       />
 
-      <section className="log-metrics" aria-label="Resumen de distribución">
-        <article className="log-metric">
-          <div className="log-metric-label">
-            Total de pedidos <Icon name="orders" />
-          </div>
-          <strong>{activeOrders.length}</strong>
-          <span>en operación</span>
-        </article>
-        <article className="log-metric">
-          <div className="log-metric-label">
-            Volumen total <Icon name="box" />
-          </div>
-          <strong>
-            {totalVolume.toFixed(1)}
-            <small>m³</small>
-          </strong>
-          <span>de {fleetMaxVolume} m³</span>
-        </article>
-        <article className="log-metric">
-          <div className="log-metric-label">
-            Peso total <Icon name="truck" />
-          </div>
-          <strong>
-            {Math.round(totalWeight).toLocaleString('es-EC')}
-            <small>kg</small>
-          </strong>
-          <span>de {fleetMaxWeight.toLocaleString('es-EC')} kg</span>
-        </article>
-        <article className="log-metric">
-          <div className="log-metric-label">
-            Tiempo estimado <Icon name="route" />
-          </div>
-          <strong>{avgEta ? fmtHours(avgEta) : '—'}</strong>
-          <span>{avgEta ? 'promedio de las rutas en curso' : 'sin camiones en ruta'}</span>
-        </article>
-      </section>
+      <KpiGrid label="Resumen de distribución">
+        <Kpi
+          label="Total de pedidos"
+          icon="orders"
+          value={activeOrders.length}
+          caption="en operación"
+        />
+        <Kpi
+          label="Volumen total"
+          icon="box"
+          value={totalVolume.toFixed(1)}
+          unit="m³"
+          caption={`de ${fleetMaxVolume} m³`}
+        />
+        <Kpi
+          label="Peso total"
+          icon="truck"
+          value={Math.round(totalWeight).toLocaleString('es-EC')}
+          unit="kg"
+          caption={`de ${fleetMaxWeight.toLocaleString('es-EC')} kg`}
+        />
+        <Kpi
+          label="Tiempo estimado"
+          icon="route"
+          value={fmtHours(avgEta)}
+          caption="promedio de entrega"
+        />
+      </KpiGrid>
 
       <div className="log-layout">
         <section className="log-panel" aria-label="Pedidos por ciudad">
           <header>
             <h2>Pedidos por ciudad / sector</h2>
             <p>
-              En Pendientes usa <strong>Marcar listo</strong>. Luego arrastra los Listos al camión o usa IA
-              autoasignar.
+              En Pendientes usa <strong>Marcar listo</strong>. Luego arrastra los Listos al camión o
+              usa IA autoasignar.
             </p>
           </header>
 
@@ -551,7 +570,9 @@ export function LogisticsPage() {
                   {assignedVolume.toFixed(1)} m³ · {volPct}%
                 </strong>
               </div>
-              <div className={`log-bar ${volPct >= 95 ? 'is-red' : volPct > 55 ? 'is-amber' : 'is-green'}`}>
+              <div
+                className={`log-bar ${volPct >= 95 ? 'is-red' : volPct > 55 ? 'is-amber' : 'is-green'}`}
+              >
                 <span style={{ width: `${volPct}%` }} />
               </div>
             </div>
@@ -562,7 +583,9 @@ export function LogisticsPage() {
                   {Math.round(assignedWeight).toLocaleString('es-EC')} kg · {kgPct}%
                 </strong>
               </div>
-              <div className={`log-bar ${kgPct >= 95 ? 'is-red' : kgPct > 55 ? 'is-amber' : 'is-green'}`}>
+              <div
+                className={`log-bar ${kgPct >= 95 ? 'is-red' : kgPct > 55 ? 'is-amber' : 'is-green'}`}
+              >
                 <span style={{ width: `${kgPct}%` }} />
               </div>
             </div>
@@ -572,18 +595,23 @@ export function LogisticsPage() {
             <div className="log-trucks-head">
               <h3>
                 <Icon name="truck" />
-                Camiones disponibles
+                Vehículos disponibles
               </h3>
-              <button type="button" className="log-filter-btn">
-                <Icon name="search" />
-                Filtrar
+              <button
+                type="button"
+                className="log-filter-btn"
+                onClick={() => setFleetConfigOpen(true)}
+              >
+                <Icon name="settings" />
+                Configurar flota
               </button>
             </div>
             <ul className="log-truck-list">
               {fleet.map((t) => {
                 const load = truckLoad(t);
                 const active = selectedTruck === t.id;
-                const tone = load.status === 'full' ? 'red' : load.status === 'partial' ? 'amber' : 'green';
+                const tone =
+                  load.status === 'full' ? 'red' : load.status === 'partial' ? 'amber' : 'green';
                 const isDrop = dropTarget === t.id;
                 return (
                   <li key={t.id}>
@@ -615,16 +643,16 @@ export function LogisticsPage() {
                           : dropped
                             ? [...readySelected, dropped]
                             : readySelected;
-                        void stageToTruck(t.id, ids);
+                        stageToTruck(t.id, ids);
                       }}
                     >
                       <div className="log-truck-top">
                         <div className="log-truck-title">
                           <span className={`log-truck-icon log-truck-icon-${tone}`}>
-                            <Icon name="truck" />
+                            <Icon name={vehicleIconName(t)} />
                           </span>
                           <strong>
-                            {t.label} - {t.city}
+                            {t.label} · {vehicleKindLabel(t)} - {t.city}
                           </strong>
                         </div>
                         <span className={`log-truck-badge ${load.status}`}>
@@ -647,6 +675,12 @@ export function LogisticsPage() {
                           <strong>${t.costPerKm.toFixed(2)}</strong>
                         </div>
                       </div>
+                      <p className="log-truck-zones">
+                        <strong>Zonas:</strong>{' '}
+                        {t.allowedSectors?.length
+                          ? t.allowedSectors.join(', ')
+                          : 'Sin restricción de sector'}
+                      </p>
 
                       <div className={`log-truck-bar log-bar is-${tone}`}>
                         <span style={{ width: `${Math.max(load.pct, load.kg > 0 ? 2 : 0)}%` }} />
@@ -665,10 +699,7 @@ export function LogisticsPage() {
                       {active ? (
                         <div className="log-truck-actions">
                           {readySelected.length ? (
-                            <Btn
-                              icon="plus"
-                              onClick={() => void stageToTruck(t.id, readySelected)}
-                            >
+                            <Btn icon="plus" onClick={() => stageToTruck(t.id, readySelected)}>
                               Cargar seleccionados
                             </Btn>
                           ) : null}
@@ -745,13 +776,11 @@ export function LogisticsPage() {
             <ul className="log-route-list">
               {fleet.map((t, index) => {
                 const load = truckLoad(t);
-                const tone = load.status === 'full' ? 'red' : load.status === 'partial' ? 'amber' : 'green';
+                const tone =
+                  load.status === 'full' ? 'red' : load.status === 'partial' ? 'amber' : 'green';
                 const open = expandedRoute === t.id;
                 const stops = routeOrders(state, t.plate);
                 const showStops = stops.length ? stops : load.orders.slice(0, 4);
-                const measured = measureRoute(state, t.city, showStops);
-                const etaLabel = measured.km > 0 ? fmtHours(measured.etaHours) : 'Sin ruta';
-                const costLabel = measured.km > 0 ? moneyFmt(measured.km * t.costPerKm) : '—';
                 return (
                   <li key={t.id} className={`log-route-card ${open ? 'is-open' : ''}`}>
                     <button
@@ -765,14 +794,17 @@ export function LogisticsPage() {
                       <span className={`log-route-num log-route-num-${tone}`}>{index + 1}</span>
                       <span className="log-route-copy">
                         <strong>
-                          {t.label} - {t.city}
+                          {t.label} · {vehicleKindLabel(t)} - {t.city}
                         </strong>
                         <small>
-                          {etaLabel} | {costLabel}
+                          {fmtHours(t.etaHours)} | {moneyFmt(t.routeKm * t.costPerKm)}
                         </small>
                       </span>
-                      <span className="log-route-eta">{etaLabel}</span>
-                      <Icon name="chevron" className={`log-route-chevron ${open ? 'is-open' : ''}`} />
+                      <span className="log-route-eta">{fmtHours(t.etaHours)}</span>
+                      <Icon
+                        name="chevron"
+                        className={`log-route-chevron ${open ? 'is-open' : ''}`}
+                      />
                     </button>
 
                     {open ? (
@@ -784,26 +816,29 @@ export function LogisticsPage() {
                             city={t.city}
                             onSelect={(id) => setDetailId(id)}
                             showFullButton
-                            onFullRoute={() => navigate('/logistica/rutas', { state: { truckId: t.id } })}
+                            onFullRoute={() =>
+                              navigate('/logistica/rutas', { state: { truckId: t.id } })
+                            }
                           />
                           <div>
                             <ul className="log-route-stats">
                               <li>
                                 <Icon name="history" />
                                 <span>
-                                  Tiempo estimado: <strong>{etaLabel}</strong>
+                                  Tiempo estimado: <strong>{fmtHours(t.etaHours)}</strong>
                                 </span>
                               </li>
                               <li>
                                 <Icon name="spark" />
                                 <span>
-                                  Costo estimado: <strong>{costLabel}</strong>
+                                  Costo estimado:{' '}
+                                  <strong>{moneyFmt(t.routeKm * t.costPerKm)}</strong>
                                 </span>
                               </li>
                               <li>
                                 <Icon name="route" />
                                 <span>
-                                  Distancia total: <strong>{measured.km > 0 ? `${measured.km} km` : '—'}</strong>
+                                  Distancia total: <strong>{t.routeKm} km</strong>
                                 </span>
                               </li>
                             </ul>
@@ -813,7 +848,9 @@ export function LogisticsPage() {
                                 {showStops.map((o) => (
                                   <li key={o.id}>
                                     <button type="button" onClick={() => setDetailId(o.id)}>
-                                      <strong>{client(state, o.clientId)?.name ?? o.clientId}</strong>
+                                      <strong>
+                                        {client(state, o.clientId)?.name ?? o.clientId}
+                                      </strong>
                                       <small>
                                         {sectorOf(state, o)} · {o.id}
                                       </small>
@@ -828,7 +865,9 @@ export function LogisticsPage() {
                               <Btn
                                 variant="primary"
                                 icon="route"
-                                onClick={() => navigate('/logistica/rutas', { state: { truckId: t.id } })}
+                                onClick={() =>
+                                  navigate('/logistica/rutas', { state: { truckId: t.id } })
+                                }
                               >
                                 Pantalla de rutas
                               </Btn>
@@ -870,7 +909,7 @@ export function LogisticsPage() {
                   variant="primary"
                   icon="truck"
                   onClick={() => {
-                    void stageToTruck(selectedTruck, [detail.id]);
+                    stageToTruck(selectedTruck, [detail.id]);
                     setDetailId(null);
                   }}
                 >
@@ -911,7 +950,9 @@ export function LogisticsPage() {
           <div className="log-detail">
             <div className="log-detail-status">
               <Badge text={detail.status} color={statusColor(detail.status)} />
-              {detail.priority ? <span className="log-detail-chip">Prioridad {detail.priority}</span> : null}
+              {detail.priority ? (
+                <span className="log-detail-chip">Prioridad {detail.priority}</span>
+              ) : null}
               {detail.vehicle ? (
                 <span className="log-detail-chip">
                   {detailTruck ? `${detailTruck.label} · ${detail.vehicle}` : detail.vehicle}
@@ -945,8 +986,9 @@ export function LogisticsPage() {
               <div>
                 <dt>Carga</dt>
                 <dd>
-                  {orderWeight(state, detail).toFixed(1)} kg · {orderVolume(state, detail).toFixed(2)} m³ ·{' '}
-                  {packagesOf(detail)} {packagesOf(detail) === 1 ? 'paquete' : 'paquetes'}
+                  {orderWeight(state, detail).toFixed(1)} kg ·{' '}
+                  {orderVolume(state, detail).toFixed(2)} m³ · {packagesOf(detail)}{' '}
+                  {packagesOf(detail) === 1 ? 'paquete' : 'paquetes'}
                 </dd>
               </div>
             </dl>
@@ -984,83 +1026,85 @@ export function LogisticsPage() {
         </Modal>
       ) : null}
 
-      {pedidosTruckId ? (() => {
-        const pt = fleet.find((t) => t.id === pedidosTruckId) ?? truck;
-        const staged = stagedOrdersOf(pt.id);
-        const onRoute = activeOrders.filter((o) => o.vehicle === pt.plate);
-        return (
-          <Modal
-            title={`Pedidos · ${pt.label}`}
-            subtitle={`${pt.plate} · saca pedidos de la carga o envía el camión`}
-            onClose={() => setPedidosTruckId(null)}
-            footer={
-              <div className="log-detail-actions">
-                <Btn
-                  variant="primary"
-                  icon="truck"
-                  disabled={!staged.length || assigning}
-                  onClick={() => void sendTruck(pt.id)}
-                >
-                  {assigning ? 'Enviando…' : 'Enviar camión'}
-                </Btn>
-                <Btn onClick={() => setPedidosTruckId(null)}>Cerrar</Btn>
-              </div>
-            }
-          >
-            <div className="log-pedidos-modal">
-              <h4>En carga (aún no enviados)</h4>
-              {staged.length ? (
-                <ul className="log-detail-lines">
-                  {staged.map((o) => (
-                    <li key={o.id}>
-                      <div>
-                        <strong>
-                          {o.id} · {client(state, o.clientId)?.name}
-                        </strong>
-                        <small>
-                          {sectorOf(state, o)} · {orderWeight(state, o).toFixed(1)} kg ·{' '}
-                          {orderVolume(state, o).toFixed(2)} m³
-                        </small>
-                      </div>
-                      <Btn
-                        variant="danger"
-                        icon="close"
-                        onClick={() => void unstageOrder(o.id)}
-                      >
-                        Sacar
-                      </Btn>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="subtle">No hay pedidos en carga. Arrastra listos al camión.</p>
-              )}
+      {pedidosTruckId
+        ? (() => {
+            const pt = fleet.find((t) => t.id === pedidosTruckId) ?? truck;
+            const staged = stagedOrdersOf(pt.id);
+            const onRoute = activeOrders.filter((o) => o.vehicle === pt.plate);
+            return (
+              <Modal
+                title={`Pedidos · ${pt.label}`}
+                subtitle={`${pt.plate} · saca pedidos de la carga o envía el camión`}
+                onClose={() => setPedidosTruckId(null)}
+                footer={
+                  <div className="log-detail-actions">
+                    <Btn
+                      variant="primary"
+                      icon="truck"
+                      disabled={!staged.length || assigning}
+                      onClick={() => void sendTruck(pt.id)}
+                    >
+                      {assigning ? 'Enviando…' : 'Enviar camión'}
+                    </Btn>
+                    <Btn onClick={() => setPedidosTruckId(null)}>Cerrar</Btn>
+                  </div>
+                }
+              >
+                <div className="log-pedidos-modal">
+                  <h4>En carga (aún no enviados)</h4>
+                  {staged.length ? (
+                    <ul className="log-detail-lines">
+                      {staged.map((o) => (
+                        <li key={o.id}>
+                          <div>
+                            <strong>
+                              {o.id} · {client(state, o.clientId)?.name}
+                            </strong>
+                            <small>
+                              {sectorOf(state, o)} · {orderWeight(state, o).toFixed(1)} kg ·{' '}
+                              {orderVolume(state, o).toFixed(2)} m³
+                            </small>
+                          </div>
+                          <Btn
+                            variant="danger"
+                            icon="close"
+                            onClick={() => unstageOrder(pt.id, o.id)}
+                          >
+                            Sacar
+                          </Btn>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="subtle">No hay pedidos en carga. Arrastra listos al camión.</p>
+                  )}
 
-              <h4>Ya en ruta</h4>
-              {onRoute.length ? (
-                <ul className="log-detail-lines">
-                  {onRoute.map((o) => (
-                    <li key={o.id}>
-                      <div>
-                        <strong>
-                          {o.id} · {client(state, o.clientId)?.name}
-                        </strong>
-                        <small>
-                          {statusLabel(o.status)} · {orderWeight(state, o).toFixed(1)} kg
-                        </small>
-                      </div>
-                      <Badge text={o.status} color={statusColor(o.status)} />
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="subtle">Sin pedidos despachados en este camión.</p>
-              )}
-              {error ? <div className="form-error visible">{error}</div> : null}
-            </div>
-          </Modal>
-        );
-      })() : null}
+                  <h4>Ya en ruta</h4>
+                  {onRoute.length ? (
+                    <ul className="log-detail-lines">
+                      {onRoute.map((o) => (
+                        <li key={o.id}>
+                          <div>
+                            <strong>
+                              {o.id} · {client(state, o.clientId)?.name}
+                            </strong>
+                            <small>
+                              {statusLabel(o.status)} · {orderWeight(state, o).toFixed(1)} kg
+                            </small>
+                          </div>
+                          <Badge text={o.status} color={statusColor(o.status)} />
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="subtle">Sin pedidos despachados en este camión.</p>
+                  )}
+                  {error ? <div className="form-error visible">{error}</div> : null}
+                </div>
+              </Modal>
+            );
+          })()
+        : null}
 
       {deliveryOrder ? (
         <Modal
@@ -1097,7 +1141,11 @@ export function LogisticsPage() {
           subtitle={incidentOrder}
           onClose={() => setIncidentOrder(null)}
           footer={
-            <ModalActions onCancel={() => setIncidentOrder(null)} submitLabel="Guardar" formId="incident-form" />
+            <ModalActions
+              onCancel={() => setIncidentOrder(null)}
+              submitLabel="Guardar"
+              formId="incident-form"
+            />
           }
         >
           <form id="incident-form" onSubmit={submitIncident}>
@@ -1135,10 +1183,9 @@ export function LogisticsPage() {
         >
           <div className="log-ai-plan">
             <p className="subtle">
-              Fuente:{' '}
-              <strong>{aiPlan.source === 'openai' ? 'OpenAI' : 'Heurística local'}</strong>. Criterios:
-              ciudad, capacidad kg/m³, ocupación y costo/km. Los pedidos quedaron en carga. Usa{' '}
-              <strong>Enviar camión</strong> para despachar.
+              Fuente: <strong>{aiPlan.source === 'openai' ? 'OpenAI' : 'Heurística local'}</strong>.
+              Criterios: ciudad, capacidad kg/m³, ocupación y costo/km. Los pedidos quedaron en
+              carga. Usa <strong>Enviar camión</strong> para despachar.
             </p>
             {Object.entries(aiPlan.byTruck).map(([truckId, ids]) => {
               const t = fleet.find((x) => x.id === truckId);
@@ -1149,8 +1196,8 @@ export function LogisticsPage() {
                     {t?.label ?? truckId} · {t?.plate} · {t?.city}
                   </h4>
                   <small>
-                    Cap. {t?.maxKg.toLocaleString('es-EC')} kg / {t?.maxM3} m³ · ${t?.costPerKm}/km ·{' '}
-                    {ids.length} pedido(s)
+                    Cap. {t?.maxKg.toLocaleString('es-EC')} kg / {t?.maxM3} m³ · ${t?.costPerKm}/km
+                    · {ids.length} pedido(s)
                   </small>
                   <ul>
                     {items.map((a) => (
@@ -1184,6 +1231,18 @@ export function LogisticsPage() {
             ) : null}
           </div>
         </Modal>
+      ) : null}
+
+      {fleetConfigOpen ? (
+        <FleetConfigModal
+          onClose={() => setFleetConfigOpen(false)}
+          onFleetChange={(trucks) => {
+            setFleet(trucks);
+            setSelectedTruck((cur) =>
+              trucks.some((t) => t.id === cur) ? cur : (trucks[0]?.id ?? ''),
+            );
+          }}
+        />
       ) : null}
     </div>
   );

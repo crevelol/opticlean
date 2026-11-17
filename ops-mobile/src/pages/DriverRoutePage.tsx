@@ -1,18 +1,20 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { clearSession, type AuthUser } from '../auth';
 import { RouteMap } from '../components/RouteMap';
 import { Icon } from '../components/Icon';
 import {
+  FLEET as DEFAULT_FLEET,
   clientOf,
   fmtHours,
-  measureRoute,
   orderWeight,
   packagesOf,
   productOf,
   routeOrders,
   sectorOf,
   truckByPlate,
+  vehicleIconName,
+  type Truck,
 } from '../lib/fleet';
 import type { AppState } from '../types';
 
@@ -22,23 +24,44 @@ type Props = {
   onRefresh: () => Promise<void>;
 };
 
+type ViewTab = 'mapa' | 'paradas' | 'entrega';
+
 export function DriverRoutePage({ state, user, onRefresh }: Props) {
-  const assigned = truckByPlate(state, user.truckPlate);
-  const plate = assigned?.plate ?? '';
-  const stops = useMemo(() => (plate ? routeOrders(state, plate) : []), [state, plate]);
+  const [fleet, setFleet] = useState<Truck[]>(DEFAULT_FLEET);
+  useEffect(() => {
+    void api
+      .fleet()
+      .then((r) => {
+        if (r.trucks?.length) setFleet(r.trucks);
+      })
+      .catch(() => {});
+  }, []);
+  const truck = truckByPlate(user.truckPlate, fleet);
+  const stops = useMemo(() => routeOrders(state, truck.plate), [state, truck.plate]);
   const [stopId, setStopId] = useState<string | null>(null);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [person, setPerson] = useState('');
   const [notes, setNotes] = useState('');
-  const [incidentReason, setIncidentReason] = useState('Cliente ausente');
+  const [tab, setTab] = useState<ViewTab>('mapa');
 
   const current = stops.find((o) => o.id === stopId) ?? stops[0] ?? null;
   const currentClient = current ? clientOf(state, current.clientId) : null;
+  const currentIndex = current ? stops.findIndex((o) => o.id === current.id) : -1;
   const lineKeys = current ? current.lines.map((l) => `${current.id}:${l.productId}`) : [];
   const allChecked = lineKeys.length > 0 && lineKeys.every((k) => checked[k]);
   const loadKg = Math.round(stops.reduce((n, o) => n + orderWeight(state, o), 0));
+  const progress = stops.length ? Math.round(((currentIndex + 1) / stops.length) * 100) : 0;
+
+  const selectStop = (id: string, goEntrega = false) => {
+    setStopId(id);
+    setChecked({});
+    setPerson('');
+    setNotes('');
+    setError('');
+    if (goEntrega) setTab('entrega');
+  };
 
   const confirmDelivery = async () => {
     if (!current || !allChecked || !person.trim()) return;
@@ -51,6 +74,7 @@ export function DriverRoutePage({ state, user, onRefresh }: Props) {
       setPerson('');
       setNotes('');
       setStopId(null);
+      setTab('paradas');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo confirmar');
     } finally {
@@ -58,41 +82,27 @@ export function DriverRoutePage({ state, user, onRefresh }: Props) {
     }
   };
 
-  const reportIncident = async () => {
-    if (!current || busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      await api.incident({ orderId: current.id, reason: incidentReason, notes });
-      await onRefresh();
-      setChecked({});
-      setNotes('');
-      setStopId(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo registrar la incidencia');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!assigned) {
-    return (
-      <div className="page drv-page">
-        <header className="drv-top">
-          <div>
-            <div className="eyebrow">Conductor · Mi ruta</div>
-            <h1>Sin camión asignado</h1>
-            <p>
-              {user.truckPlate
-                ? `La placa ${user.truckPlate} no está registrada en la flota.`
-                : 'Tu usuario no tiene una placa asignada.'}{' '}
-              Pide a administración que revise la flota.
-            </p>
+  return (
+    <div className="page drv-page">
+      <header className="drv-hero">
+        <div className="drv-hero-top">
+          <div className="drv-hero-brand">
+            <span className="drv-hero-icon" aria-hidden>
+              <Icon name={vehicleIconName(truck)} />
+            </span>
+            <div>
+              <div className="eyebrow">Conductor · Mi ruta</div>
+              <h1>{truck.label}</h1>
+            </div>
           </div>
           <div className="drv-top-actions">
+            <span className={`drv-pill ${stops.length ? 'route' : 'idle'}`}>
+              <i aria-hidden />
+              {stops.length ? 'En ruta' : 'Sin despacho'}
+            </span>
             <button
               type="button"
-              className="btn ghost small"
+              className="drv-logout"
               onClick={() => {
                 clearSession();
                 window.location.assign('/login');
@@ -101,194 +111,218 @@ export function DriverRoutePage({ state, user, onRefresh }: Props) {
               Salir
             </button>
           </div>
-        </header>
-      </div>
-    );
-  }
-  const truck = assigned;
-
-  return (
-    <div className="page drv-page">
-      <header className="drv-top">
-        <div>
-          <div className="eyebrow">Conductor · Mi ruta</div>
-          <h1>{truck.label}</h1>
-          <p>
-            {truck.plate} · {user.name} · {truck.city}
-          </p>
         </div>
-        <div className="drv-top-actions">
-          <span className={`drv-pill ${stops.length ? 'route' : 'idle'}`}>
-            {stops.length ? 'En ruta' : 'Sin despacho'}
-          </span>
-          <button
-            type="button"
-            className="btn ghost small"
-            onClick={() => {
-              clearSession();
-              window.location.assign('/login');
-            }}
-          >
-            Salir
-          </button>
-        </div>
+        <p className="drv-hero-meta">
+          {truck.plate} · {user.name} · {truck.city}
+        </p>
+        {stops.length ? (
+          <div className="drv-progress" aria-label="Avance de ruta">
+            <div className="drv-progress-bar">
+              <span style={{ width: `${Math.max(8, progress)}%` }} />
+            </div>
+            <small>
+              Parada {currentIndex + 1} de {stops.length}
+            </small>
+          </div>
+        ) : null}
       </header>
 
-      <section className="drv-status card">
-        <div>
-          <strong>{loadKg} kg</strong>
-          <small>carga actual</small>
-        </div>
-        <div>
+      <section className="drv-kpis" aria-label="Resumen de ruta">
+        <article>
+          <Icon name="box" />
+          <strong>{loadKg}</strong>
+          <small>kg carga</small>
+        </article>
+        <article>
+          <Icon name="pin" />
           <strong>{stops.length}</strong>
           <small>paradas</small>
-        </div>
-        <div>
-          <strong>{(() => {
-            const route = measureRoute(state, truck.city, stops);
-            return route.km > 0 ? fmtHours(route.etaHours) : '—';
-          })()}</strong>
+        </article>
+        <article>
+          <Icon name="route" />
+          <strong>{fmtHours(truck.etaHours)}</strong>
           <small>ETA</small>
-        </div>
+        </article>
       </section>
 
-      <section className="drv-map-wrap card">
-        <div className="drv-section-head">
-          <h2>Mapa de ruta</h2>
-          <small>Leaflet + OpenStreetMap</small>
-        </div>
-        <RouteMap
-          state={state}
-          orders={stops}
-          city={truck.city}
-          activeId={current?.id}
-          onSelect={(id) => {
-            setStopId(id);
-            setChecked({});
-          }}
-        />
-      </section>
+      <div className="drv-tabs" role="tablist" aria-label="Vista de ruta">
+        <button type="button" className={tab === 'mapa' ? 'is-active' : ''} onClick={() => setTab('mapa')}>
+          <Icon name="map" /> Mapa
+        </button>
+        <button type="button" className={tab === 'paradas' ? 'is-active' : ''} onClick={() => setTab('paradas')}>
+          <Icon name="orders" /> Paradas
+          {stops.length ? <em>{stops.length}</em> : null}
+        </button>
+        <button
+          type="button"
+          className={tab === 'entrega' ? 'is-active' : ''}
+          onClick={() => setTab('entrega')}
+          disabled={!current}
+        >
+          <Icon name="check" /> Entrega
+        </button>
+      </div>
 
-      <section className="card">
-        <div className="drv-section-head">
-          <h2>Paradas de hoy</h2>
-          <small>{stops.length} entregas</small>
-        </div>
-        {stops.length ? (
-          <ul className="drv-stops">
-            {stops.map((o, i) => {
-              const c = clientOf(state, o.clientId);
-              const active = current?.id === o.id;
-              return (
-                <li key={o.id}>
-                  <button
-                    type="button"
-                    className={`drv-stop ${active ? 'is-active' : ''}`}
-                    onClick={() => {
-                      setStopId(o.id);
-                      setChecked({});
-                    }}
-                  >
-                    <span className="drv-stop-num">{i + 1}</span>
-                    <span>
-                      <strong>{c?.name ?? o.clientId}</strong>
-                      <small>
-                        {o.id} · {sectorOf(state, o)} · {packagesOf(o)} prod.
-                      </small>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="subtle">
-            Aún no tienes pedidos despachados. El bodeguero debe usar <strong>Enviar camión</strong> en
-            Distribución.
-          </p>
-        )}
-      </section>
+      {tab === 'mapa' ? (
+        <section className="drv-map-card">
+          <div className="drv-section-head">
+            <h2>Mapa de ruta</h2>
+            <small>{truck.city}</small>
+          </div>
+          <RouteMap
+            state={state}
+            orders={stops}
+            city={truck.city}
+            activeId={current?.id}
+            onSelect={(id) => selectStop(id, true)}
+          />
+          {current && currentClient ? (
+            <button type="button" className="drv-map-next" onClick={() => setTab('entrega')}>
+              <span>
+                <small>
+                  Siguiente · {current.id.replace('PED-', '#')}
+                </small>
+                <strong>{currentClient.name}</strong>
+              </span>
+              <Icon name="arrow" />
+            </button>
+          ) : (
+            <p className="drv-empty-inline">Sin paradas en mapa. Espera el despacho.</p>
+          )}
+        </section>
+      ) : null}
 
-      {current && currentClient ? (
-        <section className="card drv-current">
-          <div className="drv-current-banner">
+      {tab === 'paradas' ? (
+        <section className="drv-stops-card">
+          <div className="drv-section-head">
+            <h2>Paradas de hoy</h2>
+            <small>{stops.length} entregas</small>
+          </div>
+          {stops.length ? (
+            <ol className="drv-timeline">
+              {stops.map((o, i) => {
+                const c = clientOf(state, o.clientId);
+                const active = current?.id === o.id;
+                const kg = orderWeight(state, o);
+                return (
+                  <li key={o.id} className={active ? 'is-active' : ''}>
+                    <button type="button" className="drv-timeline-btn" onClick={() => selectStop(o.id, true)}>
+                      <span className="drv-timeline-rail" aria-hidden>
+                        <em>{i + 1}</em>
+                      </span>
+                      <span className="drv-timeline-body">
+                        <strong>{c?.name ?? o.clientId}</strong>
+                        <small>
+                          {o.id.replace('PED-', '#')} · {sectorOf(state, o)} · {packagesOf(o)} prod. ·{' '}
+                          {kg.toFixed(0)} kg
+                        </small>
+                      </span>
+                      <Icon name="chevron" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          ) : (
+            <div className="drv-empty">
+              <Icon name={vehicleIconName(truck)} />
+              <strong>Sin despacho aún</strong>
+              <p>Cuando despacho envíe tu camión, aquí verás las paradas del día.</p>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {tab === 'entrega' && current && currentClient ? (
+        <section className="drv-delivery-card">
+          <div className="drv-delivery-hero">
             <span>
-              Siguiente {(stops.findIndex((o) => o.id === current.id) + 1) || 1} · {current.id}
+              Parada {currentIndex + 1} · {current.id.replace('PED-', '#')}
             </span>
             <strong>{currentClient.name}</strong>
             <p>
-              {sectorOf(state, current)}, {currentClient.address}
+              {sectorOf(state, current)} · {currentClient.address}
             </p>
-            <a
-              className="btn primary full"
-              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                `${currentClient.address} ${truck.city}`,
-              )}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <Icon name="pin" /> Cómo llegar
-            </a>
+            <div className="drv-delivery-actions">
+              <a
+                className="btn primary full"
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                  `${currentClient.address} ${truck.city}`,
+                )}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Icon name="pin" /> Cómo llegar
+              </a>
+            </div>
+            {currentClient.contact ? (
+              <p className="drv-contact-hint">Contacto: {currentClient.contact}</p>
+            ) : null}
           </div>
 
-          <h3>Checklist de entrega</h3>
-          {current.lines.map((l) => {
-            const key = `${current.id}:${l.productId}`;
-            const p = productOf(state, l.productId);
-            return (
-              <label key={key} className="drv-check">
-                <input
-                  type="checkbox"
-                  checked={!!checked[key]}
-                  onChange={() => setChecked((prev) => ({ ...prev, [key]: !prev[key] }))}
-                />
-                <span>
-                  {p?.name ?? l.productId} × {l.qty}
-                  <small>{orderWeight(state, { ...current, lines: [l] }).toFixed(1)} kg</small>
-                </span>
-              </label>
-            );
-          })}
+          <div className="drv-delivery-body">
+            <h3>Checklist de entrega</h3>
+            <div className="drv-checks">
+              {current.lines.map((l) => {
+                const key = `${current.id}:${l.productId}`;
+                const p = productOf(state, l.productId);
+                return (
+                  <label key={key} className={`drv-check-card ${checked[key] ? 'is-on' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={!!checked[key]}
+                      onChange={() => setChecked((prev) => ({ ...prev, [key]: !prev[key] }))}
+                    />
+                    <span>
+                      <strong>
+                        {p?.name ?? l.productId} × {l.qty}
+                      </strong>
+                      <small>{orderWeight(state, { ...current, lines: [l] }).toFixed(1)} kg</small>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
 
-          <label className="field">
-            <span>Quien recibe</span>
-            <input
-              value={person}
-              onChange={(e) => setPerson(e.target.value)}
-              placeholder={currentClient.contact || 'Nombre'}
-            />
-          </label>
-          <label className="field">
-            <span>Observaciones</span>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
-          </label>
+            <label className="field">
+              <span>Quién recibe</span>
+              <input
+                value={person}
+                onChange={(e) => setPerson(e.target.value)}
+                placeholder={currentClient.contact || 'Nombre de quien recibe'}
+              />
+            </label>
+            <label className="field">
+              <span>Observaciones</span>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                placeholder="Opcional"
+              />
+            </label>
 
-          {error ? <p className="login-error">{error}</p> : null}
-          <button
-            type="button"
-            className="btn primary full"
-            disabled={!allChecked || !person.trim() || busy}
-            onClick={() => void confirmDelivery()}
-          >
-            <Icon name="check" />
-            {busy ? 'Confirmando…' : 'Confirmar entrega'}
-          </button>
-          <label className="field" style={{ marginTop: 12 }}>
-            <span>Incidencia</span>
-            <select value={incidentReason} onChange={(e) => setIncidentReason(e.target.value)}>
-              <option>Cliente ausente</option>
-              <option>Dirección no localizada</option>
-              <option>Recepción no autorizada</option>
-              <option>Producto con novedad</option>
-            </select>
-          </label>
-          <button type="button" className="btn full" disabled={busy} onClick={() => void reportIncident()}>
-            Registrar incidencia
-          </button>
-          <p className="subtle" style={{ marginTop: 8 }}>
-            Marca todos los productos y escribe quién recibe para habilitar la entrega.
-          </p>
+            {error ? <p className="login-error">{error}</p> : null}
+            <button
+              type="button"
+              className="btn primary full drv-confirm"
+              disabled={!allChecked || !person.trim() || busy}
+              onClick={() => void confirmDelivery()}
+            >
+              <Icon name="check" />
+              {busy ? 'Confirmando…' : 'Confirmar entrega'}
+            </button>
+            <p className="subtle drv-hint">Marca todos los productos y escribe quién recibe.</p>
+          </div>
         </section>
+      ) : null}
+
+      {tab === 'entrega' && !current ? (
+        <div className="drv-empty">
+          <Icon name="check" />
+          <strong>Nada por entregar</strong>
+          <p>No hay paradas activas en tu ruta.</p>
+        </div>
       ) : null}
     </div>
   );

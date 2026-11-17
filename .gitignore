@@ -7,6 +7,10 @@ data/
 .env
 backend/.env
 **/.env
+data/admin.db
+data/admin.db-*
+backend/data/admin.db
+admin-web/dist/
 
 *.tsbuildinfo
 ops-mobile/dist/
