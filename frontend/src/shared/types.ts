@@ -125,6 +125,9 @@ export type Order = {
   deliveredAt?: string;
   cancelledAt?: string;
   cancelReason?: string;
+  assignedToUserId?: string;
+  assignedToName?: string;
+  assignedAt?: string;
 };
 
 export type TraceEvent = {

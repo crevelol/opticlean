@@ -102,7 +102,10 @@ function parsePrice(raw: string | number) {
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 0;
 }
 
-function normalizeInvoice(raw: Partial<ParsedInvoice> & { lines?: Array<Partial<ParsedInvoiceLine>> }, source: 'openai' | 'heuristic'): ParsedInvoice {
+export function normalizeInvoice(
+  raw: Partial<ParsedInvoice> & { lines?: Array<Partial<ParsedInvoiceLine>> },
+  source: 'openai' | 'heuristic',
+): ParsedInvoice {
   const lines: ParsedInvoiceLine[] = [];
   for (const line of raw.lines ?? []) {
     const name = String(line.name || line.code || 'Producto').slice(0, 120);
@@ -122,9 +125,11 @@ function normalizeInvoice(raw: Partial<ParsedInvoice> & { lines?: Array<Partial<
       ...(line.packCode ? { packCode: line.packCode } : {}),
     });
   }
-  if (!lines.length) throw new Error('No se encontraron líneas de producto en el XML.');
+  if (!lines.length) {
+    throw new Error('La IA no encontró líneas de producto/costos en el documento.');
+  }
 
-  const buyerName = String(raw.buyerName || 'Cliente XML').slice(0, 120);
+  const buyerName = String(raw.buyerName || 'Cliente importado').slice(0, 120);
   const buyerId = String(raw.buyerId || '').replace(/\D/g, '');
   return {
     buyerName,
@@ -135,7 +140,7 @@ function normalizeInvoice(raw: Partial<ParsedInvoice> & { lines?: Array<Partial<
     sellerTaxId: String(raw.sellerTaxId || '').replace(/\D/g, ''),
     issueDate: String(raw.issueDate || new Date().toISOString().slice(0, 10)).slice(0, 32),
     accessKey: String(raw.accessKey || '').slice(0, 80),
-    docNumber: String(raw.docNumber || 'XML').slice(0, 40),
+    docNumber: String(raw.docNumber || 'DOC').slice(0, 40),
     lines,
     source,
   };
@@ -223,27 +228,20 @@ async function parseFacturaXmlWithAi(xmlRaw: string): Promise<ParsedInvoice> {
   // Limitar tamaño para no saturar el contexto
   const xml = xmlRaw.trim().slice(0, 120_000);
 
-  const system = `Eres un extractor de datos de facturas/comprobantes en XML para OPTICLEAN (Ecuador).
-Puedes recibir CUALQUIER esquema XML (SRI Ecuador, UBL, Factura-e, SAP, custom, con o sin namespaces, CDATA, autorizaciones).
-Identifica el COMPRADOR/cliente (no el emisor/vendedor) y las líneas de productos/servicios.
-Responde SOLO JSON válido con esta forma exacta:
+  const system = `Eres un extractor de facturas para OPTICLEAN (Ecuador).
+Lee el XML y saca COMPRADOR (cliente), PRODUCTOS y COSTOS (precio unitario).
+Responde SOLO JSON:
 {
-  "buyerName":"razón social o nombre del comprador",
-  "buyerId":"RUC/cédula/NIT solo dígitos si es posible",
+  "buyerName":"razón social del comprador",
+  "buyerId":"RUC/cédula solo dígitos",
   "buyerAddress":"dirección",
   "buyerEmail":"email si existe",
-  "issueDate":"fecha de emisión",
-  "accessKey":"clave de acceso u otro id del documento",
-  "docNumber":"número de factura o serie-secuencial",
-  "lines":[{"code":"sku o código","name":"descripción","qty":1,"unitPrice":0}]
+  "issueDate":"fecha emisión",
+  "accessKey":"clave de acceso",
+  "docNumber":"número de factura",
+  "lines":[{"code":"sku","name":"descripción","qty":1,"unitPrice":0}]
 }
-Reglas:
-- qty debe ser número > 0 (redondea a entero si viene decimal).
-- unitPrice es precio unitario numérico.
-- code: usa código del ítem; si no hay, inventa uno corto estable a partir del nombre.
-- Si hay varios bloques de detalle, inclúyelos todos.
-- No inventes productos que no estén en el XML.
-- Si el XML no es un comprobante comercial, buyerName="Cliente XML" y lines=[]`;
+Reglas: comprador ≠ emisor; qty>0; unitPrice numérico (si solo hay total, unitPrice=total/qty); no inventes líneas.`;
 
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
@@ -259,7 +257,7 @@ Reglas:
         { role: 'system', content: system },
         {
           role: 'user',
-          content: `Extrae la factura de este XML:\n\n${xml}`,
+          content: `Extrae cliente, productos y costos de este XML:\n\n${xml}`,
         },
       ],
     }),
@@ -287,50 +285,54 @@ Reglas:
 }
 
 /**
- * Parsea cualquier XML de factura:
- * 1) heurística SRI si aplica
- * 2) IA (OpenAI) para cualquier otro esquema
+ * Parsea XML de factura:
+ * 1) IA (extrae cliente, productos y costos)
+ * 2) Fallback heurística SRI si la IA no está o falla
  */
 export async function parseFacturaXml(xmlRaw: string): Promise<ParsedInvoice> {
   if (!xmlRaw?.trim()) throw new Error('El XML está vacío.');
 
-  let heuristicError = '';
-  try {
-    return parseFacturaXmlHeuristic(xmlRaw);
-  } catch (e) {
-    heuristicError = e instanceof Error ? e.message : 'Parser local falló';
+  if (openaiConfigured()) {
+    try {
+      return await parseFacturaXmlWithAi(xmlRaw);
+    } catch (e) {
+      const aiErr = e instanceof Error ? e.message : 'Error de IA';
+      try {
+        return parseFacturaXmlHeuristic(xmlRaw);
+      } catch (he) {
+        const local = he instanceof Error ? he.message : 'Parser local falló';
+        throw new Error(`No se pudo leer el XML. IA: ${aiErr}. Local: ${local}`);
+      }
+    }
   }
 
-  if (!openaiConfigured()) {
-    throw new Error(
-      `${heuristicError} Configura OPENAI_API_KEY para leer XML de otros formatos con IA.`,
-    );
-  }
-
-  try {
-    return await parseFacturaXmlWithAi(xmlRaw);
-  } catch (e) {
-    const aiErr = e instanceof Error ? e.message : 'Error de IA';
-    throw new Error(`No se pudo leer el XML. Local: ${heuristicError}. IA: ${aiErr}`);
-  }
+  return parseFacturaXmlHeuristic(xmlRaw);
 }
 
 function ensureClient(s: AppState, inv: ParsedInvoice): Client {
   const ruc = inv.buyerId;
-  const byId = ruc ? s.clients.find((c) => c.id === `CL-${ruc}` || c.id === ruc) : undefined;
-  const byName = s.clients.find(
-    (c) => c.name.trim().toLowerCase() === inv.buyerName.trim().toLowerCase(),
-  );
-  const existing = byId || byName;
+  const nameKey = inv.buyerName.trim().toLowerCase();
+  const byId = ruc
+    ? s.clients.find((c) => c.id === `CL-${ruc}` || c.id === ruc || c.id.endsWith(ruc))
+    : undefined;
+  const byRucInContact = ruc
+    ? s.clients.find((c) => c.contact.replace(/\D/g, '').includes(ruc))
+    : undefined;
+  const byName = nameKey
+    ? s.clients.find((c) => c.name.trim().toLowerCase() === nameKey)
+    : undefined;
+  const existing = byId || byRucInContact || byName;
   if (existing) {
+    // Relacionar / enriquecer cliente existente
     if (inv.buyerAddress && inv.buyerAddress !== 'Sin dirección') existing.address = inv.buyerAddress;
     if (inv.buyerEmail) existing.email = inv.buyerEmail;
-    if (ruc && !existing.contact.includes(ruc)) {
+    if (ruc && !existing.contact.replace(/\D/g, '').includes(ruc)) {
       existing.contact = existing.contact ? `${existing.contact} · ${ruc}` : ruc;
     }
     if (!existing.city) existing.city = guessCity(inv.buyerAddress);
     return existing;
   }
+  // Crear cliente nuevo
   const client: Client = {
     id: ruc ? `CL-${ruc}` : uid('CL'),
     name: inv.buyerName,
@@ -347,21 +349,28 @@ function ensureClient(s: AppState, inv: ParsedInvoice): Client {
 }
 
 function ensureProduct(s: AppState, line: ParsedInvoiceLine): Product {
-  const byId = product(s, line.code);
-  const bySku = s.products.find((p) => p.sku.toUpperCase() === line.code);
-  const existing = byId || bySku;
+  const code = line.code.toUpperCase();
+  const nameKey = line.name.trim().toLowerCase();
+  const byId = product(s, line.code) || product(s, code);
+  const bySku = s.products.find((p) => p.sku.toUpperCase() === code);
+  const byName = nameKey
+    ? s.products.find((p) => p.name.trim().toLowerCase() === nameKey && p.kind !== 'raw')
+    : undefined;
+  const existing = byId || bySku || byName;
   if (existing) {
+    // Relacionar / actualizar costo y nombre
     if (line.unitPrice > 0) existing.price = line.unitPrice;
     if (line.name && existing.name !== line.name) existing.name = line.name;
     existing.kind = existing.kind === 'raw' ? 'finished' : existing.kind ?? 'finished';
     return existing;
   }
+  // Crear producto nuevo con el costo que trajo la IA
   return upsertProduct(s, {
     id: line.code,
     sku: line.code,
     name: line.name,
-    category: 'Importado XML',
-    supplier: 'Factura electrónica',
+    category: 'Importado',
+    supplier: 'Documento importado',
     price: line.unitPrice || 1,
     min: 5,
     weight: 1,
@@ -407,6 +416,11 @@ export function applyParsedInvoice(s: AppState, invoice: ParsedInvoice): Invoice
   const grouped = new Map<string, number>();
   for (const l of lines) grouped.set(l.productId, (grouped.get(l.productId) ?? 0) + l.qty);
   const orderLines = [...grouped.entries()].map(([productId, qty]) => ({ productId, qty }));
+
+  if (!orderLines.length) {
+    throw new Error('No hay productos para crear el pedido (la IA no devolvió líneas válidas).');
+  }
+
   const source = invoice.source ?? 'heuristic';
   const blocked = orderLines
     .filter((line) => available(s, line.productId) < line.qty)
@@ -429,9 +443,12 @@ export function applyParsedInvoice(s: AppState, invoice: ParsedInvoice): Invoice
   }
 
   const notes = [
-    `Importado desde XML (${source === 'openai' ? 'IA' : 'parser local'}) ${invoice.docNumber}`,
+    `Importado por ${source === 'openai' ? 'IA' : 'parser local'} · ${invoice.docNumber}`,
     invoice.accessKey ? `Clave: ${invoice.accessKey}` : '',
     `Emisión: ${invoice.issueDate}`,
+    clientCreated ? 'Cliente nuevo' : 'Cliente existente',
+    productsCreated.length ? `${productsCreated.length} producto(s) nuevo(s)` : '',
+    productsUpdated.length ? `${productsUpdated.length} producto(s) relacionado(s)` : '',
   ]
     .filter(Boolean)
     .join(' · ');

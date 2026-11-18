@@ -166,7 +166,14 @@ export function App() {
   const driver = isDriver(user);
   const dispatch = isDispatch(user);
   const warehouse = isWarehouseRole(user);
-  const pending = state.orders.filter((o) => o.status === 'Por preparar').length;
+  const pending = warehouse
+    ? state.orders.filter(
+        (o) =>
+          !o.id.startsWith('PED-H') &&
+          o.status === 'Por preparar' &&
+          (user.role === 'admin' || o.assignedToUserId === user.id),
+      ).length
+    : state.orders.filter((o) => o.status === 'Por preparar').length;
   const home = homePathForRole(user.role);
   const appClass = driver ? 'app-driver' : dispatch ? 'app-dispatch' : 'app-ops';
 
@@ -197,10 +204,13 @@ export function App() {
             </>
           ) : warehouse ? (
             <>
-              <Route path="/" element={<HomePage state={state} />} />
+              <Route path="/" element={<HomePage state={state} user={user} />} />
               <Route path="/inventario" element={<InventoryPage state={state} />} />
               <Route path="/recibir" element={<ReceivePage state={state} onRefresh={refresh} />} />
-              <Route path="/pedidos" element={<OrdersPage state={state} onRefresh={refresh} />} />
+              <Route
+                path="/pedidos"
+                element={<OrdersPage state={state} user={user} onRefresh={refresh} />}
+              />
               <Route path="/bodega" element={<WarehousePage state={state} />} />
               <Route path="/ruta" element={<Navigate to="/" replace />} />
               <Route path="/despacho" element={<Navigate to="/" replace />} />

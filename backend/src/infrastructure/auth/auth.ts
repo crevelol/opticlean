@@ -17,6 +17,8 @@ export type AuthUser = {
   /** Placa asignada al conductor */
   truckPlate?: string;
   passwordHash: string;
+  /** false = no puede iniciar sesión */
+  active?: boolean;
 };
 
 export type PublicUser = {
@@ -27,6 +29,22 @@ export type PublicUser = {
   companyId: string;
   truckPlate?: string;
 };
+
+export type ManagedUser = PublicUser & {
+  active: boolean;
+  isDemo: boolean;
+};
+
+const DEMO_USER_IDS = new Set([
+  'U-ADMIN',
+  'U-BODEGA',
+  'U-OPS',
+  'U-DESPACHO',
+  'U-DRIVER',
+  'U-DEMO-CO',
+]);
+
+const ROLES: AuthRole[] = ['admin', 'ops', 'dispatch', 'driver'];
 
 type UsersFile = { version: 1; users: AuthUser[] };
 
@@ -218,8 +236,12 @@ function ensureUsers(): UsersFile {
 
   const byId = new Map(raw.users.map((u) => [u.id, u]));
   for (const u of desired) {
-    // Usuarios demo siempre sincronizados desde .env
-    byId.set(u.id, u);
+    const prev = byId.get(u.id);
+    // Demo: sincroniza credenciales/rol; conserva active si ya existía
+    byId.set(u.id, {
+      ...u,
+      active: prev?.active === false ? false : true,
+    });
   }
   const next: UsersFile = { version: 1, users: [...byId.values()] };
   writeFileSync(USERS_PATH, JSON.stringify(next, null, 2));
@@ -227,10 +249,158 @@ function ensureUsers(): UsersFile {
   return next;
 }
 
+function persistUsers(users: AuthUser[]) {
+  const next: UsersFile = { version: 1, users };
+  mkdirSync(DATA_DIR, { recursive: true });
+  writeFileSync(USERS_PATH, JSON.stringify(next, null, 2));
+  usersCache = next;
+  return next;
+}
+
+function toManaged(u: AuthUser): ManagedUser {
+  return {
+    ...toPublic(u),
+    active: u.active !== false,
+    isDemo: DEMO_USER_IDS.has(u.id),
+  };
+}
+
+function normalizeRole(role: string): AuthRole {
+  if (!ROLES.includes(role as AuthRole)) {
+    throw new Error('Rol no válido. Usa admin, ops, dispatch o driver.');
+  }
+  return role as AuthRole;
+}
+
+export function listUsers(opts?: {
+  role?: AuthRole;
+  companyId?: string;
+  activeOnly?: boolean;
+}): ManagedUser[] {
+  let users = ensureUsers().users;
+  if (opts?.companyId) {
+    users = users.filter((u) => (u.companyId || 'co-innovamf') === opts.companyId);
+  }
+  if (opts?.role) {
+    users = users.filter((u) => u.role === opts.role);
+  }
+  if (opts?.activeOnly) {
+    users = users.filter((u) => u.active !== false);
+  }
+  return users
+    .map(toManaged)
+    .sort((a, b) => a.name.localeCompare(b.name, 'es') || a.email.localeCompare(b.email));
+}
+
+export function getUserById(id: string): ManagedUser | null {
+  const u = ensureUsers().users.find((x) => x.id === id);
+  return u ? toManaged(u) : null;
+}
+
+export function createUser(input: {
+  email: string;
+  name: string;
+  password: string;
+  role: string;
+  companyId: string;
+  truckPlate?: string;
+}): ManagedUser {
+  const email = String(input.email || '')
+    .trim()
+    .toLowerCase();
+  const name = String(input.name || '').trim();
+  const password = String(input.password || '');
+  const companyId = String(input.companyId || '').trim() || 'co-innovamf';
+  const role = normalizeRole(String(input.role || 'ops'));
+  if (!email || !email.includes('@')) throw new Error('Correo no válido.');
+  if (!name) throw new Error('El nombre es obligatorio.');
+  if (password.length < 8) throw new Error('La contraseña debe tener al menos 8 caracteres.');
+  const file = ensureUsers();
+  if (file.users.some((u) => u.email.toLowerCase() === email)) {
+    throw new Error('Ya existe un usuario con ese correo.');
+  }
+  const truckPlate =
+    role === 'driver' ? String(input.truckPlate || '').trim().toUpperCase() || undefined : undefined;
+  const user: AuthUser = {
+    id: `U-${randomBytes(4).toString('hex').toUpperCase()}`,
+    email,
+    name,
+    role,
+    companyId,
+    truckPlate,
+    passwordHash: hashPassword(password),
+    active: true,
+  };
+  persistUsers([...file.users, user]);
+  return toManaged(user);
+}
+
+export function updateUser(
+  id: string,
+  input: {
+    email?: string;
+    name?: string;
+    password?: string;
+    role?: string;
+    companyId?: string;
+    truckPlate?: string | null;
+    active?: boolean;
+  },
+): ManagedUser {
+  const file = ensureUsers();
+  const idx = file.users.findIndex((u) => u.id === id);
+  if (idx < 0) throw new Error('Usuario no encontrado.');
+  const current = file.users[idx];
+  const next: AuthUser = { ...current };
+  if (input.email !== undefined) {
+    const email = String(input.email).trim().toLowerCase();
+    if (!email.includes('@')) throw new Error('Correo no válido.');
+    if (file.users.some((u) => u.id !== id && u.email.toLowerCase() === email)) {
+      throw new Error('Ya existe un usuario con ese correo.');
+    }
+    next.email = email;
+  }
+  if (input.name !== undefined) {
+    const name = String(input.name).trim();
+    if (!name) throw new Error('El nombre es obligatorio.');
+    next.name = name;
+  }
+  if (input.role !== undefined) next.role = normalizeRole(String(input.role));
+  if (input.companyId !== undefined) {
+    next.companyId = String(input.companyId).trim() || next.companyId;
+  }
+  if (input.password !== undefined && String(input.password).length > 0) {
+    if (String(input.password).length < 8) {
+      throw new Error('La contraseña debe tener al menos 8 caracteres.');
+    }
+    next.passwordHash = hashPassword(String(input.password));
+  }
+  if (input.active !== undefined) next.active = Boolean(input.active);
+  if (input.truckPlate !== undefined) {
+    next.truckPlate =
+      next.role === 'driver'
+        ? String(input.truckPlate || '')
+            .trim()
+            .toUpperCase() || undefined
+        : undefined;
+  } else if (next.role !== 'driver') {
+    next.truckPlate = undefined;
+  }
+  const users = [...file.users];
+  users[idx] = next;
+  persistUsers(users);
+  return toManaged(next);
+}
+
+/** Baja lógica. Los demo no se borran del archivo. */
+export function deactivateUser(id: string): ManagedUser {
+  return updateUser(id, { active: false });
+}
+
 export function login(email: string, password: string) {
   const users = ensureUsers().users;
   const user = users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
-  if (!user || !verifyPassword(password, user.passwordHash)) {
+  if (!user || user.active === false || !verifyPassword(password, user.passwordHash)) {
     throw new Error('Correo o contraseña incorrectos');
   }
   const publicUser = toPublic(user);

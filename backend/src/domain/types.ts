@@ -151,6 +151,10 @@ export type Order = {
   deliveredAt?: string;
   cancelledAt?: string;
   cancelReason?: string;
+  /** Bodeguero (rol ops) asignado para preparar el pedido */
+  assignedToUserId?: string;
+  assignedToName?: string;
+  assignedAt?: string;
 };
 
 export type TraceEvent = {

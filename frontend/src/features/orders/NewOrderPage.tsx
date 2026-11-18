@@ -226,7 +226,7 @@ export function NewOrderPage() {
               Volver a pedidos
             </Btn>
             <Btn icon="file" onClick={() => setImportOpen(true)}>
-              Importar
+              Subir archivo
             </Btn>
           </>
         }

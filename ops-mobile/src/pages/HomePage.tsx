@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom';
-import { clearSession } from '../auth';
+import { clearSession, type AuthUser } from '../auth';
 import { Icon, Logo } from '../components/Icon';
+import { myPendingOrders } from '../lib/assignments';
 import { available, clientName, money, stock } from '../lib/inventory';
 import type { AppState } from '../types';
 
-export function HomePage({ state }: { state: AppState }) {
-  const pending = state.orders.filter((o) => o.status === 'Por preparar');
+export function HomePage({ state, user }: { state: AppState; user: AuthUser }) {
+  const pending = myPendingOrders(state.orders, user);
   const low = state.products.filter((p) => available(state, p.id) < p.min);
   const recent = state.receipts.slice(0, 4);
   const stockValue = state.products.reduce((n, p) => n + stock(state, p.id) * p.price, 0);
@@ -37,7 +38,9 @@ export function HomePage({ state }: { state: AppState }) {
         <div className="eyebrow">Bienvenida, {state.settings.operator.split(' ')[0]}</div>
         <h1>Ingreso y picking en piso</h1>
         <p>
-          {pending.length} pedidos por preparar · {low.length} productos bajo mínimo.
+          {pending.length
+            ? `${pending.length} pedidos asignados a ti · ${low.length} productos bajo mínimo.`
+            : `Aún no te asignaron pedidos · ${low.length} productos bajo mínimo.`}
         </p>
         <div className="button-row">
           <Link className="btn primary" to="/recibir?scan=1">

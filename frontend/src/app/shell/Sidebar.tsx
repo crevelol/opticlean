@@ -66,7 +66,7 @@ export function Sidebar({
                           <motion.span
                             layoutId="nav-active"
                             className="nav-active-bg"
-                            transition={spring.smooth}
+                            transition={spring.snappy}
                             aria-hidden
                           />
                         ) : null}

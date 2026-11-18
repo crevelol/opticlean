@@ -3,6 +3,17 @@ import { clearSession, getToken, type AuthUser } from '../auth/session';
 
 type StateResponse = { state: AppState; metrics: Metrics };
 
+export type ManagedUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: AuthUser['role'];
+  companyId: string;
+  truckPlate?: string;
+  active: boolean;
+  isDemo: boolean;
+};
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -76,9 +87,86 @@ export const api = {
         };
       }
     >('/api/orders/from-xml', { method: 'POST', body: JSON.stringify({ xml }) }),
+  importOrderFile: (body: { fileName: string; mimeType?: string; contentBase64: string }) =>
+    request<
+      StateResponse & {
+        import: {
+          orderId: string;
+          clientId: string;
+          clientCreated: boolean;
+          productsCreated: string[];
+          productsUpdated: string[];
+          source: 'openai' | 'heuristic';
+          openai: boolean;
+          invoice: {
+            buyerName: string;
+            buyerId: string;
+            docNumber: string;
+            issueDate: string;
+            source?: 'openai' | 'heuristic';
+            lines: Array<{ code: string; name: string; qty: number; unitPrice: number }>;
+          };
+        };
+      }
+    >('/api/orders/from-file', { method: 'POST', body: JSON.stringify(body) }),
+  saveVehicle: (body: Record<string, unknown>) =>
+    request<StateResponse>('/api/vehicles', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  deleteVehicle: (id: string) =>
+    request<StateResponse>(`/api/vehicles/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
   prepare: (orderId: string) =>
     request<StateResponse>(`/api/orders/${encodeURIComponent(orderId)}/prepare`, {
       method: 'POST',
+    }),
+  assignOrder: (orderId: string, userId: string) =>
+    request<StateResponse>(`/api/orders/${encodeURIComponent(orderId)}/assign`, {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    }),
+  unassignOrder: (orderId: string) =>
+    request<StateResponse>(`/api/orders/${encodeURIComponent(orderId)}/unassign`, {
+      method: 'POST',
+    }),
+  listUsers: (opts?: { role?: string; activeOnly?: boolean }) => {
+    const q = new URLSearchParams();
+    if (opts?.role) q.set('role', opts.role);
+    if (opts?.activeOnly) q.set('activeOnly', '1');
+    const qs = q.toString();
+    return request<{ users: ManagedUser[] }>(`/api/users${qs ? `?${qs}` : ''}`);
+  },
+  createUser: (body: {
+    name: string;
+    email: string;
+    password: string;
+    role: string;
+    truckPlate?: string;
+  }) =>
+    request<{ user: ManagedUser }>('/api/users', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateUser: (
+    id: string,
+    body: {
+      name?: string;
+      email?: string;
+      password?: string;
+      role?: string;
+      truckPlate?: string | null;
+      active?: boolean;
+    },
+  ) =>
+    request<{ user: ManagedUser }>(`/api/users/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deactivateUser: (id: string) =>
+    request<{ user: ManagedUser }>(`/api/users/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
     }),
   dispatch: (orderIds: string[], vehicle?: string) =>
     request<StateResponse>('/api/dispatch', {

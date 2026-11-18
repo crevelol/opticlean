@@ -1,13 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
+import { useAuth } from '../../shared/hooks/AuthProvider';
+import { api } from '../../shared/api/client';
 import { client, money, orderValue, orderWeight, product, statusColor } from '../../shared/lib/inventory';
 import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
 import { Modal } from '../../shared/components/Modal';
 import { Icon } from '../../shared/components/Icon';
+import { AssignPicker } from './AssignPicker';
 import '../../styles/orders.css';
 
 const tabs = ['Todos', 'Por preparar', 'Preparado', 'En ruta', 'Entregado', 'Incidencia'] as const;
+const PAGE_SIZE = 8;
 
 function isLiveOrder(id: string) {
   return !id.startsWith('PED-H');
@@ -15,9 +19,12 @@ function isLiveOrder(id: string) {
 
 export function OrdersPage() {
   const { state } = useAppState();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState<(typeof tabs)[number]>('Por preparar');
+  const [page, setPage] = useState(1);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [bodegueroCount, setBodegueroCount] = useState(0);
 
   const liveOrders = useMemo(
     () => (state ? state.orders.filter((o) => isLiveOrder(o.id)) : []),
@@ -26,6 +33,7 @@ export function OrdersPage() {
 
   const counts = useMemo(() => {
     const by = (status: string) => liveOrders.filter((o) => o.status === status).length;
+    const pending = liveOrders.filter((o) => o.status === 'Por preparar');
     return {
       todos: liveOrders.length,
       porPreparar: by('Por preparar'),
@@ -33,12 +41,36 @@ export function OrdersPage() {
       enRuta: by('En ruta'),
       entregado: by('Entregado'),
       incidencia: by('Incidencia'),
+      sinAsignar: pending.filter((o) => !o.assignedToUserId).length,
     };
   }, [liveOrders]);
+
+  useEffect(() => {
+    if (user?.role !== 'admin') return;
+    let cancelled = false;
+    void api
+      .listUsers({ role: 'ops', activeOnly: true })
+      .then((res) => {
+        if (!cancelled) setBodegueroCount(res.users.length);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.role]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [tab]);
 
   if (!state) return null;
 
   const list = liveOrders.filter((o) => tab === 'Todos' || o.status === tab);
+  const pageCount = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const pageList = list.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const rangeFrom = list.length ? (safePage - 1) * PAGE_SIZE + 1 : 0;
+  const rangeTo = Math.min(safePage * PAGE_SIZE, list.length);
   const detail = detailId ? liveOrders.find((o) => o.id === detailId) : null;
   const detailClient = detail ? client(state, detail.clientId) : null;
   const detailTotal = detail ? orderValue(state, detail) : 0;
@@ -72,15 +104,23 @@ export function OrdersPage() {
           label="Por preparar"
           value={counts.porPreparar}
           unit=""
-          foot="Pendientes de picking"
+          foot={
+            user?.role === 'admin'
+              ? `${counts.sinAsignar} sin asignar`
+              : 'Pendientes de picking'
+          }
           icon="box"
         />
         <Kpi
-          label="Listos / ruta"
-          value={counts.preparado + counts.enRuta}
+          label="Bodegueros"
+          value={user?.role === 'admin' ? bodegueroCount : counts.preparado + counts.enRuta}
           unit=""
-          foot={`${counts.preparado} listos · ${counts.enRuta} en ruta`}
-          icon="truck"
+          foot={
+            user?.role === 'admin'
+              ? 'Activos para asignar'
+              : `${counts.preparado} listos · ${counts.enRuta} en ruta`
+          }
+          icon={user?.role === 'admin' ? 'warehouse' : 'truck'}
         />
         <Kpi
           label="Entregados"
@@ -119,11 +159,12 @@ export function OrdersPage() {
                   <th>Destino</th>
                   <th>Total</th>
                   <th>Estado</th>
+                  <th>Bodeguero</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
-                {list.map((o) => {
+                {pageList.map((o) => {
                   const c = client(state, o.clientId);
                   return (
                     <tr key={o.id}>
@@ -152,6 +193,9 @@ export function OrdersPage() {
                         <Badge text={o.status} color={statusColor(o.status)} />
                       </td>
                       <td>
+                        <AssignPicker order={o} compact />
+                      </td>
+                      <td>
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                           <Btn variant="small" icon="eye" onClick={() => setDetailId(o.id)}>
                             Ver
@@ -176,6 +220,42 @@ export function OrdersPage() {
         ) : (
           <Empty title="No hay pedidos en este estado" desc="Cambia de pestaña o crea un nuevo pedido." />
         )}
+        {list.length ? (
+          <div className="ord-pagination" aria-label="Paginación de pedidos">
+            <span>
+              Mostrando {rangeFrom}–{rangeTo} de {list.length}
+            </span>
+            <div>
+              <button
+                type="button"
+                disabled={safePage <= 1}
+                aria-label="Página anterior"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <Icon name="back" />
+              </button>
+              {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className={n === safePage ? 'is-active' : ''}
+                  aria-current={n === safePage ? 'page' : undefined}
+                  onClick={() => setPage(n)}
+                >
+                  {n}
+                </button>
+              ))}
+              <button
+                type="button"
+                disabled={safePage >= pageCount}
+                aria-label="Página siguiente"
+                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              >
+                <Icon name="arrow" />
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       {detail && detailClient ? (
@@ -219,6 +299,11 @@ export function OrdersPage() {
               <Badge text={detail.priority} color={detail.priority === 'Alta' ? 'amber' : 'muted'} />
               {detail.vehicle ? <Badge text={detail.vehicle} color="blue" /> : null}
             </div>
+            {detail.status === 'Por preparar' || detail.assignedToName ? (
+              <div className="ord-assign-block">
+                <AssignPicker order={detail} />
+              </div>
+            ) : null}
 
             <div className="ord-meta">
               <article>

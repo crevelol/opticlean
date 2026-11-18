@@ -37,6 +37,7 @@ export const routeMeta: Record<string, RouteMeta> = {
   '/trazabilidad': { title: 'Trazabilidad' },
   '/reportes': { title: 'Reportes' },
   '/reglas': { title: 'Reglas de negocio' },
+  '/usuarios': { title: 'Usuarios' },
   '/configuracion': { title: 'Configuración' },
 };
 
@@ -59,6 +60,7 @@ export const fallbackMenu: MenuSection[] = [
       { id: 'f-cli', label: 'Clientes', path: '/clientes', icon: 'users', badge: null },
       { id: 'f-com', label: 'Comercial', path: '/comercial', icon: 'orders', badge: null },
       { id: 'f-rules', label: 'Reglas de negocio', path: '/reglas', icon: 'shield', badge: null },
+      { id: 'f-users', label: 'Usuarios', path: '/usuarios', icon: 'users', badge: null },
       {
         id: 'f-cfg',
         label: 'Configuración',

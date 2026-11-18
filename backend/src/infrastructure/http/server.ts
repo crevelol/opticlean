@@ -6,7 +6,18 @@ import { JsonStateRepository } from '../persistence/JsonStateRepository.js';
 import { OperationsUseCases } from '../../application/use-cases/OperationsUseCases.js';
 import { suggest, suggestPlacement } from '../../domain/placement.service.js';
 import { autoAssignLogistics, openaiConfigured } from '../../domain/logistics-ai.service.js';
-import { adminRequired, authRequired, login, publicUserFromRequest, type AuthRole } from '../auth/auth.js';
+import {
+  adminRequired,
+  authRequired,
+  createUser,
+  deactivateUser,
+  getUserById,
+  listUsers,
+  login,
+  publicUserFromRequest,
+  updateUser,
+  type AuthRole,
+} from '../auth/auth.js';
 import {
   companyMobileRoleIds,
   companyModuleIds,
@@ -86,7 +97,7 @@ const repo = new JsonStateRepository();
 const ops = new OperationsUseCases(repo);
 
 app.use(cors());
-app.use(express.json({ limit: '8mb' }));
+app.use(express.json({ limit: '15mb' }));
 
 function roleDenied(req: express.Request) {
   const role = req.user?.role;
@@ -107,6 +118,9 @@ function roleDenied(req: express.Request) {
     path.startsWith('/api/price-lists') ||
     path.startsWith('/api/client-prices') ||
     path.startsWith('/api/settings') ||
+    path.startsWith('/api/users') ||
+    path.includes('/assign') ||
+    path.includes('/unassign') ||
     path === '/api/state/reset'
   ) {
     return allow([]);
@@ -268,6 +282,24 @@ app.post('/api/products', async (req, res, next) => {
   }
 });
 
+app.post('/api/vehicles', adminRequired, async (req, res, next) => {
+  try {
+    const state = await ops.saveVehicle(req.body ?? {});
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.delete('/api/vehicles/:id', adminRequired, async (req, res, next) => {
+  try {
+    const state = await ops.deleteVehicle(req.params.id);
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
 app.post('/api/orders', async (req, res, next) => {
   try {
     await ops.placeOrder(req.body);
@@ -294,10 +326,128 @@ app.post('/api/orders/from-xml', async (req, res, next) => {
   }
 });
 
+/** Importa factura desde XML, PDF o Word (.docx) */
+app.post('/api/orders/from-file', async (req, res, next) => {
+  try {
+    const importResult = await ops.importInvoiceFile({
+      fileName: String(req.body?.fileName ?? ''),
+      mimeType: String(req.body?.mimeType ?? ''),
+      contentBase64: String(req.body?.contentBase64 ?? ''),
+    });
+    const state = await ops.getState();
+    res.status(201).json({
+      state,
+      metrics: ops.metricsSnapshot(state),
+      import: importResult,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
 app.post('/api/orders/:id/prepare', async (req, res, next) => {
   try {
-    const state = await ops.confirmPrepare(req.params.id);
+    const state = await ops.confirmPrepare(req.params.id, publicUserFromRequest(req));
     res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/orders/:id/assign', adminRequired, async (req, res, next) => {
+  try {
+    const userId = String(req.body?.userId ?? '').trim();
+    if (!userId) throw new Error('Indica el bodeguero (userId).');
+    const assignee = getUserById(userId);
+    if (!assignee) throw new Error('Usuario no encontrado.');
+    const state = await ops.assignOrder(req.params.id, assignee, companyIdOf(req));
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/orders/:id/unassign', adminRequired, async (req, res, next) => {
+  try {
+    const state = await ops.unassignOrder(req.params.id);
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/users', adminRequired, (req, res, next) => {
+  try {
+    const rawRole = req.query.role ? String(req.query.role) : '';
+    const role = (['admin', 'ops', 'dispatch', 'driver'] as AuthRole[]).includes(
+      rawRole as AuthRole,
+    )
+      ? (rawRole as AuthRole)
+      : undefined;
+    const activeOnly =
+      String(req.query.activeOnly ?? '') === '1' || String(req.query.activeOnly ?? '') === 'true';
+    res.json({
+      users: listUsers({
+        companyId: companyIdOf(req),
+        role,
+        activeOnly,
+      }),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/users', adminRequired, (req, res, next) => {
+  try {
+    const user = createUser({
+      email: String(req.body?.email ?? ''),
+      name: String(req.body?.name ?? ''),
+      password: String(req.body?.password ?? ''),
+      role: String(req.body?.role ?? 'ops'),
+      companyId: companyIdOf(req),
+      truckPlate: req.body?.truckPlate !== undefined ? String(req.body.truckPlate) : undefined,
+    });
+    res.status(201).json({ user });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.patch('/api/users/:id', adminRequired, (req, res, next) => {
+  try {
+    const existing = getUserById(req.params.id);
+    if (!existing) throw new Error('Usuario no encontrado.');
+    if (existing.companyId !== companyIdOf(req) && existing.id !== req.user?.id) {
+      throw new Error('Usuario de otra empresa.');
+    }
+    const user = updateUser(req.params.id, {
+      email: req.body?.email !== undefined ? String(req.body.email) : undefined,
+      name: req.body?.name !== undefined ? String(req.body.name) : undefined,
+      password: req.body?.password !== undefined ? String(req.body.password) : undefined,
+      role: req.body?.role !== undefined ? String(req.body.role) : undefined,
+      truckPlate:
+        req.body?.truckPlate !== undefined
+          ? req.body.truckPlate === null
+            ? null
+            : String(req.body.truckPlate)
+          : undefined,
+      active: req.body?.active !== undefined ? Boolean(req.body.active) : undefined,
+    });
+    res.json({ user });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.delete('/api/users/:id', adminRequired, (req, res, next) => {
+  try {
+    const existing = getUserById(req.params.id);
+    if (!existing) throw new Error('Usuario no encontrado.');
+    if (existing.companyId !== companyIdOf(req)) throw new Error('Usuario de otra empresa.');
+    if (existing.id === req.user?.id) throw new Error('No puedes desactivar tu propio usuario.');
+    const user = deactivateUser(req.params.id);
+    res.json({ user });
   } catch (e) {
     next(e);
   }

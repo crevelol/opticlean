@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Icon } from '../shared/components/Icon';
@@ -8,11 +8,42 @@ import { api } from '../shared/api/client';
 import { available } from '../shared/lib/inventory';
 import { Modal } from '../shared/components/Modal';
 import { cx } from '../shared/components/ui';
-import { fadeUp } from '../shared/motion/presets';
+import { transition } from '../shared/motion/presets';
 import { Sidebar } from './shell/Sidebar';
 import { Topbar } from './shell/Topbar';
 import { PageSkeleton } from './shell/PageSkeleton';
 import { breadcrumbsFor, fallbackMenu, titleFor, type MenuSection } from './navigation';
+
+const ROUTE_SKELETON_MS = 160;
+
+function PageFrame() {
+  const { pathname } = useLocation();
+  const [busy, setBusy] = useState(false);
+
+  useLayoutEffect(() => {
+    setBusy(true);
+    const t = window.setTimeout(() => setBusy(false), ROUTE_SKELETON_MS);
+    return () => window.clearTimeout(t);
+  }, [pathname]);
+
+  return (
+    <>
+      {busy ? <PageSkeleton /> : null}
+      <div className={busy ? 'page-content is-pending' : 'page-content'} aria-hidden={busy}>
+        <Suspense fallback={<PageSkeleton />}>
+          <motion.div
+            key={pathname}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={transition.fast}
+          >
+            <Outlet />
+          </motion.div>
+        </Suspense>
+      </div>
+    </>
+  );
+}
 
 const COLLAPSE_KEY = 'opticlean.sidebar.collapsed';
 
@@ -45,7 +76,14 @@ export function AppLayout() {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantAnswer, setAssistantAnswer] = useState<string[]>([]);
   const [notifyOpen, setNotifyOpen] = useState(false);
-  const [menuSections, setMenuSections] = useState<MenuSection[]>(fallbackMenu);
+  const [menuSections, setMenuSections] = useState<MenuSection[]>(() =>
+    user?.role === 'admin'
+      ? fallbackMenu
+      : fallbackMenu.map((s) => ({
+          ...s,
+          items: s.items.filter((i) => i.path !== '/usuarios'),
+        })),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -53,18 +91,46 @@ export function AppLayout() {
       .menu(user?.companyId)
       .then((res) => {
         if (cancelled || !res.sections?.length) return;
-        setMenuSections(
-          res.sections.map((s) => ({
-            section: s.section,
-            items: s.items.map((i) => ({
-              id: i.id,
-              label: i.label,
-              path: i.path,
-              icon: i.icon,
-              badge: i.badge,
-            })),
+        let sections = res.sections.map((s) => ({
+          section: s.section,
+          items: s.items.map((i) => ({
+            id: i.id,
+            label: i.label,
+            path: i.path,
+            icon: i.icon,
+            badge: i.badge,
           })),
-        );
+        }));
+        if (user?.role === 'admin') {
+          const hasUsers = sections.some((s) => s.items.some((i) => i.path === '/usuarios'));
+          if (!hasUsers) {
+            sections = sections.map((s) =>
+              s.section === 'Gestión'
+                ? {
+                    ...s,
+                    items: [
+                      ...s.items,
+                      {
+                        id: 'mi-users',
+                        label: 'Usuarios',
+                        path: '/usuarios',
+                        icon: 'users',
+                        badge: null,
+                      },
+                    ],
+                  }
+                : s,
+            );
+          }
+        } else {
+          sections = sections
+            .map((s) => ({
+              ...s,
+              items: s.items.filter((i) => i.path !== '/usuarios'),
+            }))
+            .filter((s) => s.items.length > 0);
+        }
+        setMenuSections(sections);
       })
       .catch(() => {
         /* mantiene menú fallback */
@@ -72,7 +138,7 @@ export function AppLayout() {
     return () => {
       cancelled = true;
     };
-  }, [user?.companyId]);
+  }, [user?.companyId, user?.role]);
 
   const path = location.pathname;
   const crumbs = useMemo(() => breadcrumbsFor(path, menuSections), [path, menuSections]);
@@ -146,17 +212,7 @@ export function AppLayout() {
           onNotifications={() => setNotifyOpen(true)}
         />
         <main className="page">
-          <Suspense fallback={<PageSkeleton />}>
-            <motion.div
-              key={path}
-              className="page-content"
-              variants={fadeUp}
-              initial="hidden"
-              animate="show"
-            >
-              <Outlet />
-            </motion.div>
-          </Suspense>
+          <PageFrame />
           <footer className="page-footer">
             <span>OPTICLEAN AI · Operación conectada</span>
             <span>Datos de demostración · Persistencia en servidor local</span>

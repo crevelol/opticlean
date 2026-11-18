@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Select } from '../../shared/components/Select';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
+import { useAuth } from '../../shared/hooks/AuthProvider';
 import { api } from '../../shared/api/client';
 import {
   activeWarehouseId,
@@ -17,15 +18,41 @@ import { buildForecast } from '../../shared/lib/forecast';
 import { expiryAlerts } from '../../shared/lib/wholesale';
 import { Badge, Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
+import { AssignPicker } from '../orders/AssignPicker';
 import '../../styles/dashboard.css';
+import '../../styles/orders.css';
+
+const ORDERS_PAGE_SIZE = 6;
 
 export function DashboardPage() {
   const { state, meta, applyResponse, toast } = useAppState();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState<'pending' | 'all'>('pending');
+  const [page, setPage] = useState(1);
   const [whFilter, setWhFilter] = useState('all');
   const [whBusy, setWhBusy] = useState(false);
+  const [bodegueroCount, setBodegueroCount] = useState(0);
   const forecast = useMemo(() => (state ? buildForecast(state) : null), [state]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [tab]);
+
+  useEffect(() => {
+    if (user?.role !== 'admin') return;
+    let cancelled = false;
+    void api
+      .listUsers({ role: 'ops', activeOnly: true })
+      .then((res) => {
+        if (!cancelled) setBodegueroCount(res.users.length);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.role]);
+
   if (!state || !meta || !forecast) return null;
 
   const totalCells = meta.locations.length;
@@ -35,11 +62,17 @@ export function DashboardPage() {
   }).length;
   const occupancyPct = Math.round((occupied / Math.max(totalCells, 1)) * 100);
   const pending = state.orders.filter((o) => o.status === 'Por preparar');
+  const unassigned = pending.filter((o) => !o.assignedToUserId).length;
   const activeOrders = state.orders.filter((o) => o.status !== 'Entregado');
   const low = state.products.filter((p) => available(state, p.id) < p.min);
   const units = state.products.reduce((n, p) => n + available(state, p.id), 0);
   const stockValue = state.products.reduce((n, p) => n + stock(state, p.id) * p.price, 0);
   const listed = tab === 'pending' ? pending : activeOrders;
+  const pageCount = Math.max(1, Math.ceil(listed.length / ORDERS_PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const pageOrders = listed.slice((safePage - 1) * ORDERS_PAGE_SIZE, safePage * ORDERS_PAGE_SIZE);
+  const rangeFrom = listed.length ? (safePage - 1) * ORDERS_PAGE_SIZE + 1 : 0;
+  const rangeTo = Math.min(safePage * ORDERS_PAGE_SIZE, listed.length);
   const productionAlerts =
     forecast.productionRisks.length ||
     forecast.recommendations.filter((r) => r.urgency === 'now').length;
@@ -110,7 +143,16 @@ export function DashboardPage() {
           label="Pedidos activos"
           icon="orders"
           value={activeOrders.length}
-          caption={<Badge text={`${pending.length} por preparar`} color="amber" />}
+          caption={
+            <Badge
+              text={
+                user?.role === 'admin'
+                  ? `${bodegueroCount} bodegueros · ${unassigned} sin asignar`
+                  : `${pending.length} por preparar`
+              }
+              color="amber"
+            />
+          }
         />
         <Kpi
           label="Productos bajo mínimo"
@@ -171,12 +213,13 @@ export function DashboardPage() {
                     <th>Cliente</th>
                     <th>Total</th>
                     <th>Estado</th>
+                    <th>Bodeguero</th>
                     <th>Acción</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {listed.length ? (
-                    listed.slice(0, 6).map((o) => (
+                  {pageOrders.length ? (
+                    pageOrders.map((o) => (
                       <tr key={o.id}>
                         <td>
                           <strong>{o.id}</strong>
@@ -187,6 +230,9 @@ export function DashboardPage() {
                         </td>
                         <td>
                           <Badge text={o.status} color={statusColor(o.status)} />
+                        </td>
+                        <td>
+                          <AssignPicker order={o} compact />
                         </td>
                         <td>
                           {o.status === 'Por preparar' ? (
@@ -206,7 +252,7 @@ export function DashboardPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={5} className="dash-empty-row">
+                      <td colSpan={6} className="dash-empty-row">
                         No hay pedidos en esta vista.
                       </td>
                     </tr>
@@ -214,6 +260,42 @@ export function DashboardPage() {
                 </tbody>
               </table>
             </div>
+            {listed.length ? (
+              <div className="dash-pagination" aria-label="Paginación de pedidos">
+                <span>
+                  Mostrando {rangeFrom}–{rangeTo} de {listed.length}
+                </span>
+                <div>
+                  <button
+                    type="button"
+                    disabled={safePage <= 1}
+                    aria-label="Página anterior"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  >
+                    <Icon name="back" />
+                  </button>
+                  {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      className={n === safePage ? 'is-active' : ''}
+                      aria-current={n === safePage ? 'page' : undefined}
+                      onClick={() => setPage(n)}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={safePage >= pageCount}
+                    aria-label="Página siguiente"
+                    onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                  >
+                    <Icon name="arrow" />
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </section>
 
           <section className="panel dash-prio">

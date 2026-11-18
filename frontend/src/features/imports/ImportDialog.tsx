@@ -45,9 +45,52 @@ export function ImportDialog({
 
   const readFile = async (file: File) => {
     const name = file.name.toLowerCase();
-    const format = name.endsWith('.xml') ? 'xml' : name.endsWith('.csv') || name.endsWith('.txt') ? 'csv' : 'xlsx';
+    const isAiDoc =
+      name.endsWith('.pdf') ||
+      name.endsWith('.docx') ||
+      (name.endsWith('.doc') && !name.endsWith('.docx'));
+    if (isAiDoc) {
+      if (name.endsWith('.doc') && !name.endsWith('.docx')) {
+        setError('El .doc antiguo no está soportado. Usa .docx, PDF, XML, CSV o Excel.');
+        return;
+      }
+      setBusy(true);
+      setError('');
+      setPreview(null);
+      try {
+        const res = await api.importOrderFile({
+          fileName: file.name,
+          mimeType: file.type,
+          contentBase64: await fileToBase64(file),
+        });
+        applyResponse(res);
+        const created = res.import.productsCreated.length;
+        const updated = res.import.productsUpdated.length;
+        const clientMsg = res.import.clientCreated ? 'cliente creado' : 'cliente relacionado';
+        const prodMsg = [
+          created ? `${created} producto(s) creado(s)` : '',
+          updated ? `${updated} relacionado(s)` : '',
+        ]
+          .filter(Boolean)
+          .join(' · ');
+        onDone(
+          `${res.import.orderId} · IA · ${clientMsg}${prodMsg ? ` · ${prodMsg}` : ''} · ${res.import.invoice.docNumber}`,
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'No se pudo leer el documento con IA.');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    const format = name.endsWith('.xml')
+      ? 'xml'
+      : name.endsWith('.csv') || name.endsWith('.txt')
+        ? 'csv'
+        : 'xlsx';
     if (!/\.(xml|csv|txt|xlsx|xls)$/.test(name)) {
-      setError('Usa un archivo XML, CSV o Excel.');
+      setError('Usa un archivo XML, PDF, Word (.docx), CSV o Excel.');
       return;
     }
     setBusy(true);
@@ -106,7 +149,7 @@ export function ImportDialog({
   return (
     <Modal
       title={kind === 'purchase' ? 'Importar compra' : 'Importar pedido'}
-      subtitle="XML, CSV o Excel. La vista previa no inventa caducidad ni existencias."
+      subtitle="PDF, Word, XML, CSV o Excel. La IA lee PDF/Word; CSV/Excel pasan por vista previa."
       onClose={onClose}
       footer={
         <>
@@ -123,7 +166,7 @@ export function ImportDialog({
           <input
             id="import-file"
             type="file"
-            accept=".xml,.csv,.txt,.xlsx,.xls"
+            accept=".xml,.pdf,.docx,.csv,.txt,.xlsx,.xls,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) void readFile(file);
@@ -200,7 +243,9 @@ export function ImportDialog({
         </div>
       ) : (
         <p className="subtle" style={{ marginTop: 12 }}>
-          {busy ? 'Leyendo archivo…' : 'Elige el archivo que ya usa el proveedor o el cliente.'}
+          {busy
+            ? 'Leyendo archivo…'
+            : 'Elige PDF/Word (IA), XML, CSV o Excel del proveedor o cliente.'}
         </p>
       )}
       {error ? <div className="form-error visible">{error}</div> : null}

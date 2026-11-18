@@ -254,7 +254,11 @@ export function issueGuide(
       origin: s.settings.warehouse,
       destination: client(s, order.clientId)?.address || client(s, order.clientId)?.name || order.clientId,
       plate: order.vehicle,
-      lines: picks.map((line) => ({ productId: line.productId, qty: line.qty, batch: line.batch })),
+      lines: picks.map((line) => ({
+        productId: line.productId,
+        qty: line.qty,
+        batch: 'batch' in line && typeof line.batch === 'string' ? line.batch : undefined,
+      })),
       status: 'Emitida',
     };
   } else if (body.transferId) {

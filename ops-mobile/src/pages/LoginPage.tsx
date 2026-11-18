@@ -34,60 +34,71 @@ export function LoginPage({ user, onLogin }: Props) {
 
   return (
     <div className="login-page">
-      <div className="login-card">
-        <div className="login-brand-row">
-          <Logo />
-          <div>
-            <strong>
-              OPTI<span>CLEAN</span> <em>Ops</em>
-            </strong>
-            <small>Bodega · Despacho · Conductor</small>
-          </div>
-        </div>
-        <h1>Iniciar sesión</h1>
-        <p className="subtle">Cada rol abre su propia interfaz móvil.</p>
-        <form onSubmit={onSubmit} autoComplete="on">
-          <label className="field">
-            <span>Correo</span>
-            <input
-              name="email"
-              type="email"
-              required
-              autoComplete="username"
-              placeholder="bodega@ / despacho@ / conductor@"
-            />
-          </label>
-          <label className="field">
-            <span>Contraseña</span>
-            <div className="login-pass">
-              <input
-                name="password"
-                type={showPassword ? 'text' : 'password'}
-                required
-                minLength={8}
-                autoComplete="current-password"
-                placeholder="Tu contraseña"
-              />
-              <button type="button" onClick={() => setShowPassword((v) => !v)}>
-                {showPassword ? 'Ocultar' : 'Ver'}
-              </button>
+      <div className="login-hero" aria-hidden="true" />
+
+      <section className="login-sheet">
+        <svg className="login-curve" viewBox="0 0 400 48" preserveAspectRatio="none" aria-hidden="true">
+          <path fill="#fff" d="M0 48V22C70 6 130 0 200 0s130 6 200 22v26H0Z" />
+        </svg>
+
+        <div className="login-sheet-body">
+          <div className="login-brand-row">
+            <Logo />
+            <div>
+              <strong>
+                OPTI<span>CLEAN</span> <em>Ops</em>
+              </strong>
+              <small>Bodega · Despacho · Conductor</small>
             </div>
-          </label>
-          {error ? <p className="login-error">{error}</p> : null}
-          <button type="submit" className="btn primary full" disabled={busy}>
-            {busy ? 'Entrando…' : 'Entrar'}
-          </button>
-        </form>
-        <p className="login-hint">
-          Bodega: <code>bodega@innovamf.com</code>
-          <br />
-          Despacho: <code>despacho@innovamf.com</code>
-          <br />
-          Conductor: <code>conductor@innovamf.com</code>
-          <br />
-          Clave: <code>OptiClean2026!</code>
-        </p>
-      </div>
+          </div>
+
+          <h1>Iniciar sesión</h1>
+          <p className="subtle">Cada rol abre su propia interfaz móvil.</p>
+
+          <form onSubmit={onSubmit} autoComplete="on">
+            <label className="field">
+              <span>Correo</span>
+              <input
+                name="email"
+                type="email"
+                required
+                autoComplete="username"
+                placeholder="bodega@ / despacho@ / conductor@"
+              />
+            </label>
+            <label className="field">
+              <span>Contraseña</span>
+              <div className="login-pass">
+                <input
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  minLength={8}
+                  autoComplete="current-password"
+                  placeholder="Tu contraseña"
+                />
+                <button type="button" onClick={() => setShowPassword((v) => !v)}>
+                  {showPassword ? 'Ocultar' : 'Ver'}
+                </button>
+              </div>
+            </label>
+            {error ? <p className="login-error">{error}</p> : null}
+            <button type="submit" className="btn primary full" disabled={busy}>
+              {busy ? 'Entrando…' : 'Entrar'}
+            </button>
+          </form>
+
+          <p className="login-hint">
+            Bodega: <code>bodega@innovamf.com</code>
+            <br />
+            Despacho: <code>despacho@innovamf.com</code>
+            <br />
+            Conductor: <code>conductor@innovamf.com</code>
+            <br />
+            Clave: <code>OptiClean2026!</code>
+          </p>
+        </div>
+      </section>
     </div>
   );
 }

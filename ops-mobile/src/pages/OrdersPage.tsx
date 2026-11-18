@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { api } from '../api';
+import type { AuthUser } from '../auth';
 import { Icon } from '../components/Icon';
+import { isAssignedToMe } from '../lib/assignments';
 import { clientName, statusTone } from '../lib/inventory';
 import type { AppState, Order, PickStep } from '../types';
 
@@ -12,9 +14,11 @@ function isActiveOrder(o: Order) {
 
 export function OrdersPage({
   state,
+  user,
   onRefresh,
 }: {
   state: AppState;
+  user: AuthUser;
   onRefresh: () => Promise<void>;
 }) {
   const [selected, setSelected] = useState<Order | null>(null);
@@ -26,22 +30,26 @@ export function OrdersPage({
   const counts = useMemo(() => {
     const active = state.orders.filter(isActiveOrder);
     return {
-      pendientes: active.filter((o) => o.status === 'Por preparar').length,
+      pendientes: active.filter(
+        (o) => o.status === 'Por preparar' && isAssignedToMe(o, user),
+      ).length,
       preparados: active.filter((o) => o.status === 'Preparado').length,
       enRuta: active.filter((o) => o.status === 'En ruta' || o.status === 'Incidencia').length,
     };
-  }, [state.orders]);
+  }, [state.orders, user]);
 
   const orders = useMemo(() => {
     return state.orders
       .filter((o) => {
         if (!isActiveOrder(o)) return false;
-        if (tab === 'pendientes') return o.status === 'Por preparar';
+        if (tab === 'pendientes') {
+          return o.status === 'Por preparar' && isAssignedToMe(o, user);
+        }
         if (tab === 'preparados') return o.status === 'Preparado';
         return o.status === 'En ruta' || o.status === 'Incidencia';
       })
       .sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
-  }, [state.orders, tab]);
+  }, [state.orders, tab, user]);
 
   const openOrder = async (order: Order) => {
     setSelected(order);
@@ -133,7 +141,7 @@ export function OrdersPage({
 
   const emptyCopy =
     tab === 'pendientes'
-      ? 'No hay pedidos por preparar.'
+      ? 'Aún no te asignaron pedidos.'
       : tab === 'preparados'
         ? 'No hay pedidos preparados.'
         : 'No hay pedidos en ruta.';

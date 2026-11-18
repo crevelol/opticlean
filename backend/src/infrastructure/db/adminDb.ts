@@ -132,6 +132,14 @@ const SEED_MODULES: Array<Omit<ModuleRow, 'active'> & { active?: number }> = [
     sort_order: 145,
   },
   {
+    id: 'mod-users',
+    code: 'users',
+    name: 'Usuarios',
+    description: 'Alta de usuarios y roles (admin)',
+    icon: 'users',
+    sort_order: 148,
+  },
+  {
     id: 'mod-settings',
     code: 'settings',
     name: 'Configuración',
@@ -278,6 +286,15 @@ const SEED_MENU: Array<Omit<MenuItem, 'active' | 'badge'> & { badge?: string | n
     icon: 'shield',
     section: 'Gestión',
     sort_order: 35,
+  },
+  {
+    id: 'mi-users',
+    module_id: 'mod-users',
+    label: 'Usuarios',
+    path: '/usuarios',
+    icon: 'users',
+    section: 'Gestión',
+    sort_order: 38,
   },
   {
     id: 'mi-settings',

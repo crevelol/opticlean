@@ -432,27 +432,44 @@ button:focus-visible, a:focus-visible {
 
 .login-page {
   min-height: 100dvh;
-  display: grid;
-  place-items: end center;
-  padding: 24px 16px 28px;
-  background:
-    linear-gradient(180deg, #04152688 0%, #062344e6 42%, #062344f7 100%),
-    url('/login-bg.jpg') center / cover no-repeat #062344;
+  display: flex;
+  flex-direction: column;
+  background: #062344;
+  overflow: hidden;
 }
-.login-card {
-  width: min(100%, 400px);
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid #ffffff55;
-  border-radius: 14px;
-  padding: 22px 18px 18px;
-  box-shadow: 0 18px 40px #02101855;
-  backdrop-filter: blur(8px);
+.login-hero {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: clamp(220px, 42dvh, 420px);
+  background:
+    linear-gradient(180deg, #04152677 0%, transparent 42%),
+    url('/login-bg.jpg') center 28% / cover no-repeat #062344;
+}
+.login-sheet {
+  position: relative;
+  z-index: 2;
+  margin-top: -40px;
+  background: transparent;
+  animation: login-sheet-up .45s cubic-bezier(.22, 1, .36, 1) both;
+}
+.login-curve {
+  display: block;
+  width: 100%;
+  height: 40px;
+  pointer-events: none;
+}
+.login-sheet-body {
+  margin-top: -1px;
+  padding: 2px 22px calc(22px + env(safe-area-inset-bottom));
+  max-width: none;
+  background: #fff;
+  box-shadow: 0 -12px 28px #02101833;
 }
 .login-brand-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 .login-brand-row strong {
   display: block;
@@ -472,17 +489,23 @@ button:focus-visible, a:focus-visible {
   font-size: 10px;
   color: var(--muted);
 }
+.login-sheet h1,
 .login-card h1 {
   margin: 0;
   font-size: 22px;
   letter-spacing: -.4px;
   color: var(--navy);
 }
+.login-sheet .subtle {
+  margin: 6px 0 2px;
+}
+.login-sheet .field,
 .login-card .field {
   display: grid;
   gap: 6px;
   margin: 12px 0;
 }
+.login-sheet .field > span,
 .login-card .field > span {
   font-size: 11px;
   font-weight: 600;
@@ -511,6 +534,33 @@ button:focus-visible, a:focus-visible {
   border: 1px solid #f3c7cb;
   color: var(--danger);
   font-size: 12px;
+}
+@keyframes login-sheet-up {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (min-width: 720px) {
+  .login-hero {
+    min-height: 52dvh;
+  }
+  .login-sheet {
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+    width: min(100%, 480px);
+    margin-bottom: 28px;
+  }
+  .login-sheet-body {
+    border-radius: 0 0 18px 18px;
+    padding-left: 28px;
+    padding-right: 28px;
+  }
 }
 
 .wh-page { padding-bottom: 8px; }
@@ -1171,6 +1221,52 @@ button:focus-visible, a:focus-visible {
   color: #6b8298;
   font-size: 12px;
   z-index: 2;
+  pointer-events: none;
+}
+.drv-map-routing {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 500;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(23, 50, 79, .88);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 650;
+  pointer-events: none;
+}
+.drv-map-route-meta {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 500;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+.drv-map-route-meta span {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .94);
+  border: 1px solid #d7e4f1;
+  color: #17324f;
+  font-size: 11px;
+  font-weight: 650;
+  box-shadow: 0 4px 12px rgba(23, 50, 79, .08);
+}
+.drv-map-attrib {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  z-index: 500;
+  font-size: 9px;
+  color: #6b8298;
+  background: rgba(255, 255, 255, .82);
+  padding: 2px 6px;
+  border-radius: 4px;
   pointer-events: none;
 }
 .drv-map-next {

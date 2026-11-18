@@ -4,7 +4,7 @@ import { AppLayout } from './AppLayout';
 import { useAppState } from '../shared/hooks/AppStateProvider';
 import { useAuth } from '../shared/hooks/AuthProvider';
 import { LoginPage } from '../features/auth/LoginPage';
-import { Spinner } from '../shared/components/Icon';
+import { AppSkeleton } from './shell/PageSkeleton';
 
 // Cada pantalla se descarga solo al visitarla (code splitting por ruta).
 const DashboardPage = lazy(() =>
@@ -57,6 +57,9 @@ const SettingsPage = lazy(() =>
 const BusinessRulesPage = lazy(() =>
   import('../features/settings/BusinessRulesPage').then((m) => ({ default: m.BusinessRulesPage })),
 );
+const UsersPage = lazy(() =>
+  import('../features/users/UsersPage').then((m) => ({ default: m.UsersPage })),
+);
 const WarehousesAdminPage = lazy(() =>
   import('../features/warehouses/WarehousesAdminPage').then((m) => ({
     default: m.WarehousesAdminPage,
@@ -69,22 +72,13 @@ const CommercialPage = lazy(() =>
   import('../features/commercial/CommercialPage').then((m) => ({ default: m.CommercialPage })),
 );
 
-function LoadingShell({ label = 'Cargando operación…' }: { label?: string }) {
-  return (
-    <div className="app-loading" role="status">
-      <Spinner />
-      <p>{label}</p>
-    </div>
-  );
-}
-
 function ProtectedApp() {
   const { loading: authLoading, user } = useAuth();
   const { loading, error, refresh } = useAppState();
 
-  if (authLoading) return <LoadingShell label="Verificando sesión…" />;
+  if (authLoading) return <AppSkeleton label="Verificando sesión…" />;
   if (!user) return <Navigate to="/login" replace />;
-  if (loading) return <LoadingShell />;
+  if (loading) return <AppSkeleton />;
   if (error) {
     return (
       <div className="page" style={{ padding: 40 }}>
@@ -118,6 +112,7 @@ function ProtectedApp() {
         <Route path="trazabilidad" element={<TraceabilityPage />} />
         <Route path="reportes" element={<ReportsPage />} />
         <Route path="reglas" element={<BusinessRulesPage />} />
+        <Route path="usuarios" element={<UsersPage />} />
         <Route path="configuracion" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/bodega" replace />} />
       </Route>

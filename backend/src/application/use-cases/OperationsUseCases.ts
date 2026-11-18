@@ -65,6 +65,8 @@ import {
   shipTransfer,
   suggestReplenishment,
 } from '../../domain/commercial.service.js';
+import { deleteVehicle as removeFleetVehicle, upsertVehicle } from '../../domain/fleet.service.js';
+import type { Vehicle } from '../../domain/types.js';
 
 export const BUNDLES = [
   {
@@ -193,6 +195,30 @@ export class OperationsUseCases {
     return result;
   }
 
+  async importInvoiceFile(body: {
+    fileName: string;
+    mimeType?: string;
+    contentBase64: string;
+  }) {
+    const { parseInvoiceDocument } = await import('../../domain/invoice-document.service.js');
+    const raw = String(body.contentBase64 ?? '').replace(/^data:[^;]+;base64,/, '');
+    if (!raw) throw new Error('Archivo vacío.');
+    const buf = Buffer.from(raw, 'base64');
+    if (!buf.length) throw new Error('No se pudo leer el archivo.');
+    if (buf.length > 12 * 1024 * 1024) throw new Error('El archivo supera 12 MB.');
+    const invoice = await parseInvoiceDocument(
+      buf,
+      String(body.fileName || 'archivo'),
+      String(body.mimeType || ''),
+    );
+    let result: ReturnType<typeof applyParsedInvoice> | null = null;
+    await this.mutate((s) => {
+      result = applyParsedInvoice(s, invoice);
+    });
+    if (!result) throw new Error('No se pudo importar el documento.');
+    return result;
+  }
+
   async getPickPlan(orderId: string) {
     const s = await this.repo.load();
     const order = s.orders.find((o) => o.id === orderId);
@@ -200,9 +226,70 @@ export class OperationsUseCases {
     return pickPlan(s, order);
   }
 
-  async confirmPrepare(orderId: string) {
+  async saveVehicle(body: Partial<Vehicle>) {
     return this.mutate((s) => {
+      upsertVehicle(s, body);
+    });
+  }
+
+  async deleteVehicle(id: string) {
+    return this.mutate((s) => {
+      removeFleetVehicle(s, id);
+    });
+  }
+
+  async confirmPrepare(
+    orderId: string,
+    actor?: { id: string; role: string } | null,
+  ) {
+    return this.mutate((s) => {
+      const order = s.orders.find((o) => o.id === orderId);
+      if (
+        order?.assignedToUserId &&
+        actor &&
+        actor.role !== 'admin' &&
+        actor.id !== order.assignedToUserId
+      ) {
+        throw new Error('Este pedido está asignado a otro bodeguero.');
+      }
       prepare(s, orderId);
+    });
+  }
+
+  async assignOrder(
+    orderId: string,
+    assignee: { id: string; name: string; role: string; companyId: string; active: boolean },
+    companyId: string,
+  ) {
+    if (assignee.role !== 'ops') {
+      throw new Error('Solo se puede asignar a usuarios con rol de bodega.');
+    }
+    if (!assignee.active) throw new Error('El bodeguero está inactivo.');
+    if (assignee.companyId !== companyId) {
+      throw new Error('El bodeguero pertenece a otra empresa.');
+    }
+    return this.mutate((s) => {
+      const order = s.orders.find((o) => o.id === orderId);
+      if (!order) throw new Error('Pedido no encontrado.');
+      if (order.status !== 'Por preparar') {
+        throw new Error('Solo se asignan pedidos por preparar.');
+      }
+      order.assignedToUserId = assignee.id;
+      order.assignedToName = assignee.name;
+      order.assignedAt = new Date().toISOString();
+    });
+  }
+
+  async unassignOrder(orderId: string) {
+    return this.mutate((s) => {
+      const order = s.orders.find((o) => o.id === orderId);
+      if (!order) throw new Error('Pedido no encontrado.');
+      if (order.status !== 'Por preparar') {
+        throw new Error('Solo se puede quitar la asignación de pedidos por preparar.');
+      }
+      delete order.assignedToUserId;
+      delete order.assignedToName;
+      delete order.assignedAt;
     });
   }
 

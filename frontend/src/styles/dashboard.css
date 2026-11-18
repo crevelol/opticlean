@@ -83,6 +83,56 @@
   box-shadow: 0 1px 2px color-mix(in srgb, var(--slate-950) 8%, transparent);
 }
 
+.dash-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-top: 1px solid var(--slate-200, #edf1f6);
+  color: var(--slate-600, #6b8298);
+  font-size: 12px;
+}
+.dash-pagination > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dash-pagination button {
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--slate-250, #e2eaf2);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--slate-600, #5885aa);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dash-pagination button .icon {
+  width: 14px;
+  height: 14px;
+}
+.dash-pagination button:hover:not(:disabled) {
+  color: var(--blue-600, #1f7ad9);
+  background: #edf6ff;
+  border-color: #a9cdeb;
+}
+.dash-pagination button.is-active {
+  background: var(--blue-600, #1f7ad9);
+  border-color: var(--blue-600, #1f7ad9);
+  color: #fff;
+}
+.dash-pagination button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .dash-empty-row {
   text-align: center;
   color: var(--slate-500);

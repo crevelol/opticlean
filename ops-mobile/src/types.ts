@@ -59,6 +59,9 @@ export type Order = {
   stagedPlate?: string;
   deliveredTo?: string;
   deliveredAt?: string;
+  assignedToUserId?: string;
+  assignedToName?: string;
+  assignedAt?: string;
 };
 
 export type Receipt = {
