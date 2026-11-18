@@ -174,7 +174,7 @@ export function ReceivePage({
               />
             </label>
             <button type="button" className="btn primary full" onClick={() => setScanOpen(true)}>
-              <Icon name="scan" /> Abrir escáner QR
+              <Icon name="scan" /> Leer código de barras / QR
             </button>
           </div>
           <ul className="product-list">

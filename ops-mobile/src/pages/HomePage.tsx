@@ -44,7 +44,7 @@ export function HomePage({ state, user }: { state: AppState; user: AuthUser }) {
         </p>
         <div className="button-row">
           <Link className="btn primary" to="/recibir?scan=1">
-            <Icon name="scan" /> Escanear QR
+            <Icon name="scan" /> Leer código
           </Link>
           <Link className="btn welcome-secondary" to="/recibir">
             <Icon name="edit" /> Ingreso manual
