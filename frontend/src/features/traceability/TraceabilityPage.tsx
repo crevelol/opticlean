@@ -5,6 +5,7 @@ import { product, dateShort, time } from '../../shared/lib/inventory';
 import { exportEvents } from '../../shared/lib/csv';
 import { Badge, Btn, Empty, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
+import { useAuth } from '../../shared/hooks/AuthProvider';
 import '../../styles/traceability.css';
 
 const TYPE_FILTERS = [
@@ -30,6 +31,8 @@ export function TraceabilityPage() {
   const initialQ = (loc.state as { q?: string } | null)?.q ?? '';
   const [query, setQuery] = useState(initialQ);
   const [type, setType] = useState<(typeof TYPE_FILTERS)[number]['id']>('all');
+  const { user } = useAuth();
+  const [view, setView] = useState<'moves' | 'changes'>('moves');
 
   useEffect(() => {
     if (initialQ) setQuery(initialQ);
@@ -77,7 +80,58 @@ export function TraceabilityPage() {
         }
       />
 
-      <section className="panel trz-panel">
+      {user?.role === 'admin' ? (
+        <div className="segmented" role="group" aria-label="Historial" style={{ marginBottom: 12 }}>
+          <button type="button" className={view === 'moves' ? 'active' : ''} aria-pressed={view === 'moves'} onClick={() => setView('moves')}>
+            Movimientos
+          </button>
+          <button type="button" className={view === 'changes' ? 'active' : ''} aria-pressed={view === 'changes'} onClick={() => setView('changes')}>
+            Cambios de precio y crédito
+          </button>
+        </div>
+      ) : null}
+
+      {view === 'changes' ? (
+        <section className="panel trz-panel">
+          <div className="trz-toolbar">
+            <div className="search-input trz-search">
+              <Icon name="search" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar producto, cliente, campo o usuario…" />
+            </div>
+          </div>
+          {(() => {
+            const q = query.trim().toLowerCase();
+            const rows = (state.auditLog ?? []).filter(
+              (a) => !q || [a.entity, a.entityId, a.entityName, a.field, a.by, a.from, a.to].join(' ').toLowerCase().includes(q),
+            );
+            return rows.length ? (
+              <div className="fx-table-wrap">
+                <table className="fx-table">
+                  <thead>
+                    <tr><th>Fecha</th><th>Usuario</th><th>Registro</th><th>Campo</th><th className="num">Antes</th><th className="num">Después</th></tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((a) => (
+                      <tr key={a.id}>
+                        <td>{dateShort(a.at)} · {time(a.at)}</td>
+                        <td>{a.by}</td>
+                        <td>{a.entity}: {a.entityName}<div className="fx-muted">{a.entityId}</div></td>
+                        <td>{a.field}</td>
+                        <td className="num">{a.from || '—'}</td>
+                        <td className="num">{a.to || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <Empty title="Sin cambios registrados" desc="Aquí aparecen los cambios de precio, costo, IVA, cupo y plazo de crédito, con quién los hizo." />
+            );
+          })()}
+        </section>
+      ) : null}
+
+      <section className="panel trz-panel" style={view !== 'moves' ? { display: 'none' } : undefined}>
         <div className="trz-toolbar">
           <div className="search-input trz-search">
             <Icon name="search" />

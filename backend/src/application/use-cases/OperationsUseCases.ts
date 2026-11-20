@@ -1,6 +1,8 @@
 import type { StateRepository } from '../ports/StateRepository.js';
 import type { AppState, Client, Product, Settings } from '../../domain/types.js';
-import { mergeBusinessRules } from '../../domain/business-rules.js';
+import { mergeBusinessRules, resolveBusinessRules } from '../../domain/business-rules.js';
+import { actorIsAdmin, recordChange } from '../../domain/audit.js';
+import { IVA_RATE } from '../../domain/ledger.js';
 import { categories } from '../../domain/warehouse.js';
 import { getWarehouseGeometry } from '../../domain/warehouse-layout.js';
 import {
@@ -45,6 +47,7 @@ import {
 import type { Bundle, Supplier, WarehouseFamily, WarehouseSite } from '../../domain/types.js';
 import { deleteBundle, ensureBundles, saveBundle } from '../../domain/bundles.service.js';
 import {
+  cancelOrder,
   cancelPurchase,
   closePurchase,
   createBackorderPurchases,
@@ -52,6 +55,7 @@ import {
   promoteWaitingOrders,
   receivePurchase,
 } from '../../domain/commerce.service.js';
+import { addEvent } from '../../domain/inventory.service.js';
 import { commitImport, previewCsv, previewXlsx, previewXml, type ImportKind } from '../../domain/import-docs.service.js';
 import { assembleBundle } from '../../domain/kits.service.js';
 import { createSupplier, updateSupplier } from '../../domain/suppliers.service.js';
@@ -111,6 +115,15 @@ export const BUNDLES = [
   },
 ];
 
+const SENSITIVE_PRODUCT_FIELDS = ['price', 'avgCost', 'ivaRate'] as const;
+const PRODUCT_FIELD_LABEL: Record<(typeof SENSITIVE_PRODUCT_FIELDS)[number], string> = {
+  price: 'Precio de venta',
+  avgCost: 'Costo promedio',
+  ivaRate: 'Tarifa de IVA',
+};
+const sameValue = (a: unknown, b: unknown) =>
+  (a ?? null) === (b ?? null) || (a != null && b != null && Number(a) === Number(b));
+
 export class OperationsUseCases {
   constructor(private readonly repo: StateRepository) {}
 
@@ -169,10 +182,52 @@ export class OperationsUseCases {
     });
   }
 
+  /**
+   * Precio, costo e IVA son datos de administración: bodega puede crear y editar
+   * fichas, pero no cambiarlos. Todo cambio queda en el historial.
+   */
   async saveProduct(body: Product & { originalId?: string }) {
     const { originalId, ...rest } = body;
     return this.mutate((s) => {
-      upsertProduct(s, rest, originalId);
+      const admin = actorIsAdmin();
+      // Copia: upsertProduct modifica el producto en el lugar.
+      const found = originalId ? s.products.find((p) => p.id === originalId) : undefined;
+      const before = found ? { ...found } : undefined;
+      const input: Product = { ...rest };
+      if (before) {
+        if (!admin) {
+          // El costo de bodega se ignora (abajo); el IVA vacío equivale a la tarifa general.
+          const iva = (v: unknown) => (v == null || v === '' ? IVA_RATE : Number(v));
+          const changed =
+            ('price' in rest && !sameValue(rest.price, before.price)) ||
+            ('ivaRate' in rest && iva(rest.ivaRate) !== iva(before.ivaRate));
+          if (changed) throw new Error('Solo administración cambia el precio, el costo o el IVA de un producto.');
+        }
+        // El costo promedio lo calcula la recepción; solo administración lo fija a mano.
+        if (!admin || rest.avgCost === undefined) input.avgCost = before.avgCost;
+      } else if (!admin) {
+        delete input.avgCost;
+      }
+      const saved = upsertProduct(s, input, originalId);
+      for (const field of SENSITIVE_PRODUCT_FIELDS) {
+        recordChange(s, {
+          entity: 'Producto',
+          entityId: saved.id,
+          entityName: saved.name,
+          field: PRODUCT_FIELD_LABEL[field],
+          // El IVA vacío es la tarifa general: guardar 15 % sobre vacío no es un cambio.
+          from: before ? (field === 'ivaRate' ? before.ivaRate ?? IVA_RATE : before[field]) : undefined,
+          to: field === 'ivaRate' ? saved.ivaRate ?? IVA_RATE : saved[field],
+        });
+      }
+    });
+  }
+
+  /** Cancela un pedido de cliente (esperando stock, por preparar o preparado). */
+  async cancelClientOrder(orderId: string, reason: string) {
+    return this.mutate((s) => {
+      const order = cancelOrder(s, orderId, reason);
+      addEvent(s, 'Cancelación', order.lines[0]?.productId ?? '', 0, order.id, 'Cancelado', `${order.id} · ${order.cancelReason}`);
     });
   }
 
@@ -355,20 +410,32 @@ export class OperationsUseCases {
     });
   }
 
-  async addClient(body: Omit<Client, 'id'> & { creditLimit?: number | string }) {
+  async addClient(body: Omit<Client, 'id'> & { creditLimit?: number | string; paymentTermsDays?: number | string }) {
     return this.mutate((s) => {
-      const creditLimit = Number(body.creditLimit);
-      s.clients.push({
-        ...body,
+      // Cupo y plazo los fija administración; bodega crea el cliente con el cupo por defecto.
+      const admin = actorIsAdmin();
+      const fallback = resolveBusinessRules(s.settings).defaultCreditLimit;
+      const requested = Number(body.creditLimit);
+      const creditLimit = admin && body.creditLimit != null && Number.isFinite(requested) && requested >= 0 ? requested : fallback;
+      const terms = Number(body.paymentTermsDays);
+      const { creditLimit: _limit, paymentTermsDays: _terms, ...rest } = body;
+      const created: Client = {
+        ...rest,
         id: uid('CL'),
-        creditLimit: Number.isFinite(creditLimit) && creditLimit >= 0 ? creditLimit : 3000,
-      });
+        creditLimit,
+        ...(admin && body.paymentTermsDays != null && Number.isInteger(terms) && terms >= 0 ? { paymentTermsDays: terms } : {}),
+      };
+      s.clients.push(created);
+      recordChange(s, { entity: 'Cliente', entityId: created.id, entityName: created.name, field: 'Cupo de crédito', from: undefined, to: creditLimit });
+      if (created.paymentTermsDays != null) {
+        recordChange(s, { entity: 'Cliente', entityId: created.id, entityName: created.name, field: 'Plazo de pago (días)', from: undefined, to: created.paymentTermsDays });
+      }
     });
   }
 
   async updateClient(
     id: string,
-    body: Partial<Omit<Client, 'id'>> & { creditLimit?: number | string },
+    body: Partial<Omit<Client, 'id'>> & { creditLimit?: number | string; paymentTermsDays?: number | string },
   ) {
     return this.mutate((s) => {
       const c = s.clients.find((x) => x.id === id);
@@ -380,10 +447,20 @@ export class OperationsUseCases {
       if (body.type !== undefined) c.type = String(body.type).trim() || c.type;
       if (body.city !== undefined) c.city = String(body.city).trim();
       if (body.sector !== undefined) c.sector = String(body.sector).trim();
+      if ((body.creditLimit !== undefined || body.paymentTermsDays !== undefined) && !actorIsAdmin()) {
+        throw new Error('Solo administración cambia el cupo o el plazo de crédito.');
+      }
       if (body.creditLimit !== undefined) {
         const n = Number(body.creditLimit);
         if (!Number.isFinite(n) || n < 0) throw new Error('Límite de crédito inválido.');
+        recordChange(s, { entity: 'Cliente', entityId: c.id, entityName: c.name, field: 'Cupo de crédito', from: c.creditLimit, to: n });
         c.creditLimit = n;
+      }
+      if (body.paymentTermsDays !== undefined) {
+        const n = Number(body.paymentTermsDays);
+        if (!Number.isInteger(n) || n < 0) throw new Error('Plazo de pago inválido.');
+        recordChange(s, { entity: 'Cliente', entityId: c.id, entityName: c.name, field: 'Plazo de pago (días)', from: c.paymentTermsDays, to: n });
+        c.paymentTermsDays = n;
       }
     });
   }

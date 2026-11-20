@@ -209,6 +209,11 @@ export const api = {
       body: JSON.stringify({ reason }),
     }),
   config: () => request<{ production: boolean; resetAllowed: boolean }>('/api/config'),
+  cancelOrder: (orderId: string, reason: string) =>
+    request<StateResponse>(`/api/orders/${encodeURIComponent(orderId)}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
   addSupplier: (body: Record<string, unknown>) =>
     request<StateResponse>('/api/suppliers', { method: 'POST', body: JSON.stringify(body) }),
   saveBundle: (body: Record<string, unknown>) =>

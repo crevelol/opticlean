@@ -343,6 +343,8 @@ export type AppState = {
   clientPrices?: ClientPrice[];
   supplierReturns?: SupplierReturn[];
   adjustments?: StockAdjustment[];
+  /** Historial de cambios de precio, costo, IVA, cupo y plazo de crédito. */
+  auditLog?: AuditEntry[];
   cycleCounts?: CycleCount[];
   transfers?: WarehouseTransfer[];
 };
@@ -544,4 +546,16 @@ export type Rack = {
   category: string;
   x: number;
   y: number;
+};
+
+export type AuditEntry = {
+  id: string;
+  at: string;
+  by: string;
+  entity: 'Producto' | 'Cliente';
+  entityId: string;
+  entityName: string;
+  field: string;
+  from: string;
+  to: string;
 };

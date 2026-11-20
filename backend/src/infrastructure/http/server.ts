@@ -45,6 +45,8 @@ import {
 import { getAdminDb } from '../db/adminDb.js';
 import { runAs } from '../../domain/request-context.js';
 import { carriesState, stateForUser } from './state-view.js';
+import { loginBlockedFor, registerLoginFailure, registerLoginSuccess } from './login-throttle.js';
+import { scheduleAuthBackups } from '../persistence/auth-backup.js';
 
 // Se evalúan al usarse porque `.env` se carga más abajo.
 const isProd = () => process.env.NODE_ENV === 'production';
@@ -106,7 +108,21 @@ const app = express();
 const repo = new JsonStateRepository();
 const ops = new OperationsUseCases(repo);
 
-app.use(cors());
+/**
+ * Web, app de bodega y admin llaman al API por su propio dominio (nginx), así que en
+ * producción no hace falta aceptar otros orígenes. OPTICLEAN_CORS_ORIGINS (separados
+ * por coma) habilita los que se necesiten; fuera de producción se aceptan todos.
+ */
+function corsOrigins(): cors.CorsOptions['origin'] {
+  const list = (process.env.OPTICLEAN_CORS_ORIGINS ?? '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (list.length) return list;
+  return !isProd();
+}
+app.use((req, res, next) => cors({ origin: corsOrigins() })(req, res, next));
+app.set('trust proxy', 'loopback');
 app.use(express.json({ limit: '15mb' }));
 
 function roleDenied(req: express.Request) {
@@ -191,7 +207,23 @@ app.post('/api/auth/login', (req, res) => {
       res.status(400).json({ error: 'Ingresa correo y contraseña' });
       return;
     }
-    res.json(login(email, password));
+    const ip = req.ip || 'desconocida';
+    const wait = loginBlockedFor(ip, email);
+    if (wait) {
+      res.set('Retry-After', String(wait));
+      res.status(429).json({
+        error: `Demasiados intentos fallidos. Espera ${Math.ceil(wait / 60)} minuto(s) antes de volver a intentar.`,
+      });
+      return;
+    }
+    try {
+      const result = login(email, password);
+      registerLoginSuccess(ip, email);
+      res.json(result);
+    } catch (e) {
+      registerLoginFailure(ip, email);
+      throw e;
+    }
   } catch (e) {
     res.status(401).json({ error: e instanceof Error ? e.message : 'No autorizado' });
   }
@@ -588,6 +620,15 @@ app.patch('/api/clients/:id', async (req, res, next) => {
 app.post('/api/purchases', async (req, res, next) => {
   try {
     const state = await ops.addPurchase(req.body);
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/orders/:id/cancel', async (req, res, next) => {
+  try {
+    const state = await ops.cancelClientOrder(req.params.id, String(req.body?.reason ?? ''));
     res.json({ state, metrics: ops.metricsSnapshot(state) });
   } catch (e) {
     next(e);
@@ -1199,6 +1240,8 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 
 // Inicializa SQLite (menú / módulos / empresas)
 getAdminDb();
+// Respaldo diario de usuarios y de la base de empresas, junto a los del estado.
+scheduleAuthBackups(repo.backupsDir);
 if (isProd() && !resetAllowed()) console.log('[state] Reinicio de datos desactivado (producción).');
 
 const PORT = Number(process.env.PORT ?? 3001);

@@ -9,6 +9,9 @@ const DB_PATH = path.join(DATA_DIR, 'admin.db');
 
 let db: DatabaseSync | null = null;
 
+/** Ruta del archivo SQLite (para respaldos). */
+export const adminDbPath = () => DB_PATH;
+
 export type Company = {
   id: string;
   name: string;

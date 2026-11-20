@@ -18,13 +18,31 @@ function isLiveOrder(id: string) {
 }
 
 export function OrdersPage() {
-  const { state } = useAppState();
+  const { state, applyResponse, toast } = useAppState();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState<(typeof tabs)[number]>('Por preparar');
   const [page, setPage] = useState(1);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [bodegueroCount, setBodegueroCount] = useState(0);
+  const [cancelling, setCancelling] = useState<{ id: string; reason: string } | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const canCancel = user?.role === 'admin' || user?.role === 'ops';
+
+  const confirmCancel = async () => {
+    if (!cancelling || cancelBusy) return;
+    setCancelBusy(true);
+    try {
+      applyResponse(await api.cancelOrder(cancelling.id, cancelling.reason));
+      toast(`Pedido ${cancelling.id} cancelado.`);
+      setCancelling(null);
+      setDetailId(null);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'No se pudo cancelar el pedido.');
+    } finally {
+      setCancelBusy(false);
+    }
+  };
   const location = useLocation();
 
   // Abre el detalle cuando se llega desde una orden de compra enlazada.
@@ -278,6 +296,11 @@ export function OrdersPage() {
           footer={
             <div className="ord-actions">
               <Btn onClick={() => setDetailId(null)}>Cerrar</Btn>
+              {canCancel && ['Esperando stock', 'Por preparar', 'Preparado'].includes(detail.status) ? (
+                <Btn icon="close" onClick={() => setCancelling({ id: detail.id, reason: '' })}>
+                  Cancelar pedido
+                </Btn>
+              ) : null}
               {detail.status === 'Por preparar' ? (
                 <Btn
                   variant="primary"
@@ -423,6 +446,31 @@ export function OrdersPage() {
               <span>Total del pedido</span>
               <strong>{money(detailTotal)}</strong>
             </div>
+          </div>
+        </Modal>
+      ) : null}
+      {cancelling ? (
+        <Modal
+          title={`Cancelar ${cancelling.id}`}
+          subtitle="Si ya estaba preparado, la mercadería vuelve a bodega. Las órdenes de compra del faltante siguen abiertas."
+          onClose={() => setCancelling(null)}
+          footer={
+            <>
+              <Btn onClick={() => setCancelling(null)}>Volver</Btn>
+              <Btn variant="primary" icon="close" disabled={cancelBusy || !cancelling.reason.trim()} onClick={() => void confirmCancel()}>
+                Cancelar pedido
+              </Btn>
+            </>
+          }
+        >
+          <div className="field full">
+            <label htmlFor="ord-cancel-reason">Motivo</label>
+            <input
+              id="ord-cancel-reason"
+              value={cancelling.reason}
+              placeholder="Ej.: el cliente ya no lo necesita"
+              onChange={(e) => setCancelling({ ...cancelling, reason: e.target.value })}
+            />
           </div>
         </Modal>
       ) : null}

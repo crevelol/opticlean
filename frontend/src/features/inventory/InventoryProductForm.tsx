@@ -3,6 +3,7 @@ import { Select } from '../../shared/components/Select';
 import { api } from '../../shared/api/client';
 import { Icon } from '../../shared/components/Icon';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
+import { useAuth } from '../../shared/hooks/AuthProvider';
 import type { HazardClass, Product, ProductComponent, ProductKind } from '../../shared/types';
 import { HAZARD_OPTIONS } from '../../shared/lib/wholesale';
 import './inventory-product-form.css';
@@ -44,6 +45,11 @@ export function InventoryProductForm({ product, categories, products, onClose, o
   const closeRef = useRef(onClose);
   const initialFieldRef = useRef(product ? 'name' : 'id');
   const [pending, setPending] = useState(false);
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  /** Precio, costo e IVA de un producto existente: solo administración. */
+  const lockMoney = !!product && !isAdmin;
+  const [avgCostDraft, setAvgCostDraft] = useState(product?.avgCost != null ? String(product.avgCost) : '');
   const [errors, setErrors] = useState<FormErrors>({});
   const [serverError, setServerError] = useState('');
   const [kind, setKind] = useState<ProductKind>(product?.kind === 'raw' ? 'raw' : 'finished');
@@ -307,6 +313,9 @@ export function InventoryProductForm({ product, categories, products, onClose, o
         sanitaryExpires: sanitaryExpires || undefined,
         ivaRate: Number(ivaRate),
         inspectOnReceipt,
+        ...(isAdmin && avgCostDraft.trim() !== '' && Number.isFinite(Number(avgCostDraft))
+          ? { avgCost: Number(avgCostDraft) }
+          : {}),
         stockUnit: 'unidad',
         packs: [
           { code: 'unidad', label: 'Unidad', units: 1 },
@@ -468,9 +477,10 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                       <label htmlFor={fieldId('price')}>Precio por unidad</label>
                       <div className="inv-input-affix">
                         <span aria-hidden="true">USD</span>
-                        <input {...fieldProps('price')} type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" />
+                        <input {...fieldProps('price')} type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" readOnly={lockMoney} />
                       </div>
                       {fieldError('price')}
+                      {lockMoney ? <small>Solo administración cambia el precio.</small> : null}
                     </div>
                     <div className="field">
                       <label htmlFor={fieldId('min')}>Stock mínimo</label>
@@ -509,7 +519,7 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                     </div>
                     <div className="field">
                       <label htmlFor={`${uniqueId}-iva`}>Tarifa de IVA</label>
-                      <Select id={`${uniqueId}-iva`} value={ivaRate} onChange={(event) => setIvaRate(event.target.value)}>
+                      <Select id={`${uniqueId}-iva`} value={ivaRate} disabled={lockMoney} onChange={(event) => setIvaRate(event.target.value)}>
                         <option value="0.15">15 %</option>
                         <option value="0">0 %</option>
                       </Select>
@@ -522,11 +532,23 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                       </label>
                       <small>Cada recepción queda retenida hasta que se revise etiqueta, sello y hoja de seguridad.</small>
                     </div>
-                    {product?.avgCost != null ? (
+                    {isAdmin || product?.avgCost != null ? (
                       <div className="field">
-                        <label>Costo promedio</label>
-                        <input value={product.avgCost.toFixed(4)} readOnly />
-                        <small>Se actualiza al recibir contra una orden de compra.</small>
+                        <label htmlFor={`${uniqueId}-cost`}>Costo promedio</label>
+                        <input
+                          id={`${uniqueId}-cost`}
+                          type="number"
+                          min="0"
+                          step="0.0001"
+                          value={avgCostDraft}
+                          readOnly={!isAdmin}
+                          placeholder="Sin costo"
+                          onChange={(event) => setAvgCostDraft(event.target.value)}
+                        />
+                        <small>
+                          Se actualiza al recibir contra una orden de compra.
+                          {isAdmin ? ' Un cambio manual queda en el historial de cambios.' : ''}
+                        </small>
                       </div>
                     ) : null}
                   </div>

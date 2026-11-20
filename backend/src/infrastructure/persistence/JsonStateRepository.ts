@@ -29,6 +29,11 @@ export class JsonStateRepository implements StateRepository {
 
   constructor(private readonly dataDir = process.env.OPTICLEAN_DATA_DIR?.trim() || DEFAULT_DATA_DIR) {}
 
+  /** Carpeta de respaldos diarios. */
+  get backupsDir() {
+    return path.join(this.dataDir, 'backups');
+  }
+
   private fileFor(companyId: string) {
     return companyId === DEFAULT_COMPANY_ID
       ? path.join(this.dataDir, 'state.json')

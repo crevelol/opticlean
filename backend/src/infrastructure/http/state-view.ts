@@ -12,7 +12,7 @@ const DRIVER_STATUSES = new Set(['Preparado', 'En ruta', 'Incidencia', 'Entregad
 export function stateForUser(state: AppState, user: PublicUser | undefined): AppState {
   if (!user || user.role === 'admin') return state;
   if (user.role === 'driver') return driverView(state, user.truckPlate);
-  return { ...state, supplierBills: [], supplierPayments: [] };
+  return { ...state, supplierBills: [], supplierPayments: [], auditLog: [] };
 }
 
 function driverView(state: AppState, plate?: string): AppState {
@@ -49,6 +49,7 @@ function driverView(state: AppState, plate?: string): AppState {
     cycleCounts: [],
     transfers: [],
     suppliers: [],
+    auditLog: [],
   };
 }
 

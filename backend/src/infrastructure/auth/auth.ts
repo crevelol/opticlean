@@ -60,6 +60,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, '../../../../data');
 const USERS_PATH = path.join(DATA_DIR, 'users.json');
 
+/** Ruta del archivo de usuarios (para respaldos). */
+export const usersFilePath = () => USERS_PATH;
+
 /** Se evalúa al usarse: `.env` se carga después de importar este módulo. */
 const isProd = () => process.env.NODE_ENV === 'production';
 const INSECURE_SECRETS = new Set(['', 'cambia-este-secreto', 'opticlean-dev-secret-change-me-in-production']);

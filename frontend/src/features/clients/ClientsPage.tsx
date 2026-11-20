@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Select } from '../../shared/components/Select';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
+import { useAuth } from '../../shared/hooks/AuthProvider';
 import { api } from '../../shared/api/client';
 import {
   creditAvailable,
@@ -39,6 +40,9 @@ function clientOrders(state: { orders: Order[] }, clientId: string) {
 
 export function ClientsPage() {
   const { state, applyResponse, toast } = useAppState();
+  const { user } = useAuth();
+  /** Cupo y plazo de crédito los fija administración. */
+  const isAdmin = user?.role === 'admin';
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -337,13 +341,15 @@ export function ClientsPage() {
                                   >
                                     Ver ficha
                                   </button>
-                                  <button
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={() => openCredit(c)}
-                                  >
-                                    Editar crédito
-                                  </button>
+                                  {isAdmin ? (
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => openCredit(c)}
+                                    >
+                                      Editar crédito
+                                    </button>
+                                  ) : null}
                                 </div>
                               ) : null}
                             </div>
@@ -491,9 +497,11 @@ export function ClientsPage() {
                 <div className="cli-credit-box">
                   <div className="cli-credit-box-head">
                     <strong>Cupo de crédito</strong>
-                    <button type="button" onClick={() => openCredit(selected.client)}>
+                    {isAdmin ? (
+<button type="button" onClick={() => openCredit(selected.client)}>
                       Editar
                     </button>
+) : null}
                   </div>
                   <div className="cli-credit-stats">
                     <div>
@@ -587,7 +595,7 @@ export function ClientsPage() {
                     El cupo comprometido corresponde a pedidos abiertos (por preparar, en ruta,
                     etc.).
                   </p>
-                  <Btn variant="primary" onClick={() => openCredit(selected.client)}>
+                  <Btn variant="primary" disabled={!isAdmin} onClick={() => openCredit(selected.client)}>
                     Ajustar límite
                   </Btn>
                 </div>
@@ -667,8 +675,10 @@ export function ClientsPage() {
                   min={0}
                   step={50}
                   defaultValue={rules.defaultCreditLimit}
+                  readOnly={!isAdmin}
                   required
                 />
+                {!isAdmin ? <small>Se asigna el cupo por defecto. Administración puede ajustarlo después.</small> : null}
               </div>
             </div>
             {error ? <div className="form-error visible">{error}</div> : null}

@@ -277,6 +277,7 @@ export type AppState = {
   clientPrices?: ClientPrice[];
   supplierReturns?: SupplierReturn[];
   adjustments?: StockAdjustment[];
+  auditLog?: AuditEntry[];
   cycleCounts?: CycleCount[];
   transfers?: WarehouseTransfer[];
 };
@@ -376,6 +377,18 @@ export type SupplierReturn = {
   qty: number;
   batch: string;
   reason: string;
+};
+
+export type AuditEntry = {
+  id: string;
+  at: string;
+  by: string;
+  entity: 'Producto' | 'Cliente';
+  entityId: string;
+  entityName: string;
+  field: string;
+  from: string;
+  to: string;
 };
 
 export type StockAdjustment = {
