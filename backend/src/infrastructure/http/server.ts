@@ -14,6 +14,7 @@ import {
   getUserById,
   listUsers,
   login,
+  prepareAuth,
   publicUserFromRequest,
   updateUser,
   type AuthRole,
@@ -42,6 +43,13 @@ import {
   updateVehicle,
 } from '../../domain/admin.service.js';
 import { getAdminDb } from '../db/adminDb.js';
+import { runAs } from '../../domain/request-context.js';
+import { carriesState, stateForUser } from './state-view.js';
+
+// Se evalúan al usarse porque `.env` se carga más abajo.
+const isProd = () => process.env.NODE_ENV === 'production';
+/** El reinicio a datos demo solo existe fuera de producción (o con permiso explícito). */
+const resetAllowed = () => !isProd() || process.env.OPTICLEAN_ALLOW_RESET === '1';
 
 function companyIdOf(req: express.Request) {
   return String(req.user?.companyId || 'co-innovamf');
@@ -91,6 +99,8 @@ function loadEnvFile() {
   }
 }
 loadEnvFile();
+// En producción no arranca sin secreto propio ni con usuarios demo.
+prepareAuth();
 
 const app = express();
 const repo = new JsonStateRepository();
@@ -121,9 +131,18 @@ function roleDenied(req: express.Request) {
     path.startsWith('/api/users') ||
     path.includes('/assign') ||
     path.includes('/unassign') ||
-    path === '/api/state/reset'
+    path === '/api/state/reset' ||
+    // Separación de funciones: bodega solicita, administración aprueba.
+    /^\/api\/adjustments\/[^/]+\/approve$/.test(path) ||
+    /^\/api\/cycle-counts\/[^/]+\/apply$/.test(path) ||
+    path.startsWith('/api/supplier-returns') ||
+    /^\/api\/purchases\/[^/]+\/close$/.test(path) ||
+    /^\/api\/lots\/[^/]+\/(release|reject)$/.test(path)
   ) {
     return allow([]);
+  }
+  if (path === '/api/receptions' && req.method === 'POST' && !req.body?.purchaseId) {
+    return 'Recibir sin orden de compra requiere aprobación de administración.';
   }
   if (req.method === 'PATCH' && /^\/api\/clients\/[^/]+$/.test(path)) {
     const body = req.body ?? {};
@@ -146,8 +165,20 @@ app.use((req, res, next) => {
       res.status(403).json({ error: denied });
       return;
     }
-    next();
+    const user = req.user!;
+    // Cada movimiento queda firmado por el usuario y aislado en su empresa.
+    runAs({ id: user.id, name: user.name, role: user.role, companyId: user.companyId }, () => next());
   });
+});
+
+// Ningún rol recibe más estado del que le corresponde, en ninguna respuesta.
+app.use((req, res, next) => {
+  const send = res.json.bind(res);
+  res.json = (body: unknown) => {
+    if (carriesState(body)) return send({ ...body, state: stateForUser(body.state, req.user) });
+    return send(body);
+  };
+  next();
 });
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
@@ -175,6 +206,10 @@ app.use('/api', (req, res, next) => {
   return authRequired(req, res, next);
 });
 
+app.get('/api/config', (_req, res) => {
+  res.json({ production: isProd(), resetAllowed: resetAllowed() });
+});
+
 app.get('/api/meta', async (_req, res, next) => {
   try {
     res.json(await ops.getMeta());
@@ -194,6 +229,10 @@ app.get('/api/state', async (_req, res, next) => {
 
 app.post('/api/state/reset', async (_req, res, next) => {
   try {
+    if (!resetAllowed()) {
+      res.status(403).json({ error: 'El reinicio de datos está desactivado en producción.' });
+      return;
+    }
     const state = await ops.reset();
     res.json({ state, metrics: ops.metricsSnapshot(state) });
   } catch (e) {
@@ -549,6 +588,42 @@ app.patch('/api/clients/:id', async (req, res, next) => {
 app.post('/api/purchases', async (req, res, next) => {
   try {
     const state = await ops.addPurchase(req.body);
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/purchases/:id/receive', async (req, res, next) => {
+  try {
+    const state = await ops.receivePurchaseOrder(req.params.id, req.body ?? { lines: [] });
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/purchases/:id/close', async (req, res, next) => {
+  try {
+    const state = await ops.closePurchaseOrder(req.params.id, String(req.body?.reason ?? ''));
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/lots/:id/release', async (req, res, next) => {
+  try {
+    const state = await ops.releaseInspectedLot(req.params.id);
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/lots/:id/reject', async (req, res, next) => {
+  try {
+    const state = await ops.rejectInspectedLot(req.params.id, String(req.body?.reason ?? ''));
     res.json({ state, metrics: ops.metricsSnapshot(state) });
   } catch (e) {
     next(e);
@@ -1124,6 +1199,7 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 
 // Inicializa SQLite (menú / módulos / empresas)
 getAdminDb();
+if (isProd() && !resetAllowed()) console.log('[state] Reinicio de datos desactivado (producción).');
 
 const PORT = Number(process.env.PORT ?? 3001);
 app.listen(PORT, () => {

@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
-import { dateShort, product } from '../../shared/lib/inventory';
+import { dateShort, daysUntil, expiryTone, product } from '../../shared/lib/inventory';
 import { Btn, Empty, Kpi, KpiGrid, PageHead, ProductCell, cx } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
+import { Modal } from '../../shared/components/Modal';
+import { api } from '../../shared/api/client';
+import { useAuth } from '../../shared/hooks/AuthProvider';
 import '../../styles/reception.css';
 
 type Period = 'all' | 'today' | '7d' | '30d';
@@ -23,7 +26,10 @@ function isoDay(offsetDays = 0) {
 }
 
 export function ReceptionListPage() {
-  const { state } = useAppState();
+  const { state, applyResponse, toast } = useAppState();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const [rejecting, setRejecting] = useState<{ lotId: string; receiptId: string; reason: string } | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const highlight = (location.state as { highlight?: string } | null)?.highlight;
@@ -43,7 +49,7 @@ export function ReceptionListPage() {
       if (from && r.date.slice(0, 10) < from) return false;
       if (!q) return true;
       const p = product(state, r.productId);
-      return [r.id, r.productId, p?.name, r.supplier, r.batch, r.loc].join(' ').toLowerCase().includes(q);
+      return [r.id, r.productId, p?.name, r.supplier, r.batch, r.loc, r.purchaseId, r.reason].join(' ').toLowerCase().includes(q);
     });
   }, [state, receipts, query, period, today, since7, since30]);
 
@@ -56,6 +62,27 @@ export function ReceptionListPage() {
   const openPurchases = state.purchases.filter((p) => !p.status || p.status === 'Abierta' || p.status === 'Parcial').length;
 
   const goNew = () => navigate('/recepcion/nueva');
+  const pendingInspection = receipts.filter((r) => r.inspection === 'Pendiente').length;
+
+  const release = async (lotId: string, receiptId: string) => {
+    try {
+      applyResponse(await api.releaseLot(lotId));
+      toast(`Lote de ${receiptId} liberado: ya se puede vender.`);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'No se pudo liberar el lote.');
+    }
+  };
+
+  const reject = async () => {
+    if (!rejecting) return;
+    try {
+      applyResponse(await api.rejectLot(rejecting.lotId, rejecting.reason));
+      toast(`Lote de ${rejecting.receiptId} rechazado y enviado a cuarentena.`);
+      setRejecting(null);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'No se pudo rechazar el lote.');
+    }
+  };
 
   return (
     <div className="reception-page">
@@ -128,9 +155,12 @@ export function ReceptionListPage() {
                   <th>Recepción</th>
                   <th>Producto</th>
                   <th>Proveedor</th>
+                  <th>Orden</th>
                   <th>Lote</th>
+                  <th>Vence</th>
                   <th className="num">Cantidad</th>
                   <th>Ubicación</th>
+                  <th>Calidad</th>
                 </tr>
               </thead>
               <tbody>
@@ -145,15 +175,57 @@ export function ReceptionListPage() {
                       <td>
                         <ProductCell name={p?.name ?? r.productId} id={r.productId} category={p?.category ?? '—'} />
                       </td>
-                      <td>{r.supplier || '—'}</td>
+                      <td>
+                        {r.supplier || '—'}
+                        {r.by ? <small>Recibió {r.by}</small> : null}
+                      </td>
+                      <td>
+                        {r.purchaseId ? (
+                          <button type="button" className="fx-link" onClick={() => navigate('/compras', { state: { focus: r.purchaseId } })}>
+                            {r.purchaseId}
+                          </button>
+                        ) : (
+                          <span className="fx-chip">{r.reason ?? 'Sin orden'}</span>
+                        )}
+                      </td>
                       <td>
                         <span className="reception-code">{r.batch || '—'}</span>
+                      </td>
+                      <td>
+                        {r.expiry ? (
+                          <span className={`fx-chip ${expiryTone(daysUntil(r.expiry))}`}>{dateShort(r.expiry)}</span>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td className="num">
                         <strong>{r.qty}</strong> u.
                       </td>
                       <td>
                         <span className="reception-code">{r.loc || '—'}</span>
+                      </td>
+                      <td>
+                        {r.inspection === 'Pendiente' ? (
+                          <div style={{ display: 'grid', gap: 4 }}>
+                            <span className="fx-chip amber">En inspección</span>
+                            {isAdmin && r.lotId ? (
+                              <div className="fx-hold-actions">
+                                <Btn variant="small" icon="check" onClick={() => void release(r.lotId!, r.id)}>
+                                  Liberar
+                                </Btn>
+                                <Btn variant="small" icon="close" onClick={() => setRejecting({ lotId: r.lotId!, receiptId: r.id, reason: '' })}>
+                                  Rechazar
+                                </Btn>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : r.inspection === 'Rechazado' ? (
+                          <span className="fx-chip red">Rechazado</span>
+                        ) : r.inspection === 'Liberado' ? (
+                          <span className="fx-chip green">Liberado</span>
+                        ) : (
+                          <span className="fx-muted">—</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -174,6 +246,42 @@ export function ReceptionListPage() {
             }
           />
         )}
+
+        {rejecting ? (
+          <Modal
+            title={`Rechazar lote de ${rejecting.receiptId}`}
+            subtitle="El lote pasa a cuarentena para devolverlo al proveedor."
+            onClose={() => setRejecting(null)}
+            footer={
+              <>
+                <Btn onClick={() => setRejecting(null)}>Volver</Btn>
+                <Btn variant="primary" icon="close" disabled={!rejecting.reason.trim()} onClick={() => void reject()}>
+                  Rechazar lote
+                </Btn>
+              </>
+            }
+          >
+            <div className="field full">
+              <label htmlFor="rec-reject-reason">Motivo del rechazo</label>
+              <input
+                id="rec-reject-reason"
+                value={rejecting.reason}
+                placeholder="Ej.: envase roto, sin hoja de seguridad"
+                onChange={(e) => setRejecting({ ...rejecting, reason: e.target.value })}
+              />
+            </div>
+          </Modal>
+        ) : null}
+
+        {pendingInspection ? (
+          <div className="no-shortage" role="status">
+            <Icon name="alert" />
+            <div>
+              <strong>{pendingInspection} recepción(es) en inspección</strong>
+              <p>Esos lotes no se venden hasta que administración los libere.</p>
+            </div>
+          </div>
+        ) : null}
 
         {list.length ? (
           <div className="reception-list-foot">

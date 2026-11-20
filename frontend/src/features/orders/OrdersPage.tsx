@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import { api } from '../../shared/api/client';
@@ -10,7 +10,7 @@ import { Icon } from '../../shared/components/Icon';
 import { AssignPicker } from './AssignPicker';
 import '../../styles/orders.css';
 
-const tabs = ['Todos', 'Por preparar', 'Preparado', 'En ruta', 'Entregado', 'Incidencia'] as const;
+const tabs = ['Todos', 'Esperando stock', 'Por preparar', 'Preparado', 'En ruta', 'Entregado', 'Incidencia'] as const;
 const PAGE_SIZE = 8;
 
 function isLiveOrder(id: string) {
@@ -25,6 +25,16 @@ export function OrdersPage() {
   const [page, setPage] = useState(1);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [bodegueroCount, setBodegueroCount] = useState(0);
+  const location = useLocation();
+
+  // Abre el detalle cuando se llega desde una orden de compra enlazada.
+  useEffect(() => {
+    const open = (location.state as { open?: string } | null)?.open;
+    if (!open) return;
+    setTab('Todos');
+    setDetailId(open);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, location.pathname, navigate]);
 
   const liveOrders = useMemo(
     () => (state ? state.orders.filter((o) => isLiveOrder(o.id)) : []),
@@ -36,6 +46,7 @@ export function OrdersPage() {
     const pending = liveOrders.filter((o) => o.status === 'Por preparar');
     return {
       todos: liveOrders.length,
+      esperando: by('Esperando stock'),
       porPreparar: by('Por preparar'),
       preparado: by('Preparado'),
       enRuta: by('En ruta'),
@@ -78,6 +89,7 @@ export function OrdersPage() {
 
   const tabCount = (t: (typeof tabs)[number]) => {
     if (t === 'Todos') return counts.todos;
+    if (t === 'Esperando stock') return counts.esperando;
     if (t === 'Por preparar') return counts.porPreparar;
     if (t === 'Preparado') return counts.preparado;
     if (t === 'En ruta') return counts.enRuta;
@@ -299,6 +311,33 @@ export function OrdersPage() {
               <Badge text={detail.priority} color={detail.priority === 'Alta' ? 'amber' : 'muted'} />
               {detail.vehicle ? <Badge text={detail.vehicle} color="blue" /> : null}
             </div>
+            {detail.status === 'Esperando stock' ? (
+              <div className="no-shortage" role="status">
+                <Icon name="alert" />
+                <div>
+                  <strong>Esperando stock</strong>
+                  <p>
+                    {(detail.shortages ?? [])
+                      .map((s) => `Faltan ${s.qty} u. de ${product(state, s.productId)?.name ?? s.productId}`)
+                      .join(' · ') || 'Falta mercadería para completar el pedido.'}
+                    . Pasa a «Por preparar» automáticamente al recibir.
+                  </p>
+                  {detail.purchaseIds?.length ? (
+                    <p>
+                      Órdenes de compra:{' '}
+                      {detail.purchaseIds.map((id, i) => (
+                        <span key={id}>
+                          {i ? ', ' : ''}
+                          <button type="button" className="fx-link" onClick={() => navigate('/compras', { state: { focus: id } })}>
+                            {id}
+                          </button>
+                        </span>
+                      ))}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
             {detail.status === 'Por preparar' || detail.assignedToName ? (
               <div className="ord-assign-block">
                 <AssignPicker order={detail} />

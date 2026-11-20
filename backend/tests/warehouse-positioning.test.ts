@@ -84,6 +84,12 @@ test('Saved and reloaded rack placements preserve stock, references, and locatio
     load: async () => structuredClone(persisted),
     save: async (state: AppState) => { persisted = JSON.parse(JSON.stringify(state)) as AppState; },
     reset: async () => seed(),
+    transaction: async <T,>(fn: (state: AppState) => T | Promise<T>) => {
+      const state = structuredClone(persisted);
+      const result = await fn(state);
+      persisted = JSON.parse(JSON.stringify(state)) as AppState;
+      return { state, result };
+    },
   };
   const ops = new OperationsUseCases(repo);
   const before = structuredClone(persisted);

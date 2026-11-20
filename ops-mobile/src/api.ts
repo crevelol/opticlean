@@ -46,6 +46,7 @@ export const api = {
     expiry: string;
     supplier: string;
     purchaseId?: string;
+    reason?: string;
   }) => request<{ state: AppState }>('/api/receptions', { method: 'POST', body: JSON.stringify(body) }),
   pickPlan: (orderId: string) =>
     request<PickStep[]>(`/api/orders/${encodeURIComponent(orderId)}/pick-plan`),

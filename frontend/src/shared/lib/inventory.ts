@@ -1,4 +1,4 @@
-import type { AppState, Order, OrderKit, OrderLine } from '../types';
+import type { AppState, Lot, Order, OrderKit, OrderLine } from '../types';
 
 export const activeWarehouseId = (s: AppState) =>
   s.settings.activeWarehouseId ?? s.warehouses?.[0]?.id ?? 'WH-QT-01';
@@ -37,7 +37,42 @@ export const reserved = (s: AppState, id: string) =>
     .filter((o) => o.status === 'Por preparar')
     .reduce((n, o) => n + expandedDemand(s, o).filter((l) => l.productId === id).reduce((a, l) => a + l.qty, 0), 0);
 
-export const available = (s: AppState, id: string) => stock(s, id) - reserved(s, id);
+/** Fecha de hoy en Ecuador (YYYY-MM-DD). */
+export const todayEc = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+
+export function daysUntil(expiry: string, today = todayEc()) {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(expiry ?? '')) return null;
+  return Math.round((Date.parse(`${expiry.slice(0, 10)}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 864e5);
+}
+
+/** Misma regla que el backend: vendible, sin retención, no vencido y con vida útil mínima. */
+export function isLotSellable(s: AppState, lot: Lot, today = todayEc()) {
+  if (HELD_LOCS.has(lot.loc) || lot.onHold || lot.qty <= 0) return false;
+  const days = daysUntil(lot.expiry, today);
+  if (days == null || days < 0) return false;
+  return days >= (product(s, lot.productId)?.minShelfLifeDays ?? 0);
+}
+
+export const sellableStock = (s: AppState, id: string) =>
+  scopedLots(s)
+    .filter((l) => l.productId === id && isLotSellable(s, l))
+    .reduce((n, l) => n + l.qty, 0);
+
+export const available = (s: AppState, id: string) => sellableStock(s, id) - reserved(s, id);
+
+/** FEFO: vence antes primero; a igual vencimiento, lo que entró antes. */
+export const fefoCompare = (a: Lot, b: Lot) =>
+  a.expiry.localeCompare(b.expiry) || (a.receivedAt ?? '').localeCompare(b.receivedAt ?? '');
+
+/** Lotes vendibles de un producto en orden de salida (1 = sale primero). */
+export const exitOrder = (s: AppState, productId: string) =>
+  scopedLots(s)
+    .filter((l) => l.productId === productId && isLotSellable(s, l))
+    .sort(fefoCompare);
+
+/** Urgencia por días al vencimiento, para colorear. */
+export const expiryTone = (days: number | null) =>
+  days == null ? '' : days < 0 ? 'red' : days < 60 ? 'red' : days < 120 ? 'amber' : 'green';
 
 export const qtyAt = (s: AppState, loc: string) =>
   scopedLots(s)
@@ -58,7 +93,7 @@ export const orderWeight = (s: AppState, o: Order) =>
 export const money = (n: number) =>
   new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD' }).format(n);
 
-const CREDIT_STATUSES = new Set(['Por preparar', 'Preparado', 'En ruta', 'Incidencia']);
+const CREDIT_STATUSES = new Set(['Esperando stock', 'Por preparar', 'Preparado', 'En ruta', 'Incidencia']);
 
 /** Crédito usado = pedidos abiertos que aún no tienen factura. */
 export const creditUsed = (s: AppState, clientId: string) => {
@@ -108,6 +143,7 @@ export const time = (d: string) =>
 
 export const statusColor = (s: string) =>
   ({
+    'Esperando stock': 'purple',
     'Por preparar': 'amber',
     Preparado: 'blue',
     'En ruta': 'purple',
@@ -117,4 +153,7 @@ export const statusColor = (s: string) =>
     Abierta: 'blue',
     Parcial: 'amber',
     Recibida: 'green',
+    Cerrada: 'green',
+    Cancelada: 'red',
+    Cancelado: 'red',
   })[s] ?? '';

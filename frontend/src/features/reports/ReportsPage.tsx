@@ -6,6 +6,7 @@ import { exportEvents, exportInventory, exportLocations, exportReport } from '..
 import { Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { buildReportsSnapshot, type ReportPeriod, type ReportTab } from './reportsModel';
+import { buildManagement } from './managementModel';
 import '../../styles/reports.css';
 
 const periods: { value: ReportPeriod; label: string }[] = [
@@ -20,6 +21,7 @@ const tabs: { id: ReportTab; label: string; icon: string }[] = [
   { id: 'service', label: 'Servicio', icon: 'orders' },
   { id: 'supply', label: 'Abastecimiento', icon: 'cart' },
   { id: 'warehouse', label: 'Bodega', icon: 'warehouse' },
+  { id: 'management', label: 'Gestión', icon: 'chart' },
 ];
 
 export function ReportsPage() {
@@ -36,8 +38,11 @@ export function ReportsPage() {
   if (!state || !meta || !snapshot) return null;
 
   const { capital, service, supply, warehouse } = snapshot;
+  const management = buildManagement(state, period);
   const insight =
-    tab === 'capital'
+    tab === 'management'
+      ? management.insight
+      : tab === 'capital'
       ? capital.insight
       : tab === 'service'
         ? service.insight
@@ -94,6 +99,24 @@ export function ReportsPage() {
           r.restockCost,
           r.parentsBlocked,
           r.parentNames.join(' | '),
+        ]),
+      );
+    } else if (tab === 'management') {
+      exportReport(
+        'OPTICLEAN_Reporte_Gestion',
+        ['Código', 'Producto', 'ABC', 'Unidades vendidas', 'Venta', 'Costo', 'Margen', 'Margen %', 'Stock', 'Días de inventario', 'Rotación anual'],
+        management.products.map((r) => [
+          r.productId,
+          r.name,
+          r.abc,
+          r.unitsSold,
+          r.revenue,
+          r.cost,
+          r.margin,
+          r.marginPct ?? '',
+          r.stock,
+          r.daysOfInventory ?? '',
+          r.turnover ?? '',
         ]),
       );
     } else {
@@ -814,6 +837,119 @@ export function ReportsPage() {
               <div className="rpt-empty">
                 Todas las ubicaciones con stock han tenido movimiento reciente.
               </div>
+            )}
+          </section>
+        </>
+      )}
+      {tab === 'management' && (
+        <>
+          <div className="fx-abc">
+            <div>
+              <span className="fx-muted">Margen bruto del periodo</span>
+              <b>{money(management.margin)}</b>
+              <span className="fx-muted">
+                {management.marginPct != null ? `${management.marginPct} % sobre ${money(management.revenue)}` : 'Sin ventas facturadas'} · {management.invoices} factura(s)
+              </span>
+            </div>
+            <div>
+              <span className="fx-muted">Clasificación ABC (por venta)</span>
+              <b>
+                {management.abcCount.A} · {management.abcCount.B} · {management.abcCount.C}
+              </b>
+              <span className="fx-muted">A = 80 % de la venta · B = siguiente 15 % · C = resto</span>
+            </div>
+            <div>
+              <span className="fx-muted">Sin venta en el periodo</span>
+              <b>{management.slow}</b>
+              <span className="fx-muted">productos con stock inmovilizado</span>
+            </div>
+          </div>
+          {management.missingCostLines ? (
+            <p className="fx-muted">{management.missingCostLines} línea(s) facturadas sin costo registrado: su margen se muestra sin porcentaje.</p>
+          ) : null}
+
+          <section className="rpt-panel">
+            <div className="rpt-panel-head">
+              <div>
+                <h3>Rotación y margen por producto</h3>
+                <p>Desde facturas emitidas desde el {management.from} ({management.days} días)</p>
+              </div>
+            </div>
+            <div className="rpt-table-scroll">
+              <table className="rpt-table">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>ABC</th>
+                    <th className="num">Vendidas</th>
+                    <th className="num">Venta</th>
+                    <th className="num">Margen</th>
+                    <th className="num">Margen %</th>
+                    <th className="num">Stock</th>
+                    <th className="num">Días inv.</th>
+                    <th className="num">Rotación/año</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {management.products.slice(0, 40).map((r) => (
+                    <tr key={r.productId}>
+                      <td>
+                        <strong>{r.name}</strong>
+                        <small>{r.productId}</small>
+                      </td>
+                      <td>
+                        <span className={`fx-chip ${r.abc === 'A' ? 'green' : r.abc === 'B' ? 'amber' : ''}`}>{r.abc}</span>
+                      </td>
+                      <td className="num">{num(r.unitsSold)}</td>
+                      <td className="num">{money(r.revenue)}</td>
+                      <td className="num">{money(r.margin)}</td>
+                      <td className="num">{r.marginPct != null ? `${r.marginPct} %` : '—'}</td>
+                      <td className="num">{num(r.stock)}</td>
+                      <td className="num">{r.daysOfInventory ?? '—'}</td>
+                      <td className="num">{r.turnover ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="rpt-panel">
+            <div className="rpt-panel-head">
+              <div>
+                <h3>Margen por cliente</h3>
+                <p>Venta facturada menos costo al facturar</p>
+              </div>
+            </div>
+            {management.clients.length ? (
+              <div className="rpt-table-scroll">
+                <table className="rpt-table">
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th className="num">Facturas</th>
+                      <th className="num">Venta</th>
+                      <th className="num">Margen</th>
+                      <th className="num">Margen %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {management.clients.map((r) => (
+                      <tr key={r.clientId}>
+                        <td>
+                          <strong>{r.name}</strong>
+                        </td>
+                        <td className="num">{r.invoices}</td>
+                        <td className="num">{money(r.revenue)}</td>
+                        <td className="num">{money(r.margin)}</td>
+                        <td className="num">{r.marginPct != null ? `${r.marginPct} %` : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="rpt-empty">Sin facturas en el periodo.</div>
             )}
           </section>
         </>

@@ -195,6 +195,9 @@ export function InventoryWorkspace({
         'Ubicaciones',
         'PVP',
         'Valor a PVP',
+        'Costo promedio',
+        'Valor a costo',
+        'No vendible',
         'Insumos',
       ],
       ...rows.map((row) => [
@@ -212,7 +215,10 @@ export function InventoryWorkspace({
         inventoryStatusLabels[row.status],
         row.locations.join(' / '),
         row.product.price,
+        row.saleValue.toFixed(2),
+        (row.product.avgCost ?? 0).toFixed(4),
         row.stockValue.toFixed(2),
+        row.unsellable,
         componentsOf(row.product)
           .map((c) => `${c.productId}×${c.qty}`)
           .join('; '),
@@ -780,6 +786,7 @@ export function InventoryWorkspace({
               onLocate={(loc) => locate(selected.product.id, loc)}
               onTrace={() => navigate('/trazabilidad', { state: { q: selected.product.id } })}
               onSelectRelated={selectProduct}
+              onOpenPurchase={(id) => navigate('/compras', { state: { focus: id } })}
             />
           </aside>
         ) : null}

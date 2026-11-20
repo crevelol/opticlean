@@ -51,6 +51,8 @@ export function InventoryProductForm({ product, categories, products, onClose, o
   const [minShelfLifeDays, setMinShelfLifeDays] = useState(product?.minShelfLifeDays ?? 0);
   const [sanitaryRegistration, setSanitaryRegistration] = useState(product?.sanitaryRegistration ?? '');
   const [sanitaryExpires, setSanitaryExpires] = useState(product?.sanitaryExpires ?? '');
+  const [ivaRate, setIvaRate] = useState(product?.ivaRate != null ? String(product.ivaRate) : '0.15');
+  const [inspectOnReceipt, setInspectOnReceipt] = useState(!!product?.inspectOnReceipt);
   const [packUnits, setPackUnits] = useState({
     paquete: product?.packs?.find((pack) => pack.code === 'paquete')?.units ?? 6,
     caja: product?.packs?.find((pack) => pack.code === 'caja')?.units ?? 12,
@@ -303,6 +305,8 @@ export function InventoryProductForm({ product, categories, products, onClose, o
         minShelfLifeDays: Number(minShelfLifeDays) || 0,
         sanitaryRegistration: sanitaryRegistration.trim() || undefined,
         sanitaryExpires: sanitaryExpires || undefined,
+        ivaRate: Number(ivaRate),
+        inspectOnReceipt,
         stockUnit: 'unidad',
         packs: [
           { code: 'unidad', label: 'Unidad', units: 1 },
@@ -502,6 +506,21 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                       <label htmlFor={`${uniqueId}-sanitary-exp`}>Vence el registro</label>
                       <input id={`${uniqueId}-sanitary-exp`} type="date" value={sanitaryExpires} onChange={(event) => setSanitaryExpires(event.target.value)} />
                       <small>Si esta fecha ya pasó, el producto no se puede vender.</small>
+                    </div>
+                    <div className="field">
+                      <label htmlFor={`${uniqueId}-iva`}>Tarifa de IVA</label>
+                      <Select id={`${uniqueId}-iva`} value={ivaRate} onChange={(event) => setIvaRate(event.target.value)}>
+                        <option value="0.15">15 %</option>
+                        <option value="0">0 %</option>
+                      </Select>
+                      <small>Se aplica en la factura de venta y al validar la factura del proveedor.</small>
+                    </div>
+                    <div className="field">
+                      <label htmlFor={`${uniqueId}-inspect`} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input id={`${uniqueId}-inspect`} type="checkbox" checked={inspectOnReceipt} onChange={(event) => setInspectOnReceipt(event.target.checked)} />
+                        Recibir siempre a inspección
+                      </label>
+                      <small>Cada recepción queda retenida hasta que se revise etiqueta, sello y hoja de seguridad.</small>
                     </div>
                     {product?.avgCost != null ? (
                       <div className="field">

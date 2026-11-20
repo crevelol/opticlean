@@ -49,7 +49,7 @@ test('Incompatible chemicals cannot share a rack', () => {
   const target = dest?.id ?? s.lots.find((l) => l.loc.startsWith(`${rack}-`) && l.productId !== 'P018')?.loc;
   if (!target) return;
   assert.throws(
-    () => receive(s, { productId: 'P005', qty: 1, loc: target, batch: 'B', expiry: '2099-01-01', supplier: 'Q' }),
+    () => receive(s, { productId: 'P005', qty: 1, loc: target, batch: 'B', expiry: '2099-01-01', supplier: 'Q', reason: 'Inventario inicial' }),
     /No se puede juntar/,
   );
 });
@@ -58,9 +58,9 @@ test('Different expiries cannot share a location', () => {
   const s = migrateState(seed());
   const loc = suggest(s, 'P015', 2).find((item) => !s.lots.some((lot) => lot.loc === item.id && lot.qty > 0))?.id;
   assert.ok(loc);
-  receive(s, { productId: 'P015', qty: 1, loc, batch: 'A', expiry: '2099-01-01', supplier: 'Q' });
+  receive(s, { productId: 'P015', qty: 1, loc, batch: 'A', expiry: '2099-01-01', supplier: 'Q', reason: 'Inventario inicial' });
   assert.throws(
-    () => receive(s, { productId: 'P015', qty: 1, loc, batch: 'B', expiry: '2099-08-01', supplier: 'Q' }),
+    () => receive(s, { productId: 'P015', qty: 1, loc, batch: 'B', expiry: '2099-08-01', supplier: 'Q', reason: 'Inventario inicial' }),
     /caducidad/,
   );
 });

@@ -1,5 +1,6 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
+import { useAuth } from '../../shared/hooks/AuthProvider';
 import { api } from '../../shared/api/client';
 import { client, invoiceBalance, money, product } from '../../shared/lib/inventory';
 import { Btn, Empty, PageHead, Panel } from '../../shared/components/ui';
@@ -20,6 +21,9 @@ const TABS: { id: Tab; label: string }[] = [
 
 export function CommercialPage() {
   const { state, applyResponse, toast } = useAppState();
+  const { user } = useAuth();
+  /** Separación de funciones: bodega solicita, administración aprueba. */
+  const isAdmin = user?.role === 'admin';
   const [tab, setTab] = useState<Tab>('docs');
   const [busy, setBusy] = useState(false);
   const [orderId, setOrderId] = useState('');
@@ -429,7 +433,12 @@ export function CommercialPage() {
               {(state.adjustments ?? []).filter((item) => item.status === 'Pendiente').map((item) => (
                 <li key={item.id}>
                   {item.id} · {item.kind} · {item.qty} u. · {item.reason}
-                  <Btn size="small" disabled={busy} onClick={() => void run(() => api.approveAdjustment(item.id), 'Ajuste aplicado.')}>Aprobar</Btn>
+                  {item.requestedBy ? ` · solicitó ${item.requestedBy}` : ''}
+                  {isAdmin ? (
+                    <Btn size="small" disabled={busy} onClick={() => void run(() => api.approveAdjustment(item.id), 'Ajuste aplicado.')}>Aprobar</Btn>
+                  ) : (
+                    <span className="fx-chip amber">Espera aprobación de administración</span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -476,7 +485,11 @@ export function CommercialPage() {
                   </div>
                 ))}
                 </div>
-                <Btn type="submit" variant="primary" disabled={busy}>Aplicar diferencias</Btn>
+                {isAdmin ? (
+                  <Btn type="submit" variant="primary" disabled={busy}>Aplicar diferencias</Btn>
+                ) : (
+                  <p className="fx-muted">Administración revisa y aplica las diferencias del conteo.</p>
+                )}
               </form>
             ) : null}
           </Panel>
@@ -568,7 +581,11 @@ export function CommercialPage() {
                 <label htmlFor="com-dpr-reason">Motivo</label>
                 <input id="com-dpr-reason" value={supplierReturnReason} onChange={(event) => setSupplierReturnReason(event.target.value)} required />
               </div>
-              <Btn type="submit" variant="primary" disabled={busy}>Devolver</Btn>
+              {isAdmin ? (
+                <Btn type="submit" variant="primary" disabled={busy}>Devolver</Btn>
+              ) : (
+                <p className="fx-muted">Solo administración registra devoluciones al proveedor.</p>
+              )}
             </form>
           </Panel>
         </div>

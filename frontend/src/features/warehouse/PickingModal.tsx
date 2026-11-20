@@ -1,9 +1,9 @@
 import type { AppState } from '../../shared/types';
-import { product } from '../../shared/lib/inventory';
+import { dateShort, daysUntil, expiryTone, product } from '../../shared/lib/inventory';
 import { Modal } from '../../shared/components/Modal';
 import { Btn } from '../../shared/components/ui';
 
-export type PickLine = { id: string; loc: string; batch: string; qty: number; productId: string };
+export type PickLine = { id: string; loc: string; batch: string; qty: number; productId: string; expiry?: string; purchaseId?: string };
 
 type Props = {
   state: AppState;
@@ -25,7 +25,7 @@ export function PickingModal({ state, orderId, plan, checked, onToggle, onLocate
   return (
     <Modal
       title={`Preparar pedido ${orderId}`}
-      subtitle="Verifica cada posición en orden de recorrido."
+      subtitle="Verifica cada posición en orden de recorrido. Toma exactamente el lote indicado: es el que vence primero."
       onClose={onClose}
       footer={
         <div className="loc-detail-footer">
@@ -55,7 +55,17 @@ export function PickingModal({ state, orderId, plan, checked, onToggle, onLocate
                     <span className="pick-modal-number">{index + 1}</span>
                     <span className="pick-modal-text">
                       <strong>{product(state, line.productId)?.name ?? line.productId}</strong>
-                      <small>Lote {line.batch} · {line.qty} u.</small>
+                      <small>
+                        Lote {line.batch} · {line.qty} u.
+                        {line.expiry ? (
+                          <>
+                            {' · '}
+                            <span className={`fx-chip ${expiryTone(daysUntil(line.expiry))}`}>
+                              Vence {dateShort(line.expiry)} · {daysUntil(line.expiry)} días
+                            </span>
+                          </>
+                        ) : null}
+                      </small>
                     </span>
                   </label>
                   <button type="button" className="pick-modal-loc" onClick={() => onLocate(line.loc)} title="Ver en el mapa">

@@ -4,16 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import { api } from '../../shared/api/client';
-import {
-  activeWarehouseId,
-  available,
-  client,
-  money,
-  num,
-  orderValue,
-  statusColor,
-  stock,
-} from '../../shared/lib/inventory';
+import { activeWarehouseId, available, client, money, num, orderValue, statusColor, stock, sellableStock } from '../../shared/lib/inventory';
 import { buildForecast } from '../../shared/lib/forecast';
 import { expiryAlerts } from '../../shared/lib/wholesale';
 import { Badge, Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
@@ -66,7 +57,12 @@ export function DashboardPage() {
   const activeOrders = state.orders.filter((o) => o.status !== 'Entregado');
   const low = state.products.filter((p) => available(state, p.id) < p.min);
   const units = state.products.reduce((n, p) => n + available(state, p.id), 0);
-  const stockValue = state.products.reduce((n, p) => n + stock(state, p.id) * p.price, 0);
+  // A costo promedio: es el valor que cuadra con contabilidad.
+  const stockValue = state.products.reduce((n, p) => n + stock(state, p.id) * (p.avgCost ?? 0), 0);
+  const saleValue = state.products.reduce((n, p) => n + stock(state, p.id) * p.price, 0);
+  const missingCost = state.products.filter((p) => stock(state, p.id) > 0 && !(p.avgCost && p.avgCost > 0)).length;
+  const unsellable = state.products.reduce((n, p) => n + Math.max(0, stock(state, p.id) - sellableStock(state, p.id)), 0);
+  const waiting = state.orders.filter((o) => o.status === 'Esperando stock').length;
   const listed = tab === 'pending' ? pending : activeOrders;
   const pageCount = Math.max(1, Math.ceil(listed.length / ORDERS_PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
@@ -397,7 +393,16 @@ export function DashboardPage() {
             </div>
             <div className="dash-value-body">
               <div className="dash-value-amount">{money(stockValue)}</div>
-              <p>Valorado a precio de venta</p>
+              <p>Valorado a costo promedio · a precio de venta {money(saleValue)}</p>
+              {missingCost ? <p className="fx-muted">{missingCost} producto(s) con stock aún sin costo registrado.</p> : null}
+              {unsellable ? <p><span className="fx-chip red">{unsellable} u. no vendibles</span> vencidas, retenidas o con poca vida útil</p> : null}
+              {waiting ? (
+                <p>
+                  <button type="button" className="fx-link" onClick={() => navigate('/pedidos')}>
+                    {waiting} pedido(s) esperando stock
+                  </button>
+                </p>
+              ) : null}
               <button
                 type="button"
                 className="dash-kpi-link"

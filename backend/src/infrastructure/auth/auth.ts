@@ -60,9 +60,22 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, '../../../../data');
 const USERS_PATH = path.join(DATA_DIR, 'users.json');
 
-const JWT_SECRET =
-  process.env.OPTICLEAN_JWT_SECRET?.trim() ||
-  'opticlean-dev-secret-change-me-in-production';
+/** Se evalúa al usarse: `.env` se carga después de importar este módulo. */
+const isProd = () => process.env.NODE_ENV === 'production';
+const INSECURE_SECRETS = new Set(['', 'cambia-este-secreto', 'opticlean-dev-secret-change-me-in-production']);
+
+function resolveSecret() {
+  const secret = process.env.OPTICLEAN_JWT_SECRET?.trim() ?? '';
+  if (isProd() && (INSECURE_SECRETS.has(secret) || secret.length < 32)) {
+    throw new Error(
+      '[auth] En producción OPTICLEAN_JWT_SECRET es obligatorio y debe tener al menos 32 caracteres.',
+    );
+  }
+  return secret || 'opticlean-dev-secret-change-me-in-production';
+}
+
+let cachedSecret: string | null = null;
+const jwtSecret = () => (cachedSecret ??= resolveSecret());
 const TOKEN_TTL_SEC = Number(process.env.OPTICLEAN_JWT_TTL ?? 60 * 60 * 12);
 
 function b64url(input: Buffer | string) {
@@ -109,7 +122,7 @@ function signToken(user: PublicUser) {
     }),
   );
   const data = `${header}.${payload}`;
-  const sig = createHmac('sha256', JWT_SECRET).update(data).digest();
+  const sig = createHmac('sha256', jwtSecret()).update(data).digest();
   return `${data}.${b64url(sig)}`;
 }
 
@@ -118,7 +131,7 @@ export function verifyToken(token: string): PublicUser | null {
   if (parts.length !== 3) return null;
   const [header, payload, sig] = parts;
   const data = `${header}.${payload}`;
-  const expected = createHmac('sha256', JWT_SECRET).update(data).digest();
+  const expected = createHmac('sha256', jwtSecret()).update(data).digest();
   const got = fromB64url(sig);
   if (expected.length !== got.length || !timingSafeEqual(expected, got)) return null;
   try {
@@ -235,6 +248,43 @@ function ensureUsers(): UsersFile {
   }
 
   const byId = new Map(raw.users.map((u) => [u.id, u]));
+  if (isProd()) {
+    // Producción: sin usuarios demo. Solo un administrador inicial desde variables de entorno.
+    for (const id of DEMO_USER_IDS) {
+      if (id !== 'U-ADMIN') byId.delete(id);
+    }
+    const email = process.env.OPTICLEAN_ADMIN_EMAIL?.trim().toLowerCase();
+    const password = process.env.OPTICLEAN_ADMIN_PASSWORD ?? '';
+    const prevAdmin = byId.get('U-ADMIN');
+    // El admin demo con la clave conocida no sirve en producción: se reemplaza o se desactiva.
+    if (prevAdmin && verifyPassword('OptiClean2026!', prevAdmin.passwordHash)) {
+      if (email && password.length >= 12) {
+        byId.set('U-ADMIN', { ...prevAdmin, email, passwordHash: hashPassword(password), active: true });
+      } else {
+        byId.delete('U-ADMIN');
+      }
+    }
+    if (!byId.has('U-ADMIN') && ![...byId.values()].some((u) => u.role === 'admin' && u.active !== false)) {
+      if (!email || password.length < 12) {
+        throw new Error(
+          '[auth] Producción sin administrador: define OPTICLEAN_ADMIN_EMAIL y OPTICLEAN_ADMIN_PASSWORD (12+ caracteres).',
+        );
+      }
+      byId.set('U-ADMIN', {
+        id: 'U-ADMIN',
+        email,
+        name: process.env.OPTICLEAN_ADMIN_NAME?.trim() || 'Administración',
+        role: 'admin',
+        companyId: process.env.OPTICLEAN_DEFAULT_COMPANY || 'co-innovamf',
+        passwordHash: hashPassword(password),
+        active: true,
+      });
+    }
+    const next: UsersFile = { version: 1, users: [...byId.values()] };
+    writeFileSync(USERS_PATH, JSON.stringify(next, null, 2));
+    usersCache = next;
+    return next;
+  }
   for (const u of desired) {
     const prev = byId.get(u.id);
     // Demo: sincroniza credenciales/rol; conserva active si ya existía
@@ -444,6 +494,12 @@ export function requireRole(...roles: AuthRole[]) {
     if (role && (role === 'admin' || roles.includes(role))) return next();
     res.status(403).json({ error: 'Tu rol no tiene permiso para esta acción.' });
   };
+}
+
+/** Valida la configuración de seguridad al arrancar (falla rápido en producción). */
+export function prepareAuth() {
+  jwtSecret();
+  ensureUsers();
 }
 
 export function warnInsecureSecret() {

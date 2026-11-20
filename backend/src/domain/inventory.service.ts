@@ -1,4 +1,7 @@
-import type { AppState, Lot, Order, OrderKit, OrderLine, OrderPick, Product } from './types.js';
+import type { AppState, Lot, Order, OrderKit, OrderLine, OrderPick, OrderShortage, Product } from './types.js';
+import { RECEIPT_REASONS } from './types.js';
+import { currentActor } from './request-context.js';
+import { cellFitReason } from './capacity.js';
 import { activeWarehouseId, lotsForActiveWarehouse } from './warehouse-admin.service.js';
 import { getWarehouseGeometry } from './warehouse-layout.js';
 import { normalizeProductBom, validateComponents } from './bom.service.js';
@@ -7,6 +10,7 @@ import { stockQtyFromPack } from './packs.js';
 import { applyPurchaseReceipt } from './purchase-lines.js';
 import { vehicleByPlate } from './fleet.service.js';
 import {
+  QUARANTINE_LOC,
   invoicedOrderIds,
   isSellableLoc,
   outstandingReceivable,
@@ -37,7 +41,7 @@ function applyAverageCost(s: AppState, productId: string, qty: number, unitCost:
   item.avgCost = Math.round(((base * prev + qty * unitCost) / (base + qty)) * 10000) / 10000;
 }
 
-const CREDIT_STATUSES = new Set(['Por preparar', 'Preparado', 'En ruta', 'Incidencia']);
+const CREDIT_STATUSES = new Set(['Esperando stock', 'Por preparar', 'Preparado', 'En ruta', 'Incidencia']);
 
 export const todayGuayaquil = () =>
   new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
@@ -74,12 +78,30 @@ export function bundlePrice(s: AppState, bundleId: string) {
   return bundle.lines.reduce((n, line) => n + line.qty * (product(s, line.productId)?.price ?? 0), 0);
 }
 
+/** Lote que se puede vender hoy: ubicación vendible, sin retención, no vencido y con vida útil mínima. */
+export function isLotSellable(s: AppState, lot: Lot, today = todayGuayaquil()) {
+  if (!isSellableLoc(lot.loc) || lot.onHold || lot.qty <= 0) return false;
+  const days = daysUntilExpiry(lot.expiry, today);
+  if (days == null || days < 0) return false;
+  const minDays = product(s, lot.productId)?.minShelfLifeDays ?? 0;
+  return days >= minDays;
+}
+
+/** Unidades que se pueden vender hoy (excluye vencido, retenido y bajo vida útil mínima). */
+export const sellableStock = (s: AppState, id: string, today = todayGuayaquil()) =>
+  lotsForActiveWarehouse(s)
+    .filter((l) => l.productId === id && isLotSellable(s, l, today))
+    .reduce((n, l) => n + l.qty, 0);
+
+/** Unidades físicas que no se pueden vender (vencidas, retenidas o con poca vida útil). */
+export const unsellableStock = (s: AppState, id: string) => stock(s, id) - sellableStock(s, id);
+
 export const reserved = (s: AppState, id: string) =>
   s.orders
     .filter((o) => o.status === 'Por preparar')
     .reduce((n, o) => n + expandedDemand(s, o).filter((l) => l.productId === id).reduce((a, l) => a + l.qty, 0), 0);
 
-export const available = (s: AppState, id: string) => stock(s, id) - reserved(s, id);
+export const available = (s: AppState, id: string) => sellableStock(s, id) - reserved(s, id);
 
 export const qtyAt = (s: AppState, loc: string) =>
   lotsForActiveWarehouse(s)
@@ -120,8 +142,18 @@ export function addEvent(
     ref,
     batch,
     at: new Date().toISOString(),
-    by: s.settings.operator,
+    by: actorName(s),
   });
+}
+
+/** Usuario autenticado que hace la operación; el operador configurado solo fuera de una petición. */
+export function actorName(s: AppState) {
+  return currentActor()?.name || s.settings.operator;
+}
+
+function nextReceiptId(s: AppState) {
+  const max = s.receipts.reduce((n, r) => Math.max(n, Number(r.id.replace(/\D/g, '')) || 0), 0);
+  return `REC-${String(max + 1).padStart(4, '0')}`;
 }
 
 export function receive(
@@ -136,6 +168,10 @@ export function receive(
     purchaseId?: string;
     packCode?: string;
     packQty?: number | string;
+    /** Obligatorio si no hay orden de compra. */
+    reason?: string;
+    /** Recibir a inspección de calidad (queda retenido). */
+    inspect?: boolean;
   },
 ) {
   const item = product(s, data.productId);
@@ -148,47 +184,116 @@ export function receive(
   if (!item || !Number.isInteger(qty) || qty <= 0 || !target) {
     throw new Error('Selecciona un producto, una ubicación y una cantidad entera mayor a cero.');
   }
-  if (qtyAt(s, data.loc) + qty > target.capacity) {
-    throw new Error(`La cantidad supera la capacidad de esta ubicación (${target.capacity} unidades).`);
-  }
+  const fit = cellFitReason(s, target, data.productId, qty);
+  if (fit) throw new Error(fit);
   if (!data.batch?.trim() || !data.expiry) {
     throw new Error('Completa el lote y la fecha de vencimiento.');
   }
   if (data.expiry < todayGuayaquil()) {
     throw new Error('La fecha de vencimiento no puede estar en el pasado.');
   }
+  const reason = data.reason?.trim();
+  if (!data.purchaseId) {
+    if (!reason) throw new Error('Sin orden de compra indica el motivo del ingreso.');
+    if (!(RECEIPT_REASONS as readonly string[]).includes(reason)) {
+      throw new Error(`Motivo no válido. Usa: ${RECEIPT_REASONS.join(', ')}.`);
+    }
+  }
   const blocked = placementBlockReason(s, data.productId, target, { expiry: data.expiry });
   if (blocked) throw new Error(blocked);
+  let supplier = data.supplier;
   if (data.purchaseId) {
     const po = s.purchases.find((p) => p.id === data.purchaseId);
     if (!po) throw new Error('Orden de compra no encontrada.');
-    const line = po.lines?.find((item) => item.productId === data.productId);
+    const line = po.lines?.find((entry) => entry.productId === data.productId);
     if (line && line.unitPrice > 0 && line.unitsPerPack > 0) {
       applyAverageCost(s, data.productId, qty, line.unitPrice / line.unitsPerPack);
     }
     applyPurchaseReceipt(po, data.productId, qty);
+    supplier = supplier || s.suppliers?.find((x) => x.id === po.supplierId)?.name || '';
   }
-  const id = `REC-${String(84 + s.receipts.length - 1).padStart(4, '0')}`;
+  const id = nextReceiptId(s);
+  const receivedAt = new Date().toISOString();
+  const inspect = data.inspect ?? !!item.inspectOnReceipt;
+  const lotId = uid('lot');
+  const batch = data.batch.trim();
   s.lots.push({
-    id: uid('lot'),
+    id: lotId,
     productId: data.productId,
     qty,
     loc: data.loc,
-    batch: data.batch.trim(),
+    batch,
     expiry: data.expiry,
     warehouseId: activeWarehouseId(s),
+    purchaseId: data.purchaseId || undefined,
+    receiptId: id,
+    receivedAt,
+    ...(inspect ? { onHold: true } : {}),
   });
   s.receipts.unshift({
     id,
     productId: data.productId,
     qty,
     loc: data.loc,
-    batch: data.batch.trim(),
-    supplier: data.supplier,
-    date: new Date().toISOString().slice(0, 10),
+    batch,
+    expiry: data.expiry,
+    supplier,
+    purchaseId: data.purchaseId || undefined,
+    reason: data.purchaseId ? undefined : reason,
+    date: todayGuayaquil(),
+    receivedAt,
+    by: actorName(s),
+    lotId,
+    ...(inspect ? { inspection: 'Pendiente' as const } : {}),
   });
-  addEvent(s, 'Recepción', data.productId, qty, data.supplier, data.loc, id, data.batch.trim());
+  addEvent(
+    s,
+    'Recepción',
+    data.productId,
+    qty,
+    supplier || reason || 'Ingreso',
+    data.loc,
+    data.purchaseId ? `${id} · ${data.purchaseId}` : id,
+    batch,
+  );
   return id;
+}
+
+function receiptOfLot(s: AppState, lot: Lot) {
+  return s.receipts.find((r) => r.lotId === lot.id) ?? s.receipts.find((r) => r.id === lot.receiptId);
+}
+
+/** Libera un lote retenido en inspección: pasa a ser vendible. */
+export function releaseLot(s: AppState, lotId: string) {
+  const lot = s.lots.find((l) => l.id === lotId);
+  if (!lot || !lot.onHold) throw new Error('El lote no está en inspección.');
+  delete lot.onHold;
+  const receipt = receiptOfLot(s, lot);
+  if (receipt) receipt.inspection = 'Liberado';
+  addEvent(s, 'Inspección liberada', lot.productId, lot.qty, lot.loc, lot.loc, lot.receiptId ?? lot.id, lot.batch);
+}
+
+/** Rechaza un lote en inspección: va a cuarentena para devolverlo al proveedor. */
+export function rejectLot(s: AppState, lotId: string, reason: string) {
+  const lot = s.lots.find((l) => l.id === lotId);
+  if (!lot || !lot.onHold) throw new Error('El lote no está en inspección.');
+  const why = reason?.trim();
+  if (!why) throw new Error('Indica el motivo del rechazo.');
+  const from = lot.loc;
+  delete lot.onHold;
+  lot.loc = QUARANTINE_LOC;
+  const receipt = receiptOfLot(s, lot);
+  if (receipt) receipt.inspection = 'Rechazado';
+  addEvent(
+    s,
+    'Inspección rechazada',
+    lot.productId,
+    lot.qty,
+    from,
+    QUARANTINE_LOC,
+    `${lot.receiptId ?? lot.id} · ${why}`,
+    lot.batch,
+  );
 }
 
 export function move(
@@ -202,9 +307,8 @@ export function move(
     throw new Error('Revisa la cantidad disponible y el destino.');
   }
   if (lot.loc === data.to) throw new Error('El destino debe ser diferente al origen.');
-  if (qtyAt(s, data.to) + qty > target.capacity) {
-    throw new Error('La ubicación de destino no tiene capacidad suficiente.');
-  }
+  const fit = cellFitReason(s, target, lot.productId, qty);
+  if (fit) throw new Error(fit);
   const blocked = placementBlockReason(s, lot.productId, target, { expiry: lot.expiry });
   if (blocked) throw new Error(blocked);
   const from = lot.loc;
@@ -216,7 +320,15 @@ export function move(
 
 export function createOrder(
   s: AppState,
-  data: { clientId: string; lines?: OrderLine[]; kits?: OrderKit[]; priority?: string; notes?: string },
+  data: {
+    clientId: string;
+    lines?: OrderLine[];
+    kits?: OrderKit[];
+    priority?: string;
+    notes?: string;
+    /** Acepta el pedido aunque falte stock; queda Esperando stock. */
+    backorder?: boolean;
+  },
 ) {
   const buyer = client(s, data.clientId);
   const grouped = new Map<string, number>();
@@ -241,20 +353,21 @@ export function createOrder(
     unitPrice: resolveUnitPrice(s, buyer.id, line.productId, line.qty),
   }));
   const draft = { lines: priced, kits };
+  const shortages: OrderShortage[] = [];
   for (const l of expandedDemand(s, draft)) {
     const item = product(s, l.productId);
     if (item?.sanitaryExpires && item.sanitaryExpires < todayGuayaquil()) {
       throw new Error(`El registro sanitario de ${item.name} está vencido.`);
     }
-    if (
-      !item ||
-      !Number.isInteger(l.qty) ||
-      l.qty <= 0 ||
-      l.qty > available(s, l.productId)
-    ) {
-      throw new Error(
-        `Stock insuficiente o cantidad inválida para ${item?.name ?? 'el producto'}.`,
-      );
+    if (!item || !Number.isInteger(l.qty) || l.qty <= 0) {
+      throw new Error(`Cantidad inválida para ${item?.name ?? 'el producto'}.`);
+    }
+    const free = Math.max(0, available(s, l.productId));
+    if (l.qty > free) {
+      if (!data.backorder) {
+        throw new Error(`Stock insuficiente para ${item.name}: disponible ${free}, pedido ${l.qty}.`);
+      }
+      shortages.push({ productId: l.productId, qty: l.qty - free });
     }
   }
   if (overdueReceivable(s, buyer.id, todayGuayaquil()) > 0.009) {
@@ -278,9 +391,11 @@ export function createOrder(
     lines: priced,
     kits: kits.length ? kits : undefined,
     priority: data.priority ?? 'Normal',
-    status: 'Por preparar',
+    status: shortages.length ? 'Esperando stock' : 'Por preparar',
     date: new Date().toISOString().slice(0, 10),
     notes: data.notes?.trim() || undefined,
+    ...(shortages.length ? { shortages } : {}),
+    createdBy: actorName(s),
   };
   s.orders.unshift(o);
   return o;
@@ -288,11 +403,9 @@ export function createOrder(
 
 export type PickPlanLine = Lot & { qty: number };
 
-function lotSellable(s: AppState, lot: Lot, today: string) {
-  const days = daysUntilExpiry(lot.expiry, today);
-  if (days == null || days < 0) return false;
-  const minDays = product(s, lot.productId)?.minShelfLifeDays ?? 0;
-  return days >= minDays;
+/** FEFO: primero lo que vence antes; a igual vencimiento, lo que entró primero. */
+export function fefoCompare(a: Lot, b: Lot) {
+  return a.expiry.localeCompare(b.expiry) || (a.receivedAt ?? '').localeCompare(b.receivedAt ?? '');
 }
 
 export function pickPlan(s: AppState, order: Order): PickPlanLine[] {
@@ -301,8 +414,8 @@ export function pickPlan(s: AppState, order: Order): PickPlanLine[] {
   for (const line of expandedDemand(s, order)) {
     let left = line.qty;
     const lots = lotsForActiveWarehouse(s)
-      .filter((l) => l.productId === line.productId && l.qty > 0 && isSellableLoc(l.loc) && lotSellable(s, l, today))
-      .sort((a, b) => a.expiry.localeCompare(b.expiry));
+      .filter((l) => l.productId === line.productId && isLotSellable(s, l, today))
+      .sort(fefoCompare);
     for (const l of lots) {
       if (!left) break;
       const qty = Math.min(l.qty, left);
@@ -334,6 +447,7 @@ export function prepare(s: AppState, orderId: string) {
     batch: p.batch,
     loc: p.loc,
     expiry: p.expiry,
+    ...(p.purchaseId ? { purchaseId: p.purchaseId } : {}),
   }));
   o.status = 'Preparado';
   return o;

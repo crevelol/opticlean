@@ -41,6 +41,10 @@ export type Product = {
   avgCost?: number;
   sanitaryRegistration?: string;
   sanitaryExpires?: string;
+  /** Tarifa de IVA (0 o 0.15). Vacío = tarifa general. */
+  ivaRate?: number;
+  /** Recibir siempre a inspección de calidad. */
+  inspectOnReceipt?: boolean;
 };
 
 export type WarehouseFamily = {
@@ -62,6 +66,11 @@ export type Lot = {
   batch: string;
   expiry: string;
   warehouseId?: string;
+  purchaseId?: string;
+  receiptId?: string;
+  receivedAt?: string;
+  /** Retenido en inspección de calidad. */
+  onHold?: boolean;
 };
 
 export type LocationFace = 'D' | 'T';
@@ -74,6 +83,8 @@ export type WarehouseLayout = {
   positionsPerLevel: number;
   capacityPerCell: number;
   depthFaces: 1 | 2;
+  /** Litros útiles por casilla (vacío = sin límite por volumen). */
+  cellVolumeL?: number;
   rackPositions?: RackPosition[];
 };
 
@@ -105,7 +116,8 @@ export type Client = {
 
 export type OrderLine = { productId: string; qty: number; unitPrice?: number };
 export type OrderKit = { bundleId: string; qty: number };
-export type OrderPick = OrderLine & { batch?: string; loc?: string; expiry?: string };
+export type OrderPick = OrderLine & { batch?: string; loc?: string; expiry?: string; purchaseId?: string };
+export type OrderShortage = { productId: string; qty: number };
 
 export type Order = {
   id: string;
@@ -128,6 +140,9 @@ export type Order = {
   assignedToUserId?: string;
   assignedToName?: string;
   assignedAt?: string;
+  shortages?: OrderShortage[];
+  purchaseIds?: string[];
+  createdBy?: string;
 };
 
 export type TraceEvent = {
@@ -143,6 +158,8 @@ export type TraceEvent = {
   batch?: string;
 };
 
+export const RECEIPT_REASONS = ['Devolución de cliente', 'Muestra', 'Donación', 'Inventario inicial'] as const;
+
 export type Receipt = {
   id: string;
   supplier: string;
@@ -151,9 +168,16 @@ export type Receipt = {
   qty: number;
   loc: string;
   batch: string;
+  expiry?: string;
+  purchaseId?: string;
+  reason?: string;
+  receivedAt?: string;
+  by?: string;
+  lotId?: string;
+  inspection?: 'Pendiente' | 'Liberado' | 'Rechazado';
 };
 
-export type PurchaseStatus = 'Abierta' | 'Parcial' | 'Recibida' | 'Cancelada';
+export type PurchaseStatus = 'Abierta' | 'Parcial' | 'Recibida' | 'Cancelada' | 'Cerrada';
 
 export type PurchaseLine = {
   productId: string;
@@ -177,6 +201,8 @@ export type Purchase = {
   received?: number;
   status?: PurchaseStatus;
   lines?: PurchaseLine[];
+  orderIds?: string[];
+  closeReason?: string;
 };
 
 export type Supplier = {
@@ -263,7 +289,7 @@ export type SalesInvoice = {
   clientId: string;
   date: string;
   status: 'Emitida' | 'Anulada';
-  lines: Array<{ productId: string; qty: number; unitPrice: number; ivaRate: number }>;
+  lines: Array<{ productId: string; qty: number; unitPrice: number; ivaRate: number; unitCost?: number }>;
   kits?: Array<{ bundleId: string; qty: number; unitPrice: number; ivaRate: number }>;
   subtotal: number;
   iva: number;
@@ -363,6 +389,8 @@ export type StockAdjustment = {
   reason: string;
   status: 'Pendiente' | 'Aplicado';
   warehouseId: string;
+  requestedBy?: string;
+  approvedBy?: string;
 };
 
 export type CycleCount = {
@@ -388,6 +416,7 @@ export type Location = {
   level: number;
   pos: number;
   capacity: number;
+  volumeL?: number;
   category: string;
   face?: LocationFace;
 };
@@ -414,6 +443,12 @@ export type Metrics = {
   stockValue: number;
   lowCount: number;
   pendingOrders: number;
+  /** Valor del stock a precio de venta (referencia). */
+  saleValue?: number;
+  /** Productos con stock y sin costo registrado. */
+  missingCost?: number;
+  unsellableUnits?: number;
+  waitingOrders?: number;
 };
 
 export type Meta = {

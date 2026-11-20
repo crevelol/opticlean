@@ -42,7 +42,7 @@ export function TraceabilityPage() {
       .filter((e) => (type === 'all' ? true : e.type === type))
       .filter((e) => {
         if (!q) return true;
-        return [e.productId, product(state, e.productId)?.name, e.batch, e.type, e.ref, e.from, e.to]
+        return [e.productId, product(state, e.productId)?.name, e.batch, e.type, e.ref, e.from, e.to, e.by]
           .join(' ')
           .toLowerCase()
           .includes(q);

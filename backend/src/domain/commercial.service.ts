@@ -10,6 +10,7 @@ import type {
   WarehouseTransfer,
 } from './types.js';
 import {
+  actorName,
   addEvent,
   available,
   client,
@@ -34,6 +35,12 @@ import {
   roundMoney,
   isSellableLoc,
 } from './ledger.js';
+
+/** Tarifa de IVA del producto; la general si no tiene una propia. */
+export function productIvaRate(item: { ivaRate?: number } | undefined) {
+  const rate = item?.ivaRate;
+  return rate != null && Number.isFinite(rate) && rate >= 0 && rate < 1 ? rate : IVA_RATE;
+}
 
 const PAY_METHODS = new Set<PayMethod>(['Transferencia', 'Efectivo', 'Cheque', 'Retención']);
 const ADJUST_KINDS = new Set<AdjustmentKind>(['Merma', 'Daño', 'Vencimiento', 'Conteo', 'Cuarentena']);
@@ -112,12 +119,16 @@ export function issueInvoice(s: AppState, orderId: string) {
     throw new Error('Este pedido ya tiene una factura emitida.');
   }
   for (const line of order.lines) assertSanitary(s, line.productId);
-  const lines = order.lines.map((line) => ({
-    productId: line.productId,
-    qty: line.qty,
-    unitPrice: line.unitPrice ?? product(s, line.productId)?.price ?? 0,
-    ivaRate: IVA_RATE,
-  }));
+  const lines = order.lines.map((line) => {
+    const item = product(s, line.productId);
+    return {
+      productId: line.productId,
+      qty: line.qty,
+      unitPrice: line.unitPrice ?? item?.price ?? 0,
+      ivaRate: productIvaRate(item),
+      ...(item?.avgCost ? { unitCost: item.avgCost } : {}),
+    };
+  });
   const kits = (order.kits ?? []).map((kit) => ({
     bundleId: kit.bundleId,
     qty: kit.qty,
@@ -221,6 +232,7 @@ export function issueCreditNote(
       batch: line.batch || `DEV-${note.id}`,
       expiry,
       warehouseId: activeWarehouseId(s),
+      receivedAt: new Date().toISOString(),
     });
     addEvent(s, 'Devolución', line.productId, line.qty, client(s, invoice.clientId)?.name ?? 'Cliente', QUARANTINE_LOC, note.id, line.batch);
   }
@@ -313,9 +325,11 @@ export function registerCustomerPayment(
 function receivedValue(s: AppState, purchaseId: string) {
   const purchase = s.purchases.find((item) => item.id === purchaseId);
   if (!purchase) throw new Error('Orden de compra no encontrada.');
+  // El precio de la OC es sin IVA; la factura del proveedor llega con IVA.
   const value = (purchase.lines ?? []).reduce((n, line) => {
     const perUnit = line.unitsPerPack > 0 ? line.unitPrice / line.unitsPerPack : 0;
-    return n + (line.receivedUnits ?? 0) * perUnit;
+    const base = (line.receivedUnits ?? 0) * perUnit;
+    return n + base * (1 + productIvaRate(product(s, line.productId)));
   }, 0);
   return { purchase, value: roundMoney(value) };
 }
@@ -333,7 +347,7 @@ export function registerSupplierBill(
   const total = moneyOf(body.total);
   if (total <= 0) throw new Error('El total de la factura debe ser mayor que cero.');
   if (value > 0 && total > value + 0.009) {
-    throw new Error(`La factura supera lo recibido ($${value.toFixed(2)}).`);
+    throw new Error(`La factura supera lo recibido con IVA ($${value.toFixed(2)}).`);
   }
   const billed = s.supplierBills!
     .filter((bill) => bill.purchaseId === purchase.id)
@@ -454,6 +468,7 @@ export function requestAdjustment(
     reason,
     status: 'Pendiente' as const,
     warehouseId: lot.warehouseId ?? activeWarehouseId(s),
+    requestedBy: actorName(s),
   };
   s.adjustments!.unshift(adjustment);
   return adjustment;
@@ -481,6 +496,7 @@ export function approveAdjustment(s: AppState, id: string) {
   }
   s.lots = s.lots.filter((item) => item.qty > 0);
   adjustment.status = 'Aplicado';
+  adjustment.approvedBy = actorName(s);
   return adjustment;
 }
 
@@ -597,6 +613,7 @@ export function shipTransfer(
     const qty = positiveInt(line.qty);
     if ((lot.warehouseId ?? fromWarehouseId) !== fromWarehouseId) throw new Error('El lote no está en la bodega activa.');
     if (!isSellableLoc(lot.loc)) throw new Error('No se traslada mercadería en cuarentena.');
+    if (lot.onHold) throw new Error('El lote está en inspección. Libéralo antes de trasladarlo.');
     if (qty > lot.qty) throw new Error('La cantidad supera el lote.');
     return { lot, qty };
   });
@@ -611,7 +628,16 @@ export function shipTransfer(
       const from = lot.loc;
       lot.qty -= qty;
       addEvent(s, 'Traslado bodega', lot.productId, qty, from, 'En tránsito', `TR-${String(n).padStart(4, '0')}`, lot.batch);
-      return { productId: lot.productId, qty, batch: lot.batch, expiry: lot.expiry, lotId: lot.id };
+      return {
+        productId: lot.productId,
+        qty,
+        batch: lot.batch,
+        expiry: lot.expiry,
+        lotId: lot.id,
+        ...(lot.purchaseId ? { purchaseId: lot.purchaseId } : {}),
+        ...(lot.receiptId ? { receiptId: lot.receiptId } : {}),
+        ...(lot.receivedAt ? { receivedAt: lot.receivedAt } : {}),
+      };
     }),
   };
   s.lots = s.lots.filter((lot) => lot.qty > 0);
@@ -636,6 +662,11 @@ function destinationBlock(
   );
   const used = here.reduce((n, lot) => n + lot.qty, 0);
   if (used + qty > loc.capacity) return `La cantidad supera la capacidad de esta ubicación (${loc.capacity} unidades).`;
+  if (loc.volumeL) {
+    const vol = (id: string) => product(s, id)?.volume ?? 0;
+    const liters = here.reduce((n, lot) => n + lot.qty * vol(lot.productId), 0) + qty * vol(productId);
+    if (liters > loc.volumeL + 1e-9) return `No cabe por volumen: la casilla admite ${loc.volumeL} L.`;
+  }
   if (here.some((lot) => lot.productId !== productId)) {
     return 'Esta ubicación contiene otro producto. Selecciona una ubicación compatible.';
   }
@@ -686,6 +717,9 @@ export function receiveTransfer(
       batch: line.batch,
       expiry: line.expiry,
       warehouseId: transfer.toWarehouseId,
+      ...(line.purchaseId ? { purchaseId: line.purchaseId } : {}),
+      ...(line.receiptId ? { receiptId: line.receiptId } : {}),
+      receivedAt: line.receivedAt ?? new Date().toISOString(),
     });
     addEvent(s, 'Recepción traslado', line.productId, line.qty, 'En tránsito', place.loc, transfer.id, line.batch);
   }

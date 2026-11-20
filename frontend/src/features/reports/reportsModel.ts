@@ -10,7 +10,7 @@ import {
 import type { AppState, Location, Order, TraceEvent } from '../../shared/types';
 
 export type ReportPeriod = 7 | 30 | 90 | 'all';
-export type ReportTab = 'capital' | 'service' | 'supply' | 'warehouse';
+export type ReportTab = 'capital' | 'service' | 'supply' | 'warehouse' | 'management';
 
 const DAY_MS = 86_400_000;
 

@@ -56,6 +56,8 @@ export function NewOrderPage() {
   const [error, setError] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [arming, setArming] = useState<{ id: string; qty: number; batch: string; expiry: string } | null>(null);
+  /** Acepta cantidades mayores al disponible: el pedido espera stock y se crea la orden de compra. */
+  const [backorder, setBackorder] = useState(false);
 
   const selected = state && clientId ? client(state, clientId) : undefined;
 
@@ -98,8 +100,13 @@ export function NewOrderPage() {
   const availableCredit = clientId ? creditAvailable(state, clientId) : 0;
   const remainingAfter = Math.max(0, availableCredit - total);
 
+  const shortOf = (productId: string, qty: number) => Math.max(0, qty - Math.max(0, available(state, productId)));
+  const shortages = lines
+    .map((l) => ({ ...l, short: shortOf(l.productId, l.qty) }))
+    .filter((l) => l.short > 0);
+
   const setQty = (productId: string, qty: number) => {
-    const max = available(state, productId);
+    const max = backorder ? 99999 : available(state, productId);
     const next = Math.max(0, Math.min(max, Math.round(qty)));
     if (next <= 0) {
       setLines((prev) => prev.filter((l) => l.productId !== productId));
@@ -115,7 +122,7 @@ export function NewOrderPage() {
   const addProduct = (id: string) => {
     const avail = available(state, id);
     const current = lines.find((l) => l.productId === id)?.qty ?? 0;
-    if (current >= avail) {
+    if (!backorder && current >= avail) {
       toast('No hay más unidades disponibles.');
       return;
     }
@@ -189,16 +196,21 @@ export function NewOrderPage() {
         notes.trim(),
         requestedDate ? `Fecha solicitada: ${requestedDate}` : '',
       ].filter(Boolean);
-      applyResponse(
-        await api.createOrder({
-          clientId,
-          lines,
-          kits,
-          priority,
-          notes: noteParts.join(' · ') || undefined,
-        }),
+      const res = await api.createOrder({
+        clientId,
+        lines,
+        kits,
+        priority,
+        notes: noteParts.join(' · ') || undefined,
+        backorder: shortages.length > 0,
+      });
+      applyResponse(res);
+      const created = res.state?.orders?.[0];
+      toast(
+        created?.status === 'Esperando stock'
+          ? `Pedido ${created.id} esperando stock. Se creó ${created.purchaseIds?.join(', ') || 'la orden de compra'} por el faltante.`
+          : 'Pedido creado y listo para preparar.',
       );
-      toast('Pedido creado y listo para preparar.');
       navigate('/pedidos');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error');
@@ -458,6 +470,31 @@ export function NewOrderPage() {
                 </div>
               </div>
 
+              {catalogMode === 'products' ? (
+                <label className="no-backorder">
+                  <input
+                    id="no-backorder"
+                    type="checkbox"
+                    checked={backorder}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setBackorder(on);
+                      if (!on) {
+                        setLines((prev) =>
+                          prev
+                            .map((l) => ({ ...l, qty: Math.min(l.qty, Math.max(0, available(state, l.productId))) }))
+                            .filter((l) => l.qty > 0),
+                        );
+                      }
+                    }}
+                  />
+                  <span>
+                    <strong>Pedir aunque falte stock</strong>
+                    <small>El pedido queda «Esperando stock» y se crea la orden de compra por el faltante. Pasa a preparación solo cuando llega la mercadería.</small>
+                  </span>
+                </label>
+              ) : null}
+
               <div className="no-catalog">
                 {catalogMode === 'products'
                   ? productResults.map((p) => {
@@ -467,7 +504,7 @@ export function NewOrderPage() {
                           key={p.id}
                           type="button"
                           className="no-product"
-                          disabled={stock <= 0}
+                          disabled={!backorder && stock <= 0}
                           onClick={() => addProduct(p.id)}
                         >
                           <span>
@@ -539,6 +576,21 @@ export function NewOrderPage() {
                 <h2>Confirmar pedido</h2>
               </header>
               <p className="no-hint">Revisa líneas y total antes de crear el pedido.</p>
+              {shortages.length ? (
+                <div className="no-shortage" role="status">
+                  <Icon name="alert" />
+                  <div>
+                    <strong>Este pedido quedará «Esperando stock»</strong>
+                    <p>
+                      Al confirmar se crea la orden de compra por el faltante:{' '}
+                      {shortages
+                        .map((l) => `${l.short} u. de ${product(state, l.productId)?.name ?? l.productId}`)
+                        .join(', ')}
+                      . El pedido pasa a preparación cuando se recibe la mercadería.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
               <ul className="no-confirm-lines">
                 {lines.map((l) => {
                   const p = product(state, l.productId);
@@ -654,12 +706,14 @@ export function NewOrderPage() {
                   {lines.map((l) => {
                     const p = product(state, l.productId);
                     const max = available(state, l.productId);
+                    const short = shortOf(l.productId, l.qty);
                     return (
                       <li key={l.productId} className="no-line">
                         <div>
                           <strong>{p?.name ?? l.productId}</strong>
                           <small>
-                            {money(p?.price ?? 0)} · máx {max}
+                            {money(p?.price ?? 0)} · disponible {Math.max(0, max)}
+                            {short ? <b className="no-line-short"> · faltan {short}</b> : null}
                           </small>
                         </div>
                         {step === 2 ? (
@@ -674,7 +728,7 @@ export function NewOrderPage() {
                             <input
                               type="number"
                               min={1}
-                              max={max}
+                              max={backorder ? undefined : max}
                               value={l.qty}
                               onChange={(e) => setQty(l.productId, Number(e.target.value))}
                             />

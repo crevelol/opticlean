@@ -54,6 +54,10 @@ export type Product = {
   sanitaryRegistration?: string;
   /** Vencimiento del registro sanitario (YYYY-MM-DD). */
   sanitaryExpires?: string;
+  /** Tarifa de IVA (0 o 0.15). Si falta se usa la general. */
+  ivaRate?: number;
+  /** Recibir a inspección: el lote queda retenido hasta liberarlo. */
+  inspectOnReceipt?: boolean;
 };
 
 /** Familia operativa de bodega: agrupa líneas y racks para ubicación inteligente. */
@@ -76,6 +80,14 @@ export type Lot = {
   batch: string;
   expiry: string;
   warehouseId?: string;
+  /** Orden de compra de origen. */
+  purchaseId?: string;
+  /** Recepción que lo ingresó. */
+  receiptId?: string;
+  /** Fecha y hora de ingreso a bodega (desempate FIFO). */
+  receivedAt?: string;
+  /** Retenido en inspección de calidad: no se vende hasta liberarlo. */
+  onHold?: boolean;
 };
 
 export type LocationFace = 'D' | 'T';
@@ -89,6 +101,8 @@ export type WarehouseLayout = {
   capacityPerCell: number;
   /** 1 = una cara; 2 = delantera y trasera por casilla */
   depthFaces: 1 | 2;
+  /** Volumen útil por casilla en litros (0 o vacío = sin límite por volumen). */
+  cellVolumeL?: number;
   rackPositions?: RackPosition[];
 };
 
@@ -129,7 +143,10 @@ export type OrderPick = OrderLine & {
   batch?: string;
   loc?: string;
   expiry?: string;
+  purchaseId?: string;
 };
+
+export type OrderShortage = { productId: string; qty: number };
 
 export type Order = {
   id: string;
@@ -155,6 +172,11 @@ export type Order = {
   assignedToUserId?: string;
   assignedToName?: string;
   assignedAt?: string;
+  /** Faltante que originó compras (estado Esperando stock). */
+  shortages?: OrderShortage[];
+  /** Órdenes de compra generadas para cubrir el faltante. */
+  purchaseIds?: string[];
+  createdBy?: string;
 };
 
 export type TraceEvent = {
@@ -170,6 +192,9 @@ export type TraceEvent = {
   batch?: string;
 };
 
+export const RECEIPT_REASONS = ['Devolución de cliente', 'Muestra', 'Donación', 'Inventario inicial', 'Armado de paquete'] as const;
+export type ReceiptReason = (typeof RECEIPT_REASONS)[number];
+
 export type Receipt = {
   id: string;
   supplier: string;
@@ -178,9 +203,19 @@ export type Receipt = {
   qty: number;
   loc: string;
   batch: string;
+  expiry?: string;
+  purchaseId?: string;
+  /** Motivo cuando se recibe sin orden de compra. */
+  reason?: string;
+  receivedAt?: string;
+  by?: string;
+  /** Lote creado por esta recepción. */
+  lotId?: string;
+  /** Recibido a inspección de calidad. */
+  inspection?: 'Pendiente' | 'Liberado' | 'Rechazado';
 };
 
-export type PurchaseStatus = 'Abierta' | 'Parcial' | 'Recibida' | 'Cancelada';
+export type PurchaseStatus = 'Abierta' | 'Parcial' | 'Recibida' | 'Cancelada' | 'Cerrada';
 
 export type PurchaseLine = {
   productId: string;
@@ -209,6 +244,10 @@ export type Purchase = {
   received?: number;
   status?: PurchaseStatus;
   lines?: PurchaseLine[];
+  /** Pedidos de cliente que esperan esta compra. */
+  orderIds?: string[];
+  /** Motivo al cerrar con faltante. */
+  closeReason?: string;
 };
 
 export type Supplier = {
@@ -278,6 +317,8 @@ export type Settings = {
 
 export type AppState = {
   version: 1 | 2;
+  /** false = empresa real sin datos de demostración. */
+  demo?: boolean;
   products: Product[];
   lots: Lot[];
   warehouses: WarehouseSite[];
@@ -311,6 +352,8 @@ export type SalesInvoiceLine = {
   qty: number;
   unitPrice: number;
   ivaRate: number;
+  /** Costo promedio unitario al facturar (para margen). */
+  unitCost?: number;
 };
 
 export type SalesInvoiceKit = {
@@ -444,6 +487,8 @@ export type StockAdjustment = {
   reason: string;
   status: 'Pendiente' | 'Aplicado';
   warehouseId: string;
+  requestedBy?: string;
+  approvedBy?: string;
 };
 
 export type CycleCountLine = {
@@ -469,7 +514,16 @@ export type WarehouseTransfer = {
   toWarehouseId: string;
   date: string;
   status: 'En tránsito' | 'Recibido' | 'Cancelado';
-  lines: Array<{ productId: string; qty: number; batch: string; expiry: string; lotId: string }>;
+  lines: Array<{
+    productId: string;
+    qty: number;
+    batch: string;
+    expiry: string;
+    lotId: string;
+    purchaseId?: string;
+    receiptId?: string;
+    receivedAt?: string;
+  }>;
 };
 
 export type Location = {
@@ -478,6 +532,8 @@ export type Location = {
   level: number;
   pos: number;
   capacity: number;
+  /** Volumen útil en litros, si la bodega lo define. */
+  volumeL?: number;
   category: string;
   face?: LocationFace;
 };

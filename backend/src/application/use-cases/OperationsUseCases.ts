@@ -18,7 +18,10 @@ import {
   qtyAt,
   receive,
   registerIncident,
+  rejectLot,
+  releaseLot,
   reserved,
+  sellableStock,
   stock,
   upsertProduct,
 } from '../../domain/inventory.service.js';
@@ -41,7 +44,14 @@ import {
 } from '../../domain/warehouse-admin.service.js';
 import type { Bundle, Supplier, WarehouseFamily, WarehouseSite } from '../../domain/types.js';
 import { deleteBundle, ensureBundles, saveBundle } from '../../domain/bundles.service.js';
-import { cancelPurchase, createPurchase } from '../../domain/commerce.service.js';
+import {
+  cancelPurchase,
+  closePurchase,
+  createBackorderPurchases,
+  createPurchase,
+  promoteWaitingOrders,
+  receivePurchase,
+} from '../../domain/commerce.service.js';
 import { commitImport, previewCsv, previewXlsx, previewXml, type ImportKind } from '../../domain/import-docs.service.js';
 import { assembleBundle } from '../../domain/kits.service.js';
 import { createSupplier, updateSupplier } from '../../domain/suppliers.service.js';
@@ -125,10 +135,15 @@ export class OperationsUseCases {
     return this.repo.reset();
   }
 
+  /**
+   * Toda escritura pasa por aquí: atómica por empresa y, al final, libera los
+   * pedidos que esperaban stock si la operación lo dejó disponible.
+   */
   private async mutate(fn: (s: AppState) => void | Promise<void>) {
-    const state = await this.repo.load();
-    await fn(state);
-    await this.repo.save(state);
+    const { state } = await this.repo.transaction(async (s) => {
+      await fn(s);
+      promoteWaitingOrders(s);
+    });
     return state;
   }
 
@@ -179,9 +194,34 @@ export class OperationsUseCases {
     let createdId = '';
     await this.mutate((s) => {
       const o = createOrder(s, body);
+      if (o.status === 'Esperando stock') createBackorderPurchases(s, o);
       createdId = o.id;
     });
     return createdId;
+  }
+
+  async receivePurchaseOrder(id: string, body: Parameters<typeof receivePurchase>[2]) {
+    return this.mutate((s) => {
+      receivePurchase(s, id, body);
+    });
+  }
+
+  async closePurchaseOrder(id: string, reason: string) {
+    return this.mutate((s) => {
+      closePurchase(s, id, reason);
+    });
+  }
+
+  async releaseInspectedLot(lotId: string) {
+    return this.mutate((s) => {
+      releaseLot(s, lotId);
+    });
+  }
+
+  async rejectInspectedLot(lotId: string, reason: string) {
+    return this.mutate((s) => {
+      rejectLot(s, lotId, reason);
+    });
   }
 
   async importInvoiceXml(xml: string) {
@@ -567,9 +607,17 @@ export class OperationsUseCases {
 
   metricsSnapshot(s: AppState) {
     const occupied = getWarehouseGeometry(s).locations.filter((l) => qtyAt(s, l.id) > 0).length;
-    const stockValue = s.products.reduce((n, p) => n + stock(s, p.id) * p.price, 0);
+    // Valor del inventario a costo promedio (lo que cuadra con contabilidad).
+    const stockValue = s.products.reduce((n, p) => n + stock(s, p.id) * (p.avgCost ?? 0), 0);
+    const saleValue = s.products.reduce((n, p) => n + stock(s, p.id) * p.price, 0);
+    const missingCost = s.products.filter((p) => stock(s, p.id) > 0 && !(p.avgCost && p.avgCost > 0)).length;
+    const unsellable = s.products.reduce((n, p) => n + Math.max(0, stock(s, p.id) - sellableStock(s, p.id)), 0);
     return {
       occupied,
+      saleValue,
+      missingCost,
+      unsellableUnits: unsellable,
+      waitingOrders: s.orders.filter((o) => o.status === 'Esperando stock').length,
       occupancyPct: Math.round(
         (occupied / Math.max(getWarehouseGeometry(s).locations.length, 1)) * 100,
       ),

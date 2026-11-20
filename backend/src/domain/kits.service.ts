@@ -3,6 +3,8 @@ import { ensureBundles } from './bundles.service.js';
 import {
   addEvent,
   available,
+  fefoCompare,
+  isLotSellable,
   daysUntilExpiry,
   product,
   receive,
@@ -54,13 +56,8 @@ function consume(s: AppState, productId: string, qty: number, ref: string) {
   let left = qty;
   const today = todayGuayaquil();
   const lots = lotsForActiveWarehouse(s)
-    .filter((lot) => {
-      if (lot.productId !== productId || lot.qty <= 0) return false;
-      const days = daysUntilExpiry(lot.expiry, today);
-      const minDays = product(s, productId)?.minShelfLifeDays ?? 0;
-      return days != null && days >= minDays;
-    })
-    .sort((a, b) => a.expiry.localeCompare(b.expiry));
+    .filter((lot) => lot.productId === productId && isLotSellable(s, lot, today))
+    .sort(fefoCompare);
   for (const lot of lots) {
     if (!left) break;
     const take = Math.min(lot.qty, left);
@@ -101,6 +98,7 @@ export function assembleBundle(
     batch: body.batch.trim(),
     expiry: body.expiry,
     supplier: 'Armado interno',
+    reason: 'Armado de paquete',
   });
   return { bundleId: bundle.id, productId: kit.id, qty, loc };
 }
