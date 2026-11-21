@@ -46,7 +46,7 @@ export const routeMeta: Record<string, RouteMeta> = {
   '/configuracion': { title: 'Configuración' },
 };
 
-/** Menú usado si la API de menú no responde. */
+/** Menú usado si la API de menú no responde. Sigue el mismo recorrido que la semilla. */
 export const fallbackMenu: MenuSection[] = [
   {
     section: 'Operación',
@@ -55,28 +55,30 @@ export const fallbackMenu: MenuSection[] = [
       { id: 'f-inv', label: 'Inventario', path: '/inventario', icon: 'box', badge: null },
       { id: 'f-rec', label: 'Recepción', path: '/recepcion', icon: 'receive', badge: null },
       { id: 'f-bod', label: 'Bodega visual', path: '/bodega', icon: 'warehouse', badge: null },
-      { id: 'f-ped', label: 'Pedidos', path: '/pedidos', icon: 'orders', badge: null },
       { id: 'f-quote', label: 'Cotizaciones', path: '/cotizaciones', icon: 'file', badge: null },
-      { id: 'f-plan', label: 'Plan de mañana', path: '/plan', icon: 'calendar', badge: null },
+      { id: 'f-ped', label: 'Pedidos', path: '/pedidos', icon: 'orders', badge: null },
       { id: 'f-pack', label: 'Empaque', path: '/empaque', icon: 'cube', badge: null },
       { id: 'f-log', label: 'Logística', path: '/logistica', icon: 'truck', badge: null },
     ],
   },
   {
+    section: 'Abastecimiento',
+    items: [
+      { id: 'f-plan', label: 'Plan de mañana', path: '/plan', icon: 'calendar', badge: null },
+      { id: 'f-buy', label: 'Abastecimiento', path: '/compras', icon: 'cart', badge: null },
+      { id: 'f-sup', label: 'Proveedores', path: '/proveedores', icon: 'building', badge: null },
+    ],
+  },
+  {
     section: 'Gestión',
     items: [
+      { id: 'f-wh', label: 'Bodegas', path: '/bodegas', icon: 'building', badge: null },
+      { id: 'f-fam', label: 'Familias', path: '/familias', icon: 'layers', badge: null },
       { id: 'f-cli', label: 'Clientes', path: '/clientes', icon: 'users', badge: null },
-      { id: 'f-sup', label: 'Proveedores', path: '/proveedores', icon: 'building', badge: null },
       { id: 'f-com', label: 'Comercial', path: '/comercial', icon: 'orders', badge: null },
       { id: 'f-rules', label: 'Reglas de negocio', path: '/reglas', icon: 'shield', badge: null },
       { id: 'f-users', label: 'Usuarios', path: '/usuarios', icon: 'users', badge: null },
-      {
-        id: 'f-cfg',
-        label: 'Configuración',
-        path: '/configuracion',
-        icon: 'settings',
-        badge: null,
-      },
+      { id: 'f-cfg', label: 'Configuración', path: '/configuracion', icon: 'settings', badge: null },
     ],
   },
 ];
