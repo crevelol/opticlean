@@ -150,7 +150,16 @@ export function CommercialPage() {
                         <td>{money(invoice.total)}</td>
                         <td>{money(invoiceBalance(state, invoice.id))}</td>
                         <td>
-                          <Btn size="small" disabled={busy} onClick={() => void run(() => api.issueGuide({ orderId: invoice.orderId }), 'Guía de remisión emitida.')}>Guía</Btn>
+                          {(() => {
+                            const guide = (state.guides ?? []).find(
+                              (item) => item.orderId === invoice.orderId && item.kind === 'Venta' && item.status === 'Emitida',
+                            );
+                            return guide ? (
+                              <span>{guide.number}</span>
+                            ) : (
+                              <Btn size="small" disabled={busy} onClick={() => void run(() => api.issueGuide({ orderId: invoice.orderId }), 'Guía de remisión emitida.')}>Guía</Btn>
+                            );
+                          })()}
                         </td>
                       </tr>
                     ))}
@@ -168,9 +177,10 @@ export function CommercialPage() {
                 event.preventDefault();
                 const invoice = (state.invoices ?? []).find((item) => item.id === invoiceId);
                 const lines = (invoice?.lines ?? [])
-                  .map((line) => ({
+                  .map((line, index) => ({
                     productId: line.productId,
-                    qty: Number(returnQtys[line.productId] ?? 0),
+                    qty: Number(returnQtys[`${line.productId}:${line.batch ?? index}`] ?? 0),
+                    ...(line.batch ? { batch: line.batch } : {}),
                     restock,
                   }))
                   .filter((line) => line.qty > 0);
@@ -201,23 +211,27 @@ export function CommercialPage() {
                   ))}
                 </Select>
               </div>
-              {(state.invoices ?? []).find((item) => item.id === invoiceId)?.lines.map((line) => (
-                <div className="field" key={line.productId}>
-                  <label htmlFor={`com-return-${line.productId}`}>
-                    {product(state, line.productId)?.name ?? line.productId} · facturado {line.qty}
+              {(state.invoices ?? []).find((item) => item.id === invoiceId)?.lines.map((line, index) => {
+                const key = `${line.productId}:${line.batch ?? index}`;
+                return (
+                <div className="field" key={key}>
+                  <label htmlFor={`com-return-${key}`}>
+                    {product(state, line.productId)?.name ?? line.productId}
+                    {line.batch ? ` · lote ${line.batch}` : ''} · facturado {line.qty}
                   </label>
                   <input
-                    id={`com-return-${line.productId}`}
+                    id={`com-return-${key}`}
                     type="number"
                     min={0}
                     max={line.qty}
-                    value={returnQtys[line.productId] ?? 0}
+                    value={returnQtys[key] ?? 0}
                     onChange={(event) =>
-                      setReturnQtys((current) => ({ ...current, [line.productId]: Number(event.target.value) }))
+                      setReturnQtys((current) => ({ ...current, [key]: Number(event.target.value) }))
                     }
                   />
                 </div>
-              ))}
+                );
+              })}
               <div className="field">
                 <label htmlFor="com-return-reason">Motivo</label>
                 <input id="com-return-reason" value={returnReason} onChange={(event) => setReturnReason(event.target.value)} required />
@@ -639,7 +653,7 @@ export function CommercialPage() {
                   <strong>{group.supplierName}</strong> · llega en {group.leadTimeDays} días
                   <ul>
                     {group.lines.map((line) => (
-                      <li key={line.productId}>{line.name}: {line.packQty} {line.packCode} × {line.unitsPerPack} · costo {money(line.unitPrice)}</li>
+                      <li key={line.productId}>{line.name}: {line.packQty} {line.packCode} × {line.unitsPerPack} · costo {money(line.unitPrice)} · {line.reason}</li>
                     ))}
                   </ul>
                 </li>

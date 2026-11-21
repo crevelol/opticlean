@@ -49,7 +49,12 @@ export type Product = {
   ivaRate?: number;
   /** Recibir siempre a inspección de calidad. */
   inspectOnReceipt?: boolean;
+  attributes?: ProductAttribute[];
+  presentations?: string[];
 };
+
+export type ProductAttribute = { name: string; value: string };
+export type SalesChannel = 'portal' | 'ejecutivo' | 'reposicion';
 
 export type WarehouseFamily = {
   id: string;
@@ -119,6 +124,10 @@ export type Client = {
   paymentTermsDays?: number;
   /** RUC del cliente, 13 dígitos. Hace falta para facturar. */
   taxId?: string;
+  phone?: string;
+  reorderEveryDays?: number;
+  lat?: number;
+  lng?: number;
 };
 
 export type OrderLine = { productId: string; qty: number; unitPrice?: number };
@@ -150,6 +159,12 @@ export type Order = {
   shortages?: OrderShortage[];
   purchaseIds?: string[];
   createdBy?: string;
+  channel?: SalesChannel;
+  quoteId?: string;
+  deliveryCode?: string;
+  deliveryKey?: string;
+  stopOrder?: number;
+  skipped?: boolean;
 };
 
 export type TraceEvent = {
@@ -234,6 +249,56 @@ export type Vehicle = {
   maxM3: number;
   costPerKm: number;
   active: boolean;
+  fuel?: 'gasolina' | 'diesel' | 'gas' | 'electrico';
+  kmPerUnit?: number;
+  fuelPrice?: number;
+};
+
+export type CustomerQuote = {
+  id: string;
+  number: string;
+  clientId: string;
+  date: string;
+  validUntil: string;
+  status: 'Abierta' | 'Ganada' | 'Perdida';
+  channel: SalesChannel;
+  lines: Array<{ productId: string; qty: number; unitPrice: number }>;
+  note?: string;
+  orderId?: string;
+};
+
+export type Parcel = {
+  id: string;
+  orderId: string;
+  weightKg: number;
+  volumeM3: number;
+  packedAt: string;
+};
+
+export type SupplierOffering = {
+  id: string;
+  supplierId: string;
+  productId: string;
+  supplierSku: string;
+  unitCost: number;
+  minQty: number;
+};
+
+export type PlanAction = {
+  id: string;
+  kind: 'compra' | 'transferencia';
+  status: 'sugerida' | 'ejecutada' | 'descartada' | 'deshecha';
+  productId: string;
+  qty: number;
+  supplierId?: string;
+  fromWarehouseId?: string;
+  toWarehouseId?: string;
+  packCode?: string;
+  unitPrice?: number;
+  reason: string;
+  note?: string;
+  purchaseId?: string;
+  transferId?: string;
 };
 
 export type BusinessRules = {
@@ -289,6 +354,10 @@ export type AppState = {
   auditLog?: AuditEntry[];
   cycleCounts?: CycleCount[];
   transfers?: WarehouseTransfer[];
+  quotes?: CustomerQuote[];
+  parcels?: Parcel[];
+  offerings?: SupplierOffering[];
+  planActions?: PlanAction[];
 };
 
 export type SalesInvoice = {
@@ -299,7 +368,7 @@ export type SalesInvoice = {
   clientId: string;
   date: string;
   status: 'Emitida' | 'Anulada';
-  lines: Array<{ productId: string; qty: number; unitPrice: number; ivaRate: number; unitCost?: number }>;
+  lines: Array<{ productId: string; qty: number; unitPrice: number; ivaRate: number; unitCost?: number; batch?: string; expiry?: string }>;
   kits?: Array<{ bundleId: string; qty: number; unitPrice: number; ivaRate: number }>;
   subtotal: number;
   iva: number;

@@ -15,6 +15,7 @@ import {
   dispatch,
 } from '../src/domain/inventory.service.js';
 import { suggest } from '../src/domain/placement.service.js';
+import { createPurchase } from '../src/domain/commerce.service.js';
 
 test('Every seeded location respects capacity and one-product storage', () => {
   const s = seed();
@@ -101,6 +102,28 @@ test('Papel sin fecha sigue siendo vendible y el desinfectante sin registro no',
   assert.ok(disinfectant?.requiresSanitary && disinfectant.sanitaryRegistration);
   disinfectant.sanitaryRegistration = '';
   assert.throws(() => createOrder(s, { clientId: 'CL002', lines: [{ productId: 'P008', qty: 1 }] }), /registro sanitario/);
+});
+
+test('El papel entra sin fecha contra una orden y queda vendible', () => {
+  const s = seed();
+  assert.equal(s.products.find((item) => item.id === 'P012')?.perishable, false);
+  const po = createPurchase(s, { productId: 'P012', qty: 4 });
+  const loc = suggest(s, 'P012', 4).find((item) => qtyAt(s, item.id) === 0);
+  assert.ok(loc);
+  receive(s, {
+    productId: 'P012',
+    qty: 4,
+    loc: loc.id,
+    batch: 'PAP-NEW',
+    expiry: '',
+    supplier: 'Papelera',
+    purchaseId: po.id,
+  });
+  const lot = s.lots.find((item) => item.batch === 'PAP-NEW');
+  assert.ok(lot);
+  assert.equal(lot.purchaseId, po.id);
+  assert.equal(lot.expiry, '');
+  assert.equal(isLotSellable(s, lot), true);
 });
 
 test('No se despacha un pedido sin lote picado', () => {

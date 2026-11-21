@@ -227,6 +227,9 @@ export function AppLayout() {
               (order) => order.id.toLowerCase() === q || (q.startsWith('ped') && order.id.toLowerCase().includes(q)),
             );
             const clientHit = state.clients.some((item) =>
+              [item.name, item.taxId, item.email, item.contact, item.phone].some((value) => value?.toLowerCase().includes(q)),
+            );
+            const supplierHit = (state.suppliers ?? []).some((item) =>
               [item.name, item.taxId, item.email, item.contact].some((value) => value?.toLowerCase().includes(q)),
             );
             const productHit = state.products.some((item) =>
@@ -234,6 +237,7 @@ export function AppLayout() {
             );
             const encoded = encodeURIComponent(query.trim());
             if (orderHit) navigate(`/pedidos?q=${encoded}`);
+            else if (supplierHit && !clientHit && !productHit) navigate(`/proveedores?q=${encoded}`);
             else if (clientHit && !productHit) navigate(`/clientes?q=${encoded}`);
             else navigate(`/inventario?q=${encoded}`);
           }}

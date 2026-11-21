@@ -109,6 +109,7 @@ const SEED_MODULES: Array<Omit<ModuleRow, 'active'> & { active?: number }> = [
     sort_order: 110,
   },
   { id: 'mod-clients', code: 'clients', name: 'Clientes', description: 'Directorio de clientes', icon: 'users', sort_order: 120 },
+  { id: 'mod-suppliers', code: 'suppliers', name: 'Proveedores', description: 'Directorio de proveedores', icon: 'building', sort_order: 122 },
   {
     id: 'mod-commercial',
     code: 'commercial',
@@ -210,6 +211,15 @@ const SEED_MENU: Array<Omit<MenuItem, 'active' | 'badge'> & { badge?: string | n
     sort_order: 70,
   },
   {
+    id: 'mi-quotes',
+    module_id: 'mod-orders',
+    label: 'Cotizaciones',
+    path: '/cotizaciones',
+    icon: 'file',
+    section: 'Operación',
+    sort_order: 72,
+  },
+  {
     id: 'mi-purchases',
     module_id: 'mod-purchases',
     label: 'Abastecimiento',
@@ -219,6 +229,15 @@ const SEED_MENU: Array<Omit<MenuItem, 'active' | 'badge'> & { badge?: string | n
     sort_order: 80,
   },
   {
+    id: 'mi-plan',
+    module_id: 'mod-purchases',
+    label: 'Plan de mañana',
+    path: '/plan',
+    icon: 'calendar',
+    section: 'Operación',
+    sort_order: 82,
+  },
+  {
     id: 'mi-logistics',
     module_id: 'mod-logistics',
     label: 'Logística',
@@ -226,6 +245,15 @@ const SEED_MENU: Array<Omit<MenuItem, 'active' | 'badge'> & { badge?: string | n
     icon: 'truck',
     section: 'Operación',
     sort_order: 90,
+  },
+  {
+    id: 'mi-packing',
+    module_id: 'mod-logistics',
+    label: 'Empaque',
+    path: '/empaque',
+    icon: 'cube',
+    section: 'Operación',
+    sort_order: 92,
   },
   {
     id: 'mi-routes',
@@ -253,6 +281,15 @@ const SEED_MENU: Array<Omit<MenuItem, 'active' | 'badge'> & { badge?: string | n
     icon: 'users',
     section: 'Gestión',
     sort_order: 10,
+  },
+  {
+    id: 'mi-suppliers',
+    module_id: 'mod-suppliers',
+    label: 'Proveedores',
+    path: '/proveedores',
+    icon: 'building',
+    section: 'Gestión',
+    sort_order: 12,
   },
   {
     id: 'mi-commercial',
@@ -356,6 +393,14 @@ function seed(database: DatabaseSync) {
   }
 
   database.prepare(`UPDATE menu_items SET badge = NULL WHERE badge = 'NUEVO'`).run();
+  database
+    .prepare(
+      `INSERT OR IGNORE INTO company_modules (company_id, module_id, enabled)
+       SELECT company_id, 'mod-suppliers', 1
+       FROM company_modules
+       WHERE module_id IN ('mod-purchases', 'mod-clients') AND enabled = 1`,
+    )
+    .run();
 
   // Innova MF: todos los módulos
   for (const m of SEED_MODULES) {

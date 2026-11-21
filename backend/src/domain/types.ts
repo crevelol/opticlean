@@ -62,6 +62,10 @@ export type Product = {
   ivaRate?: number;
   /** Recibir a inspección: el lote queda retenido hasta liberarlo. */
   inspectOnReceipt?: boolean;
+  /** Atributos leídos de la etiqueta o cargados a mano. */
+  attributes?: ProductAttribute[];
+  /** Presentaciones en las que se compra o vende (caja, galón, saco). */
+  presentations?: string[];
 };
 
 /** Familia operativa de bodega: agrupa líneas y racks para ubicación inteligente. */
@@ -139,7 +143,16 @@ export type Client = {
   paymentTermsDays?: number;
   /** RUC del cliente, 13 dígitos. Hace falta para facturar. */
   taxId?: string;
+  phone?: string;
+  /** Cada cuántos días suele reponer. Sirve para el pronóstico por cliente. */
+  reorderEveryDays?: number;
+  lat?: number;
+  lng?: number;
 };
+
+export type SalesChannel = 'portal' | 'ejecutivo' | 'reposicion';
+
+export type ProductAttribute = { name: string; value: string };
 
 export type OrderLine = { productId: string; qty: number; unitPrice?: number };
 
@@ -183,6 +196,18 @@ export type Order = {
   /** Órdenes de compra generadas para cubrir el faltante. */
   purchaseIds?: string[];
   createdBy?: string;
+  /** portal, ejecutivo o reposición programada. */
+  channel?: SalesChannel;
+  /** Cotización que originó el pedido. */
+  quoteId?: string;
+  /** Código de 6 dígitos que el cliente dicta al recibir. */
+  deliveryCode?: string;
+  /** Llave del enlace público donde el cliente ve el código. */
+  deliveryKey?: string;
+  /** Orden de la parada en la ruta (1 = primera). */
+  stopOrder?: number;
+  /** La parada se omitió y la ruta se reordenó. */
+  skipped?: boolean;
 };
 
 export type TraceEvent = {
@@ -287,6 +312,60 @@ export type Vehicle = {
   maxM3: number;
   costPerKm: number;
   active: boolean;
+  fuel?: 'gasolina' | 'diesel' | 'gas' | 'electrico';
+  /** Kilómetros por galón o por kWh. */
+  kmPerUnit?: number;
+  /** Precio del galón o del kWh. */
+  fuelPrice?: number;
+};
+
+export type CustomerQuoteLine = { productId: string; qty: number; unitPrice: number };
+
+export type CustomerQuote = {
+  id: string;
+  number: string;
+  clientId: string;
+  date: string;
+  validUntil: string;
+  status: 'Abierta' | 'Ganada' | 'Perdida';
+  channel: SalesChannel;
+  lines: CustomerQuoteLine[];
+  note?: string;
+  orderId?: string;
+};
+
+export type Parcel = {
+  id: string;
+  orderId: string;
+  weightKg: number;
+  volumeM3: number;
+  packedAt: string;
+};
+
+export type SupplierOffering = {
+  id: string;
+  supplierId: string;
+  productId: string;
+  supplierSku: string;
+  unitCost: number;
+  minQty: number;
+};
+
+export type PlanAction = {
+  id: string;
+  kind: 'compra' | 'transferencia';
+  status: 'sugerida' | 'ejecutada' | 'descartada' | 'deshecha';
+  productId: string;
+  qty: number;
+  supplierId?: string;
+  fromWarehouseId?: string;
+  toWarehouseId?: string;
+  packCode?: string;
+  unitPrice?: number;
+  reason: string;
+  note?: string;
+  purchaseId?: string;
+  transferId?: string;
 };
 
 /** Parámetros operativos editables (costo envío, asignación, crédito). */
@@ -353,6 +432,10 @@ export type AppState = {
   auditLog?: AuditEntry[];
   cycleCounts?: CycleCount[];
   transfers?: WarehouseTransfer[];
+  quotes?: CustomerQuote[];
+  parcels?: Parcel[];
+  offerings?: SupplierOffering[];
+  planActions?: PlanAction[];
 };
 
 export type SalesInvoiceLine = {
@@ -362,6 +445,9 @@ export type SalesInvoiceLine = {
   ivaRate: number;
   /** Costo promedio unitario al facturar (para margen). */
   unitCost?: number;
+  /** Lote que salió en el picking. */
+  batch?: string;
+  expiry?: string;
 };
 
 export type SalesInvoiceKit = {

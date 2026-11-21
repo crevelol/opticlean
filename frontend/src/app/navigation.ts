@@ -28,11 +28,16 @@ export const routeMeta: Record<string, RouteMeta> = {
   '/familias': { title: 'Familias' },
   '/pedidos': { title: 'Pedidos' },
   '/pedidos/nuevo': { title: 'Nuevo pedido', parent: '/pedidos' },
+  '/cotizaciones': { title: 'Cotizaciones' },
+  '/empaque': { title: 'Empaque' },
+  '/plan': { title: 'Plan de mañana' },
+  '/entrega': { title: 'Código de entrega' },
   '/compras': { title: 'Abastecimiento' },
   '/logistica': { title: 'Logística' },
   '/logistica/rutas': { title: 'Mi ruta', parent: '/logistica' },
   '/logistica/historial': { title: 'Historial de rutas', parent: '/logistica' },
   '/clientes': { title: 'Clientes' },
+  '/proveedores': { title: 'Proveedores' },
   '/comercial': { title: 'Comercial' },
   '/trazabilidad': { title: 'Trazabilidad' },
   '/reportes': { title: 'Reportes' },
@@ -51,6 +56,9 @@ export const fallbackMenu: MenuSection[] = [
       { id: 'f-rec', label: 'Recepción', path: '/recepcion', icon: 'receive', badge: null },
       { id: 'f-bod', label: 'Bodega visual', path: '/bodega', icon: 'warehouse', badge: null },
       { id: 'f-ped', label: 'Pedidos', path: '/pedidos', icon: 'orders', badge: null },
+      { id: 'f-quote', label: 'Cotizaciones', path: '/cotizaciones', icon: 'file', badge: null },
+      { id: 'f-plan', label: 'Plan de mañana', path: '/plan', icon: 'calendar', badge: null },
+      { id: 'f-pack', label: 'Empaque', path: '/empaque', icon: 'cube', badge: null },
       { id: 'f-log', label: 'Logística', path: '/logistica', icon: 'truck', badge: null },
     ],
   },
@@ -58,6 +66,7 @@ export const fallbackMenu: MenuSection[] = [
     section: 'Gestión',
     items: [
       { id: 'f-cli', label: 'Clientes', path: '/clientes', icon: 'users', badge: null },
+      { id: 'f-sup', label: 'Proveedores', path: '/proveedores', icon: 'building', badge: null },
       { id: 'f-com', label: 'Comercial', path: '/comercial', icon: 'orders', badge: null },
       { id: 'f-rules', label: 'Reglas de negocio', path: '/reglas', icon: 'shield', badge: null },
       { id: 'f-users', label: 'Usuarios', path: '/usuarios', icon: 'users', badge: null },
@@ -109,8 +118,8 @@ export function breadcrumbsFor(path: string, menu: MenuSection[]): Crumb[] {
 }
 
 const ROLE_PATHS: Record<string, readonly string[]> = {
-  ops: ['/', '/inventario', '/recepcion', '/bodega', '/bodegas', '/familias', '/pedidos', '/compras', '/trazabilidad'],
-  dispatch: ['/', '/pedidos', '/clientes', '/logistica', '/logistica/rutas', '/logistica/historial', '/trazabilidad'],
+  ops: ['/', '/inventario', '/recepcion', '/bodega', '/bodegas', '/familias', '/pedidos', '/cotizaciones', '/compras', '/plan', '/empaque', '/proveedores', '/trazabilidad'],
+  dispatch: ['/', '/pedidos', '/clientes', '/logistica', '/empaque', '/logistica/rutas', '/logistica/historial', '/trazabilidad'],
   driver: ['/logistica/rutas', '/logistica/historial'],
 };
 

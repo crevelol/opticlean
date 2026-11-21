@@ -9,6 +9,7 @@ import { placementBlockReason } from './hazard.js';
 import { stockQtyFromPack } from './packs.js';
 import { applyPurchaseReceipt } from './purchase-lines.js';
 import { vehicleByPlate } from './fleet.service.js';
+import { issueGuide } from './commercial.service.js';
 import {
   QUARANTINE_LOC,
   invoicedOrderIds,
@@ -201,10 +202,11 @@ export function receive(
   }
   const fit = cellFitReason(s, target, data.productId, qty);
   if (fit) throw new Error(fit);
-  if (!data.batch?.trim() || !data.expiry) {
-    throw new Error('Completa el lote y la fecha de vencimiento.');
-  }
-  if (data.expiry < todayGuayaquil()) {
+  const perishable = item.perishable !== false;
+  const expiry = data.expiry?.trim() ?? '';
+  if (!data.batch?.trim()) throw new Error('Completa el lote.');
+  if (perishable && !expiry) throw new Error('Completa el lote y la fecha de vencimiento.');
+  if (expiry && expiry < todayGuayaquil()) {
     throw new Error('La fecha de vencimiento no puede estar en el pasado.');
   }
   const reason = data.reason?.trim();
@@ -214,7 +216,7 @@ export function receive(
       throw new Error(`Motivo no válido. Usa: ${RECEIPT_REASONS.join(', ')}.`);
     }
   }
-  const blocked = placementBlockReason(s, data.productId, target, { expiry: data.expiry });
+  const blocked = placementBlockReason(s, data.productId, target, { expiry });
   if (blocked) throw new Error(blocked);
   let supplier = data.supplier;
   if (data.purchaseId) {
@@ -238,7 +240,7 @@ export function receive(
     qty,
     loc: data.loc,
     batch,
-    expiry: data.expiry,
+    expiry,
     warehouseId: activeWarehouseId(s),
     purchaseId: data.purchaseId || undefined,
     receiptId: id,
@@ -251,7 +253,7 @@ export function receive(
     qty,
     loc: data.loc,
     batch,
-    expiry: data.expiry,
+    expiry,
     supplier,
     purchaseId: data.purchaseId || undefined,
     reason: data.purchaseId ? undefined : reason,
@@ -349,6 +351,7 @@ export function createOrder(
     notes?: string;
     /** Acepta el pedido aunque falte stock; queda Esperando stock. */
     backorder?: boolean;
+    channel?: Order['channel'];
   },
 ) {
   const buyer = client(s, data.clientId);
@@ -415,7 +418,11 @@ export function createOrder(
     notes: data.notes?.trim() || undefined,
     ...(shortages.length ? { shortages } : {}),
     createdBy: actorName(s),
+    ...(data.channel ? { channel: data.channel } : {}),
   };
+  if (data.channel && !['portal', 'ejecutivo', 'reposicion'].includes(data.channel)) {
+    throw new Error('El canal debe ser portal, ejecutivo o reposición.');
+  }
   s.orders.unshift(o);
   return o;
 }
@@ -547,9 +554,14 @@ export function dispatch(
   const all = [...current, ...orders];
   assertFitsVehicle(s, vehicle, all, limits);
   for (const o of orders) {
-    o.status = 'En ruta';
     o.vehicle = vehicle.trim().toUpperCase();
     o.stagedPlate = undefined;
+    issueGuide(s, { orderId: o.id });
+    if (!o.deliveryCode || !o.deliveryKey) {
+      o.deliveryCode = String(Math.floor(100000 + Math.random() * 900000));
+      o.deliveryKey = Math.random().toString(36).slice(2, 12);
+    }
+    o.status = 'En ruta';
     const lines: OrderPick[] = o.picks ?? o.lines;
     for (const line of lines) {
       addEvent(
@@ -593,6 +605,13 @@ export function upsertProduct(s: AppState, p: Product, originalId?: string) {
     components: p.components ?? [],
     kind: p.kind === 'raw' ? 'raw' : p.kind ?? 'finished',
   });
+  normalized.attributes = (p.attributes ?? [])
+    .map((attribute) => ({ name: String(attribute?.name ?? '').trim(), value: String(attribute?.value ?? '').trim() }))
+    .filter((attribute) => attribute.name && attribute.value)
+    .slice(0, 24);
+  if (!normalized.attributes.length) delete normalized.attributes;
+  normalized.presentations = [...new Set((p.presentations ?? []).map((item) => item.trim()).filter(Boolean))].slice(0, 12);
+  if (!normalized.presentations.length) delete normalized.presentations;
   validateComponents(s, normalized.id, normalized.components);
   if (originalId) {
     const existing = product(s, originalId);
@@ -612,12 +631,16 @@ export function confirmDelivery(
   orderId: string,
   person: string,
   notes?: string,
+  code?: string,
 ) {
   const o = s.orders.find((x) => x.id === orderId);
   if (!o || !['En ruta', 'Incidencia'].includes(o.status)) {
     throw new Error('El pedido no está en ruta.');
   }
   if (!person.trim()) throw new Error('Escribe el nombre de quien recibe.');
+  if (o.deliveryCode && o.deliveryCode !== String(code ?? '').trim()) {
+    throw new Error('El código de entrega no coincide.');
+  }
   o.status = 'Entregado';
   o.deliveredTo = person.trim();
   o.deliveryNotes = notes;
