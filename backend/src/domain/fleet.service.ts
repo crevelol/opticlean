@@ -10,7 +10,8 @@ export function defaultVehicles(): Vehicle[] {
 }
 
 export function ensureVehicles(s: AppState): Vehicle[] {
-  if (!Array.isArray(s.vehicles) || !s.vehicles.length) s.vehicles = defaultVehicles();
+  if (!Array.isArray(s.vehicles)) s.vehicles = s.demo === false ? [] : defaultVehicles();
+  else if (!s.vehicles.length && s.demo !== false) s.vehicles = defaultVehicles();
   return s.vehicles;
 }
 

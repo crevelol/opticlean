@@ -77,7 +77,8 @@ export function migrateState(raw: AppState): AppState {
     p.components = Array.isArray(p.components) ? p.components : [];
     p.kind = p.kind === 'raw' ? 'raw' : 'finished';
   }
-  if (!base.products.some((p) => p.kind === 'raw')) {
+  const isDemo = base.demo !== false;
+  if (isDemo && !base.products.some((p) => p.kind === 'raw')) {
     const demo = seed();
     const raws = demo.products.filter((p) => p.kind === 'raw');
     const rawLots = demo.lots.filter((l) => raws.some((r) => r.id === l.productId));
@@ -90,7 +91,7 @@ export function migrateState(raw: AppState): AppState {
   }
 
   // Historial de demanda para previsión adaptativa (solo si aún no está)
-  if (!base.orders.some((o) => o.id.startsWith('PED-H'))) {
+  if (isDemo && !base.orders.some((o) => o.id.startsWith('PED-H'))) {
     const demo = seed();
     const historyOrders = demo.orders.filter((o) => o.id.startsWith('PED-H'));
     const historyEvents = demo.events.filter((e) => e.id.startsWith('ev-h-'));
@@ -143,6 +144,11 @@ export function migrateState(raw: AppState): AppState {
     if (!p.stockUnit) p.stockUnit = p.packs[0]?.label ?? 'unidad';
     if (p.minShelfLifeDays == null || !Number.isFinite(p.minShelfLifeDays)) {
       p.minShelfLifeDays = p.category === 'Hospitalaria' ? 30 : 0;
+    }
+    // Solo datos demo recién sembrados: costo de referencia para valorar a costo.
+    // Datos existentes sin costo no se inventan; el tablero los señala.
+    if (base.demo === true && (p.avgCost == null || !(p.avgCost > 0)) && p.price > 0) {
+      p.avgCost = Math.round(p.price * 0.62 * 100) / 100;
     }
     if (!p.supplierId && p.supplier) {
       p.supplierId = suppliers.find((supplier) => supplier.name.toLowerCase() === p.supplier.toLowerCase())?.id;

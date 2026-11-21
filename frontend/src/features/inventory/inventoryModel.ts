@@ -1,4 +1,4 @@
-import { reserved, scopedLots } from '../../shared/lib/inventory';
+import { reserved, scopedLots, isLotSellable } from '../../shared/lib/inventory';
 import type { AppState, Lot, Product } from '../../shared/types';
 
 export type InventoryRow = {
@@ -8,6 +8,9 @@ export type InventoryRow = {
   available: number;
   locations: string[];
   lots: Lot[];
+  /** Unidades físicas que hoy no se pueden vender. */
+  unsellable: number;
+  saleValue: number;
   status: 'healthy' | 'low' | 'unavailable';
   shortage: number;
   stockValue: number;
@@ -49,7 +52,9 @@ export function buildInventoryRows(state: AppState): InventoryRow[] {
     const stock = lots.reduce((total, lot) => total + lot.qty, 0);
     // Orders currently reserve stock globally; retain that domain convention.
     const reservedQty = reserved(state, product.id);
-    const available = stock - reservedQty;
+    // Solo cuenta como disponible lo vendible hoy (sin vencidos, retenidos ni bajo vida útil mínima).
+    const sellable = lots.filter((lot) => isLotSellable(state, lot)).reduce((total, lot) => total + lot.qty, 0);
+    const available = sellable - reservedQty;
     return {
       product,
       stock,
@@ -59,7 +64,10 @@ export function buildInventoryRows(state: AppState): InventoryRow[] {
       lots,
       status: available <= 0 ? 'unavailable' : available < product.min ? 'low' : 'healthy',
       shortage: Math.max(0, product.min - available),
-      stockValue: stock * product.price,
+      unsellable: stock - sellable,
+      // Valor a costo promedio, el que cuadra con contabilidad.
+      stockValue: stock * (product.avgCost ?? 0),
+      saleValue: stock * product.price,
     };
   });
 }

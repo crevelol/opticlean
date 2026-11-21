@@ -631,6 +631,7 @@ export function seed(): AppState {
 
   return {
     version: 2,
+    demo: true,
     products,
     lots,
     warehouses,

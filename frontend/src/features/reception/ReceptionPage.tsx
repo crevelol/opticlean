@@ -9,7 +9,8 @@ import { Btn, PageHead, cx } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal } from '../../shared/components/Modal';
 import { WarehouseEmbed } from '../warehouse/WarehouseEmbed';
-import type { Location } from '../../shared/types';
+import { RECEIPT_REASONS, type Location } from '../../shared/types';
+import { useAuth } from '../../shared/hooks/AuthProvider';
 import { packsOf, pendingUnits, purchaseIncludes } from '../../shared/lib/wholesale';
 import '../../styles/warehouse-positioning.css';
 import '../../styles/reception.css';
@@ -43,6 +44,10 @@ export function ReceptionNewPage() {
     (p) => purchaseIncludes(p, productId) && (!p.status || p.status === 'Abierta' || p.status === 'Parcial'),
   );
   const [supplier, setSupplier] = useState('');
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const [reason, setReason] = useState('');
+  const [inspect, setInspect] = useState(false);
   const [batch, setBatch] = useState('');
   const [expiry, setExpiry] = useState('');
   const [suggestions, setSuggestions] = useState<Location[]>([]);
@@ -83,7 +88,8 @@ export function ReceptionNewPage() {
   useEffect(() => {
     if (!selectedProduct) return;
     setSupplier(selectedProduct.supplier);
-  }, [selectedProduct?.id, selectedProduct?.supplier]);
+    setInspect(!!selectedProduct.inspectOnReceipt);
+  }, [selectedProduct?.id, selectedProduct?.supplier, selectedProduct?.inspectOnReceipt]);
 
   const purchaseSupplier = state?.suppliers?.find((s) => s.id === purchase?.supplierId)?.name;
   useEffect(() => {
@@ -139,7 +145,7 @@ export function ReceptionNewPage() {
   const todayIso = new Date().toISOString().slice(0, 10);
 
   const stepValid = [
-    !!productId && supplier.trim().length > 0,
+    !!productId && supplier.trim().length > 0 && (!!purchaseId || (isAdmin && !!reason)),
     validQty && batch.trim().length > 0 && !!expiry && expiry >= todayIso,
     ready && !!selected && !lookupError && freeNow >= stockQty,
     true,
@@ -174,6 +180,8 @@ export function ReceptionNewPage() {
         expiry,
         supplier,
         purchaseId: purchaseId || undefined,
+        reason: purchaseId ? undefined : reason,
+        inspect,
       });
       applyResponse(res);
       const newId = res.state?.receipts?.[0]?.id;
@@ -199,7 +207,8 @@ export function ReceptionNewPage() {
 
   const review: Array<{ k: string; v: React.ReactNode; step: number }> = [
     { k: 'Producto', v: `${productId} · ${selectedProduct?.name ?? ''}`, step: 0 },
-    { k: 'Orden de compra', v: purchaseId || 'Sin orden de compra', step: 0 },
+    { k: 'Orden de compra', v: purchaseId || `Sin orden de compra · ${reason || 'falta motivo'}`, step: 0 },
+    { k: 'Inspección', v: inspect ? 'Queda retenido hasta liberarlo' : 'Disponible al registrar', step: 1 },
     { k: 'Proveedor', v: supplier, step: 0 },
     {
       k: 'Cantidad',
@@ -301,6 +310,24 @@ export function ReceptionNewPage() {
                       </Select>
                       {!openPurchases.length ? <small>No hay órdenes abiertas para este producto.</small> : null}
                     </div>
+                    {!purchaseId ? (
+                      <div className="field">
+                        <label htmlFor="rec-reason">Motivo del ingreso sin orden</label>
+                        <Select id="rec-reason" value={reason} disabled={!isAdmin} onChange={(e) => setReason(e.target.value)}>
+                          <option value="">Elegir motivo…</option>
+                          {RECEIPT_REASONS.map((r) => (
+                            <option key={r} value={r}>
+                              {r}
+                            </option>
+                          ))}
+                        </Select>
+                        <small>
+                          {isAdmin
+                            ? 'Todo ingreso sin orden de compra queda registrado con su motivo.'
+                            : 'Elige la orden de compra. Ingresar sin orden requiere administración.'}
+                        </small>
+                      </div>
+                    ) : null}
                     <div className="field">
                       <label htmlFor="rec-supplier">Proveedor</label>
                       <input
@@ -388,6 +415,13 @@ export function ReceptionNewPage() {
                         required
                       />
                       <small>Se despacha primero lo que vence antes.</small>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="rec-inspect" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input id="rec-inspect" type="checkbox" checked={inspect} onChange={(e) => setInspect(e.target.checked)} />
+                        Recibir a inspección de calidad
+                      </label>
+                      <small>El lote queda retenido y no se vende hasta que administración lo libere.</small>
                     </div>
                   </div>
                 </>

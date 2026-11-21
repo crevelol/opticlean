@@ -37,6 +37,7 @@ test('Receiving and transferring preserve product totals', () => {
     batch: 'TEST-001',
     expiry: '2099-12-31',
     supplier: 'Test',
+    reason: 'Inventario inicial',
   });
   assert.equal(stock(s, 'P015'), before + 12);
   const lot = s.lots.find((l) => l.batch === 'TEST-001')!;

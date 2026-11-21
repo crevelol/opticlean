@@ -15,6 +15,7 @@ import { WarehousePositioning } from './WarehousePositioning';
 import { WarehouseTransferDialog } from './WarehouseTransferDialog';
 import { LocationDetailModal } from './LocationDetailModal';
 import { PickingModal, type PickLine } from './PickingModal';
+import { ExitLayer } from './ExitLayer';
 import '../../styles/warehouse-positioning.css';
 import '../../styles/warehouse-page.css';
 
@@ -457,6 +458,15 @@ export function WarehousePage() {
           <Btn variant="primary" icon="eye" onClick={() => setDetailLoc(loc.id)}>Ver detalle</Btn>
         </footer>
       </section>
+
+      <ExitLayer
+        state={state}
+        onLocate={(target) => {
+          setSelectedLoc(target);
+          setLevel('all');
+          document.getElementById('warehouse-map')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }}
+      />
 
       <section className="panel wh-moves">
         <header className="wh-moves-head">

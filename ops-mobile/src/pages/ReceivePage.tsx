@@ -28,6 +28,7 @@ export function ReceivePage({
   const [options, setOptions] = useState<PlacementOption[]>([]);
   const [guidance, setGuidance] = useState('');
   const [purchaseId, setPurchaseId] = useState('');
+  const [reason, setReason] = useState('');
   const [selectedLoc, setSelectedLoc] = useState('');
   const [loadingPlace, setLoadingPlace] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -105,6 +106,12 @@ export function ReceivePage({
     [product, state.purchases],
   );
 
+  // Por defecto se recibe contra la primera orden abierta del producto.
+  useEffect(() => {
+    setPurchaseId(openPurchases[0]?.id ?? '');
+    setReason('');
+  }, [openPurchases]);
+
   const confirm = async () => {
     if (!product || !selectedLoc || saving) return;
     setSaving(true);
@@ -118,6 +125,7 @@ export function ReceivePage({
         expiry,
         supplier: product.supplier,
         purchaseId: purchaseId || undefined,
+        reason: purchaseId ? undefined : reason || undefined,
       });
       await onRefresh();
       setDone({ loc: selectedLoc, qty, name: product.name });
@@ -227,6 +235,18 @@ export function ReceivePage({
                   ))}
                 </select>
               </label>
+              {!purchaseId ? (
+                <label className="field">
+                  <span>Motivo sin orden (solo administración)</span>
+                  <select value={reason} onChange={(e) => setReason(e.target.value)}>
+                    <option value="">Elegir motivo…</option>
+                    <option value="Devolución de cliente">Devolución de cliente</option>
+                    <option value="Muestra">Muestra</option>
+                    <option value="Donación">Donación</option>
+                    <option value="Inventario inicial">Inventario inicial</option>
+                  </select>
+                </label>
+              ) : null}
               <label className="field">
                 <span>Cantidad</span>
                 <input

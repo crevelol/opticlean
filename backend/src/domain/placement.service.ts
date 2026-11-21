@@ -1,5 +1,6 @@
 import { familyOf } from './families.service.js';
 import { placementBlockReason } from './hazard.js';
+import { cellFits } from './capacity.js';
 import { product, qtyAt } from './inventory.service.js';
 import type { AppState, Location } from './types.js';
 import { lotsForActiveWarehouse } from './warehouse-admin.service.js';
@@ -34,7 +35,7 @@ export function suggestPlacement(
   const scored = getWarehouseGeometry(s)
     .locations.filter((l) => {
       if (l.id === exclude) return false;
-      if (qtyAt(s, l.id) + qty > l.capacity) return false;
+      if (!cellFits(s, l, productId, qty)) return false;
       if (!lots.filter((t) => t.loc === l.id).every((t) => t.productId === productId)) return false;
       return !placementBlockReason(s, productId, l);
     })

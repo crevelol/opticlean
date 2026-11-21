@@ -1,13 +1,22 @@
-import type { AppState, Client, OrderPick, PurchaseLine } from './types.js';
-import { addEvent, assertFitsVehicle, product, qtyAt, uid } from './inventory.service.js';
-import { stockQtyFromPack, unitsPerPack } from './packs.js';
-import { refreshPurchase } from './purchase-lines.js';
+import type { AppState, Client, Order, OrderPick, PurchaseLine } from './types.js';
+import {
+  addEvent,
+  assertFitsVehicle,
+  available,
+  expandedDemand,
+  product,
+  receive,
+  uid,
+} from './inventory.service.js';
+import { cellFits } from './capacity.js';
+import { packsOf, stockQtyFromPack, unitsPerPack } from './packs.js';
+import { pendingStockUnits, refreshPurchase } from './purchase-lines.js';
 import { vehicleByPlate } from './fleet.service.js';
 import { suggest } from './placement.service.js';
 import { activeWarehouseId, lotsForActiveWarehouse } from './warehouse-admin.service.js';
 import { getWarehouseGeometry } from './warehouse-layout.js';
 
-const OPEN_ORDER = ['Por preparar', 'Preparado', 'En ruta', 'Incidencia'];
+const OPEN_ORDER = ['Esperando stock', 'Por preparar', 'Preparado', 'En ruta', 'Incidencia'];
 
 /* ─── Pedidos ─────────────────────────────────────────────── */
 
@@ -15,7 +24,7 @@ function restockLocation(s: AppState, productId: string, qty: number, preferred?
   const geo = getWarehouseGeometry(s);
   const fits = (locId: string) => {
     const loc = geo.locations.find((l) => l.id === locId);
-    if (!loc || qtyAt(s, locId) + qty > loc.capacity) return false;
+    if (!loc || !cellFits(s, loc, productId, qty)) return false;
     return !lotsForActiveWarehouse(s).some((l) => l.loc === locId && l.productId !== productId);
   };
   if (preferred && fits(preferred)) return preferred;
@@ -29,8 +38,8 @@ function restockLocation(s: AppState, productId: string, qty: number, preferred?
 export function cancelOrder(s: AppState, orderId: string, reason: string) {
   const o = s.orders.find((x) => x.id === orderId);
   if (!o) throw new Error('Pedido no encontrado.');
-  if (!['Por preparar', 'Preparado'].includes(o.status)) {
-    throw new Error('Solo se pueden cancelar pedidos por preparar o preparados.');
+  if (!['Esperando stock', 'Por preparar', 'Preparado'].includes(o.status)) {
+    throw new Error('Solo se pueden cancelar pedidos esperando stock, por preparar o preparados.');
   }
   if (s.invoices?.some((invoice) => invoice.orderId === orderId && invoice.status === 'Emitida')) {
     throw new Error('El pedido tiene factura emitida. Emite una nota de crédito.');
@@ -67,6 +76,9 @@ export function cancelOrder(s: AppState, orderId: string, reason: string) {
         batch,
         expiry,
         warehouseId: activeWarehouseId(s),
+        purchaseId: pick.purchaseId ?? sameBatch?.purchaseId,
+        receiptId: sameBatch?.receiptId,
+        receivedAt: sameBatch?.receivedAt ?? new Date().toISOString(),
       });
       restocked.push({ productId: pick.productId, qty: pick.qty, loc, batch });
     }
@@ -75,6 +87,11 @@ export function cancelOrder(s: AppState, orderId: string, reason: string) {
     }
   }
 
+  if (o.purchaseIds?.length) {
+    for (const po of s.purchases) {
+      if (po.orderIds?.includes(o.id)) po.orderIds = po.orderIds.filter((id) => id !== o.id);
+    }
+  }
   o.status = 'Cancelado';
   o.cancelReason = why;
   o.cancelledAt = new Date().toISOString();
@@ -187,6 +204,7 @@ export function createPurchase(
     expectedDate?: string;
     notes?: string;
     supplierId?: string;
+    orderIds?: string[];
     lines?: Array<{
       productId: string;
       qty: number | string;
@@ -240,6 +258,7 @@ export function createPurchase(
     received: 0,
     status: 'Abierta',
     lines,
+    ...(body.orderIds?.length ? { orderIds: [...new Set(body.orderIds)] } : {}),
   });
   s.purchases.unshift(purchase);
   return purchase;
@@ -250,9 +269,139 @@ export function cancelPurchase(s: AppState, id: string) {
   if (!p) throw new Error('Orden de compra no encontrada.');
   if (p.status === 'Recibida') throw new Error('La orden ya fue recibida por completo.');
   if (p.status === 'Cancelada') throw new Error('La orden ya está cancelada.');
+  if (p.status === 'Cerrada') throw new Error('La orden ya está cerrada.');
+  if ((p.received ?? 0) > 0) {
+    throw new Error('La orden ya tiene mercadería recibida. Ciérrala con faltante en lugar de cancelarla.');
+  }
   p.status = 'Cancelada';
   return p;
 }
+
+/** Cierra una OC parcial: lo recibido queda, el faltante ya no se espera. */
+export function closePurchase(s: AppState, id: string, reason: string) {
+  const p = s.purchases.find((x) => x.id === id);
+  if (!p) throw new Error('Orden de compra no encontrada.');
+  if (p.status !== 'Parcial') throw new Error('Solo se cierran con faltante las órdenes parciales.');
+  const why = reason?.trim();
+  if (!why) throw new Error('Indica por qué se cierra con faltante.');
+  p.status = 'Cerrada';
+  p.closeReason = why;
+  return p;
+}
+
+/** Recibe varias líneas de una OC en un solo paso. Todo o nada. */
+export function receivePurchase(
+  s: AppState,
+  id: string,
+  body: {
+    lines: Array<{
+      productId: string;
+      qty: number | string;
+      loc: string;
+      batch: string;
+      expiry: string;
+      inspect?: boolean;
+    }>;
+  },
+) {
+  const po = s.purchases.find((x) => x.id === id);
+  if (!po) throw new Error('Orden de compra no encontrada.');
+  if (!isOpenPurchase(po)) throw new Error('La orden no está abierta.');
+  const lines = (body.lines ?? []).filter((line) => Number(line.qty) > 0);
+  if (!lines.length) throw new Error('Indica al menos una línea con cantidad recibida.');
+  const supplier = s.suppliers?.find((x) => x.id === po.supplierId)?.name ?? '';
+  const ids: string[] = [];
+  for (const line of lines) {
+    const name = product(s, line.productId)?.name ?? line.productId;
+    try {
+      ids.push(
+        receive(s, {
+          productId: line.productId,
+          qty: line.qty,
+          loc: line.loc,
+          batch: line.batch,
+          expiry: line.expiry,
+          supplier,
+          purchaseId: po.id,
+          inspect: line.inspect,
+        }),
+      );
+    } catch (e) {
+      throw new Error(`${name}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return ids;
+}
+
+/* ─── Pedidos con faltante ────────────────────────────────── */
+
+/** Crea una OC por proveedor para el faltante del pedido y las enlaza. */
+export function createBackorderPurchases(s: AppState, order: Order) {
+  const shortages = order.shortages ?? [];
+  if (!shortages.length) return [];
+  const groups = new Map<string, Array<{ productId: string; qty: number; packCode: string; unitPrice: number }>>();
+  for (const short of shortages) {
+    const item = product(s, short.productId);
+    if (!item) continue;
+    const supplierId =
+      item.supplierId ??
+      s.suppliers?.find((x) => x.name.toLowerCase() === (item.supplier ?? '').toLowerCase())?.id ??
+      '';
+    const packs = packsOf(item);
+    const pack = [...packs].sort((a, b) => a.units - b.units).find((x) => x.units >= 1) ?? packs[0];
+    const perPack = Math.max(1, pack.units);
+    const packQty = Math.max(1, Math.ceil(short.qty / perPack));
+    const unitPrice = Math.round((item.avgCost ?? 0) * perPack * 100) / 100;
+    const list = groups.get(supplierId) ?? [];
+    list.push({ productId: item.id, qty: packQty, packCode: pack.code, unitPrice });
+    groups.set(supplierId, list);
+  }
+  const created = [];
+  for (const [supplierId, lines] of groups) {
+    const supplier = s.suppliers?.find((x) => x.id === supplierId);
+    const expected = new Date();
+    expected.setDate(expected.getDate() + (supplier?.leadTimeDays || 7));
+    const po = createPurchase(s, {
+      supplierId: supplierId || undefined,
+      expectedDate: expected.toISOString().slice(0, 10),
+      notes: `Faltante del pedido ${order.id}.`,
+      orderIds: [order.id],
+      lines,
+    });
+    created.push(po);
+  }
+  order.purchaseIds = [...new Set([...(order.purchaseIds ?? []), ...created.map((po) => po.id)])];
+  return created;
+}
+
+/**
+ * Pasa a "Por preparar" los pedidos que esperaban stock y ya se pueden cubrir,
+ * del más antiguo al más nuevo.
+ */
+export function promoteWaitingOrders(s: AppState) {
+  const waiting = s.orders
+    .filter((o) => o.status === 'Esperando stock')
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  const promoted: string[] = [];
+  for (const o of waiting) {
+    const ok = expandedDemand(s, o).every((line) => available(s, line.productId) >= line.qty);
+    if (!ok) continue;
+    o.status = 'Por preparar';
+    delete o.shortages;
+    promoted.push(o.id);
+    addEvent(s, 'Stock completo', o.lines[0]?.productId ?? '', 0, 'Esperando stock', 'Por preparar', o.id);
+  }
+  return promoted;
+}
+
+/** Faltante actual de un pedido que espera stock. */
+export function currentShortages(s: AppState, o: Order) {
+  return expandedDemand(s, o)
+    .map((line) => ({ productId: line.productId, qty: line.qty - Math.max(0, available(s, line.productId)) }))
+    .filter((line) => line.qty > 0);
+}
+
+export { pendingStockUnits };
 
 export const isOpenPurchase = (p: { status?: string }) =>
   !p.status || p.status === 'Abierta' || p.status === 'Parcial';

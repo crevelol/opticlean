@@ -54,7 +54,7 @@ export const api = {
       `/api/suggest?productId=${encodeURIComponent(productId)}&qty=${qty}&exclude=${encodeURIComponent(exclude)}`,
     ),
   pickPlan: (orderId: string) =>
-    request<Array<{ id: string; loc: string; batch: string; qty: number; productId: string }>>(
+    request<Array<{ id: string; loc: string; batch: string; qty: number; productId: string; expiry: string; purchaseId?: string }>>(
       `/api/orders/${encodeURIComponent(orderId)}/pick-plan`,
     ),
   receive: (body: Record<string, unknown>) =>
@@ -188,6 +188,32 @@ export const api = {
     request<StateResponse>('/api/purchases', { method: 'POST', body: JSON.stringify(body) }),
   cancelPurchase: (id: string) =>
     request<StateResponse>(`/api/purchases/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  receivePurchase: (
+    id: string,
+    lines: Array<{ productId: string; qty: number; loc: string; batch: string; expiry: string; inspect?: boolean }>,
+  ) =>
+    request<StateResponse>(`/api/purchases/${encodeURIComponent(id)}/receive`, {
+      method: 'POST',
+      body: JSON.stringify({ lines }),
+    }),
+  closePurchase: (id: string, reason: string) =>
+    request<StateResponse>(`/api/purchases/${encodeURIComponent(id)}/close`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  releaseLot: (lotId: string) =>
+    request<StateResponse>(`/api/lots/${encodeURIComponent(lotId)}/release`, { method: 'POST' }),
+  rejectLot: (lotId: string, reason: string) =>
+    request<StateResponse>(`/api/lots/${encodeURIComponent(lotId)}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  config: () => request<{ production: boolean; resetAllowed: boolean }>('/api/config'),
+  cancelOrder: (orderId: string, reason: string) =>
+    request<StateResponse>(`/api/orders/${encodeURIComponent(orderId)}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
   addSupplier: (body: Record<string, unknown>) =>
     request<StateResponse>('/api/suppliers', { method: 'POST', body: JSON.stringify(body) }),
   saveBundle: (body: Record<string, unknown>) =>

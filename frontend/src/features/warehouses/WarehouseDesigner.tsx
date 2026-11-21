@@ -21,9 +21,11 @@ const fields: { key: LayoutField; label: string; hint: string; min: number; max:
   { key: 'levels', label: 'Niveles por rack', hint: 'Alturas disponibles en cada estantería.', min: 1, max: 5 },
   { key: 'positionsPerLevel', label: 'Casillas por nivel', hint: 'Espacios a lo ancho de cada nivel.', min: 1, max: 8 },
   { key: 'capacityPerCell', label: 'Unidades por ubicación', hint: 'Capacidad de cada ubicación, incluida cada cara.', min: 10, max: 200 },
+  { key: 'cellVolumeL', label: 'Litros por ubicación', hint: 'Volumen útil de cada casilla. 0 = solo se controla por unidades.', min: 0, max: 5000 },
 ];
+const presetKeys = ['rackCount', 'levels', 'positionsPerLevel', 'capacityPerCell'] as const;
 
-const presets: { name: string; description: string; layout: Omit<WarehouseLayout, 'depthFaces' | 'rackPositions'> }[] = [
+const presets: { name: string; description: string; layout: Omit<WarehouseLayout, 'depthFaces' | 'rackPositions' | 'cellVolumeL'> }[] = [
   { name: 'Compacta', description: 'Para empezar con poco espacio', layout: { rackCount: 2, levels: 2, positionsPerLevel: 4, capacityPerCell: 40 } },
   { name: 'Estándar', description: 'Una base para la operación diaria', layout: { rackCount: 6, levels: 3, positionsPerLevel: 4, capacityPerCell: 60 } },
   { name: 'Amplia', description: 'Más espacio para tu inventario', layout: { rackCount: 8, levels: 4, positionsPerLevel: 6, capacityPerCell: 80 } },
@@ -107,7 +109,7 @@ export function WarehouseDesigner({ draft, onChange }: Props) {
   const [yaw, setYaw] = useState(initialYaw);
   const [selectedId, setSelectedId] = useState('');
   const selected = summary.locations.find((location) => location.id === selectedId) ?? summary.locations[0];
-  const selectedPreset = presets.find((preset) => fields.every(({ key }) => preset.layout[key] === layout[key]));
+  const selectedPreset = presets.find((preset) => presetKeys.every((key) => preset.layout[key] === layout[key]));
 
   return (
     <div className="warehouse-designer designer-workspace">
@@ -143,7 +145,7 @@ export function WarehouseDesigner({ draft, onChange }: Props) {
               <LayoutControl
                 key={field.key}
                 field={field}
-                value={layout[field.key]}
+                value={layout[field.key] ?? 0}
                 onChange={(value) => onChange(normalizeLayout({ ...layout, [field.key]: value }))}
               />
             ))}

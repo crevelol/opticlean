@@ -1,6 +1,6 @@
 import { useId, useState, type KeyboardEvent } from 'react';
 import { Icon } from '../../shared/components/Icon';
-import { money, num } from '../../shared/lib/inventory';
+import { dateShort, daysUntil, expiryTone, fefoCompare, isLotSellable, money, num } from '../../shared/lib/inventory';
 import { childrenStatus, isRaw, parentsOf } from '../../shared/lib/bom';
 import { faceLabel } from '../../shared/lib/warehouseLayout';
 import type { AppState } from '../../shared/types';
@@ -18,9 +18,11 @@ type InventoryDetailPanelProps = {
   onLocate: (loc?: string) => void;
   onTrace: () => void;
   onSelectRelated: (id: string) => void;
+  onOpenPurchase?: (purchaseId: string) => void;
 };
 
-type DetailTab = 'locations' | 'lots';
+type DetailTab = 'locations' | 'lots' | 'entries';
+const TABS: DetailTab[] = ['locations', 'lots', 'entries'];
 
 function locationDescription(location: string) {
   const match = /^(.+)-(\d+)-(\d+)(?:-([DT]))?$/.exec(location);
@@ -44,7 +46,7 @@ function expiryLabel(expiry: string) {
 }
 
 export function InventoryDetailPanel({
-  state, row, onClose, onEdit, onDelete, onReceive, onPurchase, onLocate, onTrace, onSelectRelated,
+  state, row, onClose, onEdit, onDelete, onReceive, onPurchase, onLocate, onTrace, onSelectRelated, onOpenPurchase,
 }: InventoryDetailPanelProps) {
   const [tab, setTab] = useState<DetailTab>('locations');
   const id = useId();
@@ -59,7 +61,27 @@ export function InventoryDetailPanel({
     locationTotals.set(lot.loc, { qty: current.qty + lot.qty, lots: current.lots + 1 });
   }
   const locations = [...locationTotals.entries()].sort(([a], [b]) => a.localeCompare(b, 'es', { numeric: true }));
-  const lots = [...row.lots].sort((a, b) => (a.expiry || '9999').localeCompare(b.expiry || '9999'));
+  // Orden de salida FEFO: primero los vendibles (vence antes, entró antes); al final lo que no se puede vender.
+  const sellableLots = row.lots.filter((lot) => isLotSellable(state, lot)).sort(fefoCompare);
+  const blockedLots = row.lots.filter((lot) => !isLotSellable(state, lot)).sort(fefoCompare);
+  const lots = [...sellableLots, ...blockedLots];
+  const blockReason = (lot: (typeof row.lots)[number]) => {
+    if (lot.onHold) return 'En inspección';
+    if (lot.loc === 'CUARENTENA') return 'Cuarentena';
+    if (lot.loc === 'TRANSITO') return 'En tránsito';
+    const days = daysUntil(lot.expiry);
+    if (days != null && days < 0) return 'Vencido';
+    return `Bajo vida útil mínima (${product.minShelfLifeDays ?? 0} días)`;
+  };
+  // Historial de entradas: cada recepción con su OC, proveedor, lote y cuánto queda hoy.
+  const entries = state.receipts
+    .filter((r) => r.productId === product.id)
+    .map((r) => {
+      const left = state.lots
+        .filter((lot) => lot.productId === product.id && (lot.receiptId === r.id || (!lot.receiptId && lot.batch === r.batch)))
+        .reduce((n, lot) => n + lot.qty, 0);
+      return { receipt: r, left };
+    });
   const today = new Intl.DateTimeFormat('en-CA', {
     year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'America/Guayaquil',
   }).format(new Date());
@@ -67,10 +89,15 @@ export function InventoryDetailPanel({
   function navigateTabs(event: KeyboardEvent<HTMLButtonElement>) {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
-    const nextTab = event.key === 'Home' ? 'locations' : event.key === 'End' ? 'lots' : tab === 'locations' ? 'lots' : 'locations';
-    setTab(nextTab);
+    const index = TABS.indexOf(tab);
+    const nextIndex =
+      event.key === 'Home' ? 0
+        : event.key === 'End' ? TABS.length - 1
+          : event.key === 'ArrowRight' ? (index + 1) % TABS.length
+            : (index - 1 + TABS.length) % TABS.length;
+    setTab(TABS[nextIndex]);
     const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
-    buttons?.[nextTab === 'locations' ? 0 : 1]?.focus();
+    buttons?.[nextIndex]?.focus();
   }
 
   return (
@@ -146,7 +173,10 @@ export function InventoryDetailPanel({
           <div><dt>Reservado</dt><dd>{num(reserved)}</dd></div>
           <div className="inv-detail-available"><dt>Disponible</dt><dd>{num(available)}</dd></div>
         </dl>
-        <p className="inv-detail-formula">Disponible = físico − reservado en pedidos.</p>
+        <p className="inv-detail-formula">
+          Disponible = físico vendible − reservado en pedidos.
+          {row.unsellable > 0 ? <> <strong>{num(row.unsellable)} uds.</strong> no se pueden vender hoy (vencidas, en inspección o con poca vida útil).</> : null}
+        </p>
 
         <div className="inv-detail-minimum">
           <div className="inv-detail-minimum-heading"><span>Mínimo operativo</span><strong>{num(minimum)} uds.</strong></div>
@@ -191,6 +221,9 @@ export function InventoryDetailPanel({
         <button type="button" id={`${id}-lots-tab`} role="tab" aria-selected={tab === 'lots'} aria-controls={`${id}-lots`} tabIndex={tab === 'lots' ? 0 : -1} onClick={() => setTab('lots')} onKeyDown={navigateTabs}>
           Lotes <span>{lots.length}</span>
         </button>
+        <button type="button" id={`${id}-entries-tab`} role="tab" aria-selected={tab === 'entries'} aria-controls={`${id}-entries`} tabIndex={tab === 'entries' ? 0 : -1} onClick={() => setTab('entries')} onKeyDown={navigateTabs}>
+          Entradas <span>{entries.length}</span>
+        </button>
       </div>
 
       <div id={`${id}-locations`} className="inv-detail-tab-content" role="tabpanel" aria-labelledby={`${id}-locations-tab`} hidden={tab !== 'locations'} tabIndex={0}>
@@ -216,14 +249,34 @@ export function InventoryDetailPanel({
       <div id={`${id}-lots`} className="inv-detail-tab-content" role="tabpanel" aria-labelledby={`${id}-lots-tab`} hidden={tab !== 'lots'} tabIndex={0}>
         {lots.length > 0 ? (
           <>
-            <p className="inv-detail-section-note">Ordenados por fecha de vencimiento.</p>
+            <p className="inv-detail-section-note">En orden de salida: primero lo que vence antes; a igual fecha, lo que entró antes.</p>
             <ul className="inv-detail-lots">
               {lots.map((lot) => {
-                const expired = Boolean(lot.expiry && /^\d{4}-\d{2}-\d{2}/.test(lot.expiry) && lot.expiry.slice(0, 10) < today);
+                const sellable = isLotSellable(state, lot);
+                const order = sellable ? sellableLots.indexOf(lot) + 1 : 0;
+                const days = daysUntil(lot.expiry, today);
+                const expired = days != null && days < 0;
                 return (
                   <li key={lot.id} className="inv-detail-lot">
-                    <div className="inv-detail-lot-heading"><strong>{lot.batch || 'Sin lote registrado'}</strong><span>{num(lot.qty)} uds.</span></div>
+                    <div className="inv-detail-lot-heading">
+                      <strong style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        {sellable ? <span className="fx-order-num" aria-label={`Sale en el puesto ${order}`}>{order}</span> : null}
+                        {lot.batch || 'Sin lote registrado'}
+                        {order === 1 ? <span className="fx-first">Sale 1º</span> : null}
+                      </strong>
+                      <span>{num(lot.qty)} uds.</span>
+                    </div>
                     <div className={`inv-detail-expiry${expired ? ' inv-detail-expiry--expired' : ''}`}><Icon name={expired ? 'alert' : 'calendar'} /><span>{lot.expiry ? `${expired ? 'Vencido' : 'Vence'}: ` : ''}{expiryLabel(lot.expiry)}</span></div>
+                    <div className="fx-exit-meta">
+                      {days != null ? <span className={`fx-chip ${expiryTone(days)}`}>{expired ? `hace ${-days} días` : `${days} días`}</span> : null}
+                      {!sellable ? <span className="fx-chip red">{blockReason(lot)}</span> : null}
+                      {lot.purchaseId ? (
+                        onOpenPurchase ? (
+                          <button type="button" className="fx-link" onClick={() => onOpenPurchase(lot.purchaseId!)}>{lot.purchaseId}</button>
+                        ) : <span>{lot.purchaseId}</span>
+                      ) : null}
+                      {lot.receivedAt ? <span>Ingresó {dateShort(lot.receivedAt)}</span> : null}
+                    </div>
                     <button type="button" className="inv-detail-lot-location" onClick={() => onLocate(lot.loc)} aria-label={`Ver lote ${lot.batch || lot.id} en ubicación ${lot.loc}`}><Icon name="pin" />{lot.loc}<Icon name="arrow" /></button>
                   </li>
                 );
@@ -233,9 +286,42 @@ export function InventoryDetailPanel({
         ) : <div className="inv-detail-empty"><Icon name="layers" /><strong>No hay lotes con stock</strong><p>Los lotes aparecerán al registrar una recepción en esta bodega.</p></div>}
       </div>
 
+      <div id={`${id}-entries`} className="inv-detail-tab-content" role="tabpanel" aria-labelledby={`${id}-entries-tab`} hidden={tab !== 'entries'} tabIndex={0}>
+        {entries.length > 0 ? (
+          <>
+            <p className="inv-detail-section-note">Cada ingreso con su orden de compra. «Queda» es lo que aún está en bodega de ese ingreso.</p>
+            <div className="fx-table-wrap">
+              <table className="fx-table">
+                <thead>
+                  <tr><th>Ingreso</th><th>Orden</th><th>Proveedor</th><th>Lote</th><th>Vence</th><th className="num">Recibido</th><th className="num">Queda</th></tr>
+                </thead>
+                <tbody>
+                  {entries.map(({ receipt, left }) => (
+                    <tr key={receipt.id}>
+                      <td>{dateShort(receipt.receivedAt ?? receipt.date)}<div className="fx-muted">{receipt.id}</div></td>
+                      <td>
+                        {receipt.purchaseId ? (
+                          onOpenPurchase ? <button type="button" className="fx-link" onClick={() => onOpenPurchase(receipt.purchaseId!)}>{receipt.purchaseId}</button> : receipt.purchaseId
+                        ) : <span className="fx-chip">{receipt.reason ?? 'Sin orden'}</span>}
+                      </td>
+                      <td>{receipt.supplier || '—'}</td>
+                      <td>{receipt.batch}</td>
+                      <td>{receipt.expiry ? dateShort(receipt.expiry) : '—'}</td>
+                      <td className="num">{num(receipt.qty)}</td>
+                      <td className="num">{num(left)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : <div className="inv-detail-empty"><Icon name="receive" /><strong>Sin entradas registradas</strong><p>Las recepciones de este producto aparecerán aquí con su orden de compra.</p></div>}
+      </div>
+
       <dl className="inv-detail-values">
         <div><dt>Precio unitario</dt><dd>{money(product.price)}</dd></div>
-        <div><dt>Valor del stock físico</dt><dd>{money(row.stockValue)}</dd></div>
+        <div><dt>Costo promedio</dt><dd>{product.avgCost ? money(product.avgCost) : 'Sin costo'}</dd></div>
+        <div><dt>Valor a costo</dt><dd>{money(row.stockValue)}</dd></div>
       </dl>
       <div className="inv-detail-footer">
         {onEdit ? <button type="button" onClick={onEdit}><Icon name="edit" />Editar ficha</button> : null}

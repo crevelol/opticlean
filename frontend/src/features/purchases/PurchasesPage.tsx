@@ -14,6 +14,7 @@ import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead, ProductCell } from '../../sh
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import { dateShort, num } from '../../shared/lib/inventory';
 import { Icon } from '../../shared/components/Icon';
+import { ReceivePurchaseDialog } from './ReceivePurchaseDialog';
 import '../../styles/forecast.css';
 
 const confidenceLabel: Record<ConfidenceLevel, string> = {
@@ -35,8 +36,18 @@ export function PurchasesPage() {
   const [supplierId, setSupplierId] = useState('');
   const [lines, setLines] = useState<Array<{ productId: string; qty: number; packCode: string; unitPrice: number }>>([]);
   const [error, setError] = useState('');
+  const [receivingId, setReceivingId] = useState('');
+  const [closing, setClosing] = useState<{ id: string; reason: string } | null>(null);
+  const [focusId, setFocusId] = useState('');
 
   const forecast = useMemo(() => (state ? buildForecast(state) : null), [state]);
+
+  useEffect(() => {
+    const focus = (location.state as { focus?: string } | null)?.focus;
+    if (!focus) return;
+    setFocusId(focus);
+    window.setTimeout(() => document.getElementById(`po-${focus}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50);
+  }, [location.state]);
 
   useEffect(() => {
     const navState = location.state as { productId?: string; qty?: number } | null;
@@ -104,6 +115,17 @@ export function PurchasesPage() {
       toast(`Orden ${id} cancelada.`);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'No se pudo cancelar la orden.');
+    }
+  };
+
+  const closeShort = async () => {
+    if (!closing) return;
+    try {
+      applyResponse(await api.closePurchase(closing.id, closing.reason));
+      toast(`Orden ${closing.id} cerrada con faltante.`);
+      setClosing(null);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'No se pudo cerrar la orden.');
     }
   };
 
@@ -258,11 +280,26 @@ export function PurchasesPage() {
                   const open = status === 'Abierta' || status === 'Parcial';
                   const linesOf = purchaseLines(o);
                   const supplier = state.suppliers?.find((item) => item.id === o.supplierId);
+                  const isAdmin = user?.role === 'admin';
                   return (
-                    <tr key={o.id}>
+                    <tr key={o.id} id={`po-${o.id}`} className={focusId === o.id ? 'is-new' : undefined}>
                       <td>
                         <strong>{o.id}</strong>
                         <span className="sub">{dateShort(o.date)}</span>
+                        {o.orderIds?.length ? (
+                          <span className="sub">
+                            Para{' '}
+                            {o.orderIds.map((id, i) => (
+                              <span key={id}>
+                                {i ? ', ' : ''}
+                                <button type="button" className="fx-link" onClick={() => navigate('/pedidos', { state: { open: id } })}>
+                                  {id}
+                                </button>
+                              </span>
+                            ))}
+                          </span>
+                        ) : null}
+                        {o.closeReason ? <span className="sub">Cerrada: {o.closeReason}</span> : null}
                       </td>
                       <td>{supplier?.name ?? 'Sin proveedor'}</td>
                       <td>
@@ -285,24 +322,20 @@ export function PurchasesPage() {
                       <td style={{ whiteSpace: 'nowrap' }}>
                         {open && canManage ? (
                           <>
-                            <Btn
-                              variant="small"
-                              icon="receive"
-                              onClick={() =>
-                                navigate('/recepcion/nueva', {
-                                  state: {
-                                    productId: linesOf.find((line) => line.qty * line.unitsPerPack > (line.receivedUnits ?? 0))?.productId ?? o.productId,
-                                    purchaseId: o.id,
-                                    qty: 1,
-                                  },
-                                })
-                              }
-                            >
+                            <Btn variant="small" icon="receive" onClick={() => setReceivingId(o.id)}>
                               Recibir
                             </Btn>{' '}
-                            <Btn variant="small" icon="close" onClick={() => void cancel(o.id)}>
-                              Cancelar
-                            </Btn>
+                            {status === 'Parcial' ? (
+                              isAdmin ? (
+                                <Btn variant="small" icon="check" onClick={() => setClosing({ id: o.id, reason: '' })}>
+                                  Cerrar con faltante
+                                </Btn>
+                              ) : null
+                            ) : (
+                              <Btn variant="small" icon="close" onClick={() => void cancel(o.id)}>
+                                Cancelar
+                              </Btn>
+                            )}
                           </>
                         ) : null}
                       </td>
@@ -316,6 +349,40 @@ export function PurchasesPage() {
           <Empty title="Sin solicitudes" desc="Crea la primera desde una recomendación del modelo." />
         )}
       </section>
+
+      {receivingId && state.purchases.some((p) => p.id === receivingId) ? (
+        <ReceivePurchaseDialog
+          state={state}
+          purchase={state.purchases.find((p) => p.id === receivingId)!}
+          onClose={() => setReceivingId('')}
+        />
+      ) : null}
+
+      {closing ? (
+        <Modal
+          title={`Cerrar ${closing.id} con faltante`}
+          subtitle="Lo recibido se queda en bodega. El faltante ya no se espera del proveedor."
+          onClose={() => setClosing(null)}
+          footer={
+            <>
+              <Btn onClick={() => setClosing(null)}>Volver</Btn>
+              <Btn variant="primary" icon="check" disabled={!closing.reason.trim()} onClick={() => void closeShort()}>
+                Cerrar orden
+              </Btn>
+            </>
+          }
+        >
+          <div className="field full">
+            <label htmlFor="po-close-reason">Motivo</label>
+            <input
+              id="po-close-reason"
+              value={closing.reason}
+              placeholder="Ej.: el proveedor no tiene más stock"
+              onChange={(e) => setClosing({ ...closing, reason: e.target.value })}
+            />
+          </div>
+        </Modal>
+      ) : null}
 
       {modalOpen ? (
         <Modal

@@ -9,6 +9,7 @@ import { transition } from './shared/motion/presets';
 import './styles/tokens.css';
 import './styles/global.css';
 import './styles/layout.css';
+import './styles/flow.css';
 import './styles/warehouse-designer.css';
 
 createRoot(document.getElementById('root')!).render(

@@ -13,10 +13,10 @@ function inventoryFixture() {
   const baseProduct = state.products[0];
   state.settings.activeWarehouseId = 'WH-QT-01';
   state.products = [
-    { ...baseProduct, id: 'P-A', sku: 'LIM-001', name: 'Ácido líquido', category: 'Industrial', supplier: 'Química Andina', min: 10, price: 4 },
-    { ...baseProduct, id: 'P-B', sku: 'LIM-002', name: 'Jabón neutro', category: 'Hogar', supplier: 'Química Andina', min: 10, price: 3 },
-    { ...baseProduct, id: 'P-C', sku: 'PAP-001', name: 'Papel higiénico', category: 'Institucional', supplier: 'Papelera', min: 10, price: 20 },
-    { ...baseProduct, id: 'P-D', sku: 'LIM-004', name: 'Alcohol', category: 'Hospitalaria', supplier: 'Higiene', min: 0, price: 2 },
+    { ...baseProduct, id: 'P-A', sku: 'LIM-001', name: 'Ácido líquido', category: 'Industrial', supplier: 'Química Andina', min: 10, price: 4, avgCost: 4 },
+    { ...baseProduct, id: 'P-B', sku: 'LIM-002', name: 'Jabón neutro', category: 'Hogar', supplier: 'Química Andina', min: 10, price: 3, avgCost: 3 },
+    { ...baseProduct, id: 'P-C', sku: 'PAP-001', name: 'Papel higiénico', category: 'Institucional', supplier: 'Papelera', min: 10, price: 20, avgCost: 20 },
+    { ...baseProduct, id: 'P-D', sku: 'LIM-004', name: 'Alcohol', category: 'Hospitalaria', supplier: 'Higiene', min: 0, price: 2, avgCost: 2 },
   ];
   state.lots = [
     { id: 'L-A1', productId: 'P-A', loc: 'A-01-01-D', qty: 12, batch: 'A1', expiry: '2027-01-01', warehouseId: 'WH-QT-01' },
@@ -42,6 +42,7 @@ test('Inventory uses only positive lots in the active warehouse, including legac
   const rows = buildInventoryRows(state);
   const acid = rows.find((row) => row.product.id === 'P-A')!;
   assert.equal(acid.stock, 25);
+  // Valor a costo promedio (el fixture usa costo = precio).
   assert.equal(acid.stockValue, 100);
   assert.deepEqual(acid.locations, ['A-01-01-D', 'B-01-02-D']);
   assert.deepEqual(acid.lots.map((lot) => lot.id), ['L-A1', 'L-A2', 'L-A3']);

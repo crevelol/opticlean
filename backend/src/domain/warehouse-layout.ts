@@ -44,6 +44,7 @@ export function normalizeLayout(input?: Partial<WarehouseLayout> & { racks?: num
     positionsPerLevel: clamp(input?.positionsPerLevel ?? DEFAULT_LAYOUT.positionsPerLevel, 1, 8),
     capacityPerCell: clamp(input?.capacityPerCell ?? DEFAULT_LAYOUT.capacityPerCell, 10, 200),
     depthFaces: input?.depthFaces === 2 ? 2 : 1,
+    ...(Number(input?.cellVolumeL) > 0 ? { cellVolumeL: Math.min(5000, Math.round(Number(input!.cellVolumeL))) } : {}),
     ...(input?.rackPositions !== undefined ? { rackPositions: normalizeRackPositions(rackCount, input.rackPositions) } : {}),
   };
 }
@@ -76,6 +77,7 @@ export function buildWarehouseGeometry(layout: WarehouseLayout) {
           level,
           pos,
           capacity: layout.capacityPerCell,
+          ...(layout.cellVolumeL ? { volumeL: layout.cellVolumeL } : {}),
           category: r.category,
           ...(face ? { face } : {}),
         })),

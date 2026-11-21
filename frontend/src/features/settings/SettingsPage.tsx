@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
 import { Btn, PageHead } from '../../shared/components/ui';
@@ -9,6 +9,20 @@ import { FleetPanel } from './FleetPanel';
 export function SettingsPage() {
   const { state, applyResponse, toast } = useAppState();
   const [resetOpen, setResetOpen] = useState(false);
+  /** En producción el servidor desactiva el reinicio; el botón no se muestra. */
+  const [resetAllowed, setResetAllowed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .config()
+      .then((cfg) => {
+        if (!cancelled) setResetAllowed(cfg.resetAllowed);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (!state) return null;
 
@@ -26,9 +40,13 @@ export function SettingsPage() {
   };
 
   const reset = async () => {
-    applyResponse(await api.reset());
-    setResetOpen(false);
-    toast('Datos restablecidos.');
+    try {
+      applyResponse(await api.reset());
+      setResetOpen(false);
+      toast('Datos restablecidos.');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'No se pudo restablecer.');
+    }
   };
 
   return (
@@ -69,6 +87,7 @@ export function SettingsPage() {
             </button>
           </div>
         </form>
+        {resetAllowed ? (
         <section className="panel">
           <div className="panel-body">
             <h3 style={{ fontSize: 12 }}>Restablecer demostración</h3>
@@ -78,6 +97,7 @@ export function SettingsPage() {
             </Btn>
           </div>
         </section>
+        ) : null}
       </div>
       <FleetPanel />
 

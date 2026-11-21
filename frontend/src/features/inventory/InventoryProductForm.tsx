@@ -3,6 +3,7 @@ import { Select } from '../../shared/components/Select';
 import { api } from '../../shared/api/client';
 import { Icon } from '../../shared/components/Icon';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
+import { useAuth } from '../../shared/hooks/AuthProvider';
 import type { HazardClass, Product, ProductComponent, ProductKind } from '../../shared/types';
 import { HAZARD_OPTIONS } from '../../shared/lib/wholesale';
 import './inventory-product-form.css';
@@ -44,6 +45,11 @@ export function InventoryProductForm({ product, categories, products, onClose, o
   const closeRef = useRef(onClose);
   const initialFieldRef = useRef(product ? 'name' : 'id');
   const [pending, setPending] = useState(false);
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  /** Precio, costo e IVA de un producto existente: solo administración. */
+  const lockMoney = !!product && !isAdmin;
+  const [avgCostDraft, setAvgCostDraft] = useState(product?.avgCost != null ? String(product.avgCost) : '');
   const [errors, setErrors] = useState<FormErrors>({});
   const [serverError, setServerError] = useState('');
   const [kind, setKind] = useState<ProductKind>(product?.kind === 'raw' ? 'raw' : 'finished');
@@ -51,6 +57,8 @@ export function InventoryProductForm({ product, categories, products, onClose, o
   const [minShelfLifeDays, setMinShelfLifeDays] = useState(product?.minShelfLifeDays ?? 0);
   const [sanitaryRegistration, setSanitaryRegistration] = useState(product?.sanitaryRegistration ?? '');
   const [sanitaryExpires, setSanitaryExpires] = useState(product?.sanitaryExpires ?? '');
+  const [ivaRate, setIvaRate] = useState(product?.ivaRate != null ? String(product.ivaRate) : '0.15');
+  const [inspectOnReceipt, setInspectOnReceipt] = useState(!!product?.inspectOnReceipt);
   const [packUnits, setPackUnits] = useState({
     paquete: product?.packs?.find((pack) => pack.code === 'paquete')?.units ?? 6,
     caja: product?.packs?.find((pack) => pack.code === 'caja')?.units ?? 12,
@@ -303,6 +311,11 @@ export function InventoryProductForm({ product, categories, products, onClose, o
         minShelfLifeDays: Number(minShelfLifeDays) || 0,
         sanitaryRegistration: sanitaryRegistration.trim() || undefined,
         sanitaryExpires: sanitaryExpires || undefined,
+        ivaRate: Number(ivaRate),
+        inspectOnReceipt,
+        ...(isAdmin && avgCostDraft.trim() !== '' && Number.isFinite(Number(avgCostDraft))
+          ? { avgCost: Number(avgCostDraft) }
+          : {}),
         stockUnit: 'unidad',
         packs: [
           { code: 'unidad', label: 'Unidad', units: 1 },
@@ -464,9 +477,10 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                       <label htmlFor={fieldId('price')}>Precio por unidad</label>
                       <div className="inv-input-affix">
                         <span aria-hidden="true">USD</span>
-                        <input {...fieldProps('price')} type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" />
+                        <input {...fieldProps('price')} type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" readOnly={lockMoney} />
                       </div>
                       {fieldError('price')}
+                      {lockMoney ? <small>Solo administración cambia el precio.</small> : null}
                     </div>
                     <div className="field">
                       <label htmlFor={fieldId('min')}>Stock mínimo</label>
@@ -503,11 +517,38 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                       <input id={`${uniqueId}-sanitary-exp`} type="date" value={sanitaryExpires} onChange={(event) => setSanitaryExpires(event.target.value)} />
                       <small>Si esta fecha ya pasó, el producto no se puede vender.</small>
                     </div>
-                    {product?.avgCost != null ? (
+                    <div className="field">
+                      <label htmlFor={`${uniqueId}-iva`}>Tarifa de IVA</label>
+                      <Select id={`${uniqueId}-iva`} value={ivaRate} disabled={lockMoney} onChange={(event) => setIvaRate(event.target.value)}>
+                        <option value="0.15">15 %</option>
+                        <option value="0">0 %</option>
+                      </Select>
+                      <small>Se aplica en la factura de venta y al validar la factura del proveedor.</small>
+                    </div>
+                    <div className="field">
+                      <label htmlFor={`${uniqueId}-inspect`} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input id={`${uniqueId}-inspect`} type="checkbox" checked={inspectOnReceipt} onChange={(event) => setInspectOnReceipt(event.target.checked)} />
+                        Recibir siempre a inspección
+                      </label>
+                      <small>Cada recepción queda retenida hasta que se revise etiqueta, sello y hoja de seguridad.</small>
+                    </div>
+                    {isAdmin || product?.avgCost != null ? (
                       <div className="field">
-                        <label>Costo promedio</label>
-                        <input value={product.avgCost.toFixed(4)} readOnly />
-                        <small>Se actualiza al recibir contra una orden de compra.</small>
+                        <label htmlFor={`${uniqueId}-cost`}>Costo promedio</label>
+                        <input
+                          id={`${uniqueId}-cost`}
+                          type="number"
+                          min="0"
+                          step="0.0001"
+                          value={avgCostDraft}
+                          readOnly={!isAdmin}
+                          placeholder="Sin costo"
+                          onChange={(event) => setAvgCostDraft(event.target.value)}
+                        />
+                        <small>
+                          Se actualiza al recibir contra una orden de compra.
+                          {isAdmin ? ' Un cambio manual queda en el historial de cambios.' : ''}
+                        </small>
                       </div>
                     ) : null}
                   </div>
