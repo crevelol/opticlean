@@ -152,6 +152,9 @@ function cleanClient(input: Partial<Client>) {
     out[f] = v;
   }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(out.email)) throw new Error('El correo no es válido.');
+  const taxId = input.taxId?.trim() ?? '';
+  if (!/^\d{13}$/.test(taxId)) throw new Error('El RUC debe tener 13 dígitos.');
+  out.taxId = taxId;
   if (input.city?.trim()) out.city = input.city.trim();
   if (input.sector?.trim()) out.sector = input.sector.trim();
   return out;

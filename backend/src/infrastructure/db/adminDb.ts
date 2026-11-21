@@ -180,7 +180,7 @@ const SEED_MENU: Array<Omit<MenuItem, 'active' | 'badge'> & { badge?: string | n
     icon: 'warehouse',
     section: 'Operación',
     sort_order: 40,
-    badge: 'NUEVO',
+    badge: null,
   },
   {
     id: 'mi-warehouses',
@@ -354,6 +354,8 @@ function seed(database: DatabaseSync) {
         item.badge ?? null,
       );
   }
+
+  database.prepare(`UPDATE menu_items SET badge = NULL WHERE badge = 'NUEVO'`).run();
 
   // Innova MF: todos los módulos
   for (const m of SEED_MODULES) {

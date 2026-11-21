@@ -37,6 +37,10 @@ export type Product = {
   stockUnit?: string;
   packs?: ProductPack[];
   minShelfLifeDays?: number;
+  /** false = no caduca (papel, fundas). Si falta, el lote necesita fecha. */
+  perishable?: boolean;
+  /** Exige notificación ARCSA vigente para vender. */
+  requiresSanitary?: boolean;
   supplierId?: string;
   avgCost?: number;
   sanitaryRegistration?: string;
@@ -68,7 +72,7 @@ export type Lot = {
   warehouseId?: string;
   purchaseId?: string;
   receiptId?: string;
-  /** Fecha/hora de ingreso a bodega (FIFO al preparar). */
+  /** Fecha/hora de ingreso a bodega. Desempata el FEFO cuando dos lotes vencen igual. */
   receivedAt?: string;
   /** Retenido en inspección de calidad. */
   onHold?: boolean;
@@ -113,6 +117,8 @@ export type Client = {
   /** Límite de crédito autorizado (USD) */
   creditLimit?: number;
   paymentTermsDays?: number;
+  /** RUC del cliente, 13 dígitos. Hace falta para facturar. */
+  taxId?: string;
 };
 
 export type OrderLine = { productId: string; qty: number; unitPrice?: number };
@@ -255,6 +261,8 @@ export type Settings = {
 
 export type AppState = {
   version: 1 | 2;
+  /** false = empresa real sin datos de demostración. */
+  demo?: boolean;
   products: Product[];
   lots: Lot[];
   warehouses: WarehouseSite[];

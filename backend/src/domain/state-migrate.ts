@@ -193,6 +193,29 @@ export function migrateState(raw: AppState): AppState {
   base.settings.businessRules = mergeBusinessRules(base.settings.businessRules, undefined);
   ensureCommercial(base);
 
+  if (isDemo) {
+    const demo = seed();
+    const demoOrders = new Map(demo.orders.map((order) => [order.id, order]));
+    for (const order of base.orders) {
+      const from = demoOrders.get(order.id);
+      if (from?.picks?.length && !order.picks?.length) order.picks = from.picks.map((pick) => ({ ...pick }));
+    }
+    const demoClients = new Map(demo.clients.map((client) => [client.id, client]));
+    for (const client of base.clients) {
+      const from = demoClients.get(client.id);
+      if (from?.taxId && !client.taxId) client.taxId = from.taxId;
+    }
+    const demoProducts = new Map(demo.products.map((item) => [item.id, item]));
+    for (const item of base.products) {
+      const from = demoProducts.get(item.id);
+      if (!from) continue;
+      if (item.perishable == null && from.perishable != null) item.perishable = from.perishable;
+      if (item.requiresSanitary == null && from.requiresSanitary) item.requiresSanitary = true;
+      if (!item.sanitaryRegistration && from.sanitaryRegistration) item.sanitaryRegistration = from.sanitaryRegistration;
+      if (!item.sanitaryExpires && from.sanitaryExpires) item.sanitaryExpires = from.sanitaryExpires;
+    }
+  }
+
   syncSettingsWarehouseLabel(base);
   return base;
 }

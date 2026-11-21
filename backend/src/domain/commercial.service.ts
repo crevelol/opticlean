@@ -12,6 +12,7 @@ import type {
 import {
   actorName,
   addEvent,
+  assertCanSell,
   available,
   client,
   product,
@@ -101,11 +102,7 @@ function warehouseName(s: AppState, id: string) {
 }
 
 function assertSanitary(s: AppState, productId: string) {
-  const item = product(s, productId);
-  if (!item?.sanitaryExpires) return;
-  if (item.sanitaryExpires < today()) {
-    throw new Error(`El registro sanitario de ${item.name} está vencido${item.sanitaryRegistration ? ` (${item.sanitaryRegistration})` : ''}.`);
-  }
+  assertCanSell(s, productId);
 }
 
 export function issueInvoice(s: AppState, orderId: string) {
@@ -117,6 +114,10 @@ export function issueInvoice(s: AppState, orderId: string) {
   }
   if (s.invoices!.some((invoice) => invoice.orderId === orderId && invoice.status === 'Emitida')) {
     throw new Error('Este pedido ya tiene una factura emitida.');
+  }
+  const buyer = client(s, order.clientId);
+  if (!buyer?.taxId || !/^\d{13}$/.test(buyer.taxId)) {
+    throw new Error('El cliente necesita un RUC de 13 dígitos para facturar.');
   }
   for (const line of order.lines) assertSanitary(s, line.productId);
   const lines = order.lines.map((line) => {

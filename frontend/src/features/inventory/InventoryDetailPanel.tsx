@@ -70,7 +70,8 @@ export function InventoryDetailPanel({
     if (lot.loc === 'CUARENTENA') return 'Cuarentena';
     if (lot.loc === 'TRANSITO') return 'En tránsito';
     const days = daysUntil(lot.expiry);
-    if (days != null && days < 0) return 'Vencido';
+    if (days == null) return 'Sin fecha de caducidad';
+    if (days < 0) return 'Vencido';
     return `Bajo vida útil mínima (${product.minShelfLifeDays ?? 0} días)`;
   };
   // Historial de entradas: cada recepción con su OC, proveedor, lote y cuánto queda hoy.
@@ -250,7 +251,7 @@ export function InventoryDetailPanel({
         {lots.length > 0 ? (
           <>
             <p className="inv-detail-section-note">
-              En orden de salida: primero lo que entró antes (FIFO); a igual fecha, lo que vence antes.
+              En orden de salida: primero lo que vence antes (FEFO); a igual fecha, lo que entró antes.
             </p>
             <ul className="inv-detail-lots">
               {lots.map((lot) => {

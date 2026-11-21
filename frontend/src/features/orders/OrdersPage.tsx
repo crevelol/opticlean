@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import { api } from '../../shared/api/client';
@@ -44,6 +44,8 @@ export function OrdersPage() {
     }
   };
   const location = useLocation();
+  const [params] = useSearchParams();
+  const query = (params.get('q') ?? '').trim().toLowerCase();
 
   // Abre el detalle cuando se llega desde una orden de compra enlazada.
   useEffect(() => {
@@ -89,12 +91,21 @@ export function OrdersPage() {
   }, [user?.role]);
 
   useEffect(() => {
+    if (query) setTab('Todos');
+  }, [query]);
+
+  useEffect(() => {
     setPage(1);
   }, [tab]);
 
   if (!state) return null;
 
-  const list = liveOrders.filter((o) => tab === 'Todos' || o.status === tab);
+  const list = liveOrders.filter((o) => {
+    if (tab !== 'Todos' && o.status !== tab) return false;
+    if (!query) return true;
+    const name = client(state, o.clientId)?.name ?? '';
+    return o.id.toLowerCase().includes(query) || name.toLowerCase().includes(query);
+  });
   const pageCount = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const pageList = list.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);

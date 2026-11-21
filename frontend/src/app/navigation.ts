@@ -49,7 +49,7 @@ export const fallbackMenu: MenuSection[] = [
       { id: 'f-home', label: 'Inicio', path: '/', icon: 'home', badge: null },
       { id: 'f-inv', label: 'Inventario', path: '/inventario', icon: 'box', badge: null },
       { id: 'f-rec', label: 'Recepción', path: '/recepcion', icon: 'receive', badge: null },
-      { id: 'f-bod', label: 'Bodega visual', path: '/bodega', icon: 'warehouse', badge: 'NUEVO' },
+      { id: 'f-bod', label: 'Bodega visual', path: '/bodega', icon: 'warehouse', badge: null },
       { id: 'f-ped', label: 'Pedidos', path: '/pedidos', icon: 'orders', badge: null },
       { id: 'f-log', label: 'Logística', path: '/logistica', icon: 'truck', badge: null },
     ],
@@ -106,4 +106,36 @@ export function breadcrumbsFor(path: string, menu: MenuSection[]): Crumb[] {
   if (parentPath) chain.push({ label: titleFor(parentPath, menu), to: parentPath });
   chain.push({ label: titleFor(path, menu) });
   return chain;
+}
+
+const ROLE_PATHS: Record<string, readonly string[]> = {
+  ops: ['/', '/inventario', '/recepcion', '/bodega', '/bodegas', '/familias', '/pedidos', '/compras', '/trazabilidad'],
+  dispatch: ['/', '/pedidos', '/clientes', '/logistica', '/logistica/rutas', '/logistica/historial', '/trazabilidad'],
+  driver: ['/logistica/rutas', '/logistica/historial'],
+};
+
+/** Pantalla de entrada según el puesto. Administración abre el resumen. */
+export function homeForRole(role?: string) {
+  if (role === 'driver') return '/logistica/rutas';
+  if (role === 'dispatch') return '/logistica';
+  if (role === 'ops') return '/bodega';
+  return '/';
+}
+
+/** El menú muestra solo lo que ese rol puede operar. Administración ve todo. */
+export function menuForRole(sections: MenuSection[], role?: string): MenuSection[] {
+  const allow = role ? ROLE_PATHS[role] : undefined;
+  if (!allow) return sections;
+  return sections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => allow.includes(item.path)),
+    }))
+    .filter((section) => section.items.length > 0);
+}
+
+export function roleAllowsPath(role: string | undefined, path: string) {
+  const allow = role ? ROLE_PATHS[role] : undefined;
+  if (!allow) return true;
+  return allow.some((item) => path === item || (item !== '/' && path.startsWith(`${item}/`)));
 }

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './AppLayout';
 import { useAppState } from '../shared/hooks/AppStateProvider';
 import { useAuth } from '../shared/hooks/AuthProvider';
+import { homeForRole } from './navigation';
 import { LoginPage } from '../features/auth/LoginPage';
 import { AppSkeleton } from './shell/PageSkeleton';
 
@@ -72,6 +73,11 @@ const CommercialPage = lazy(() =>
   import('../features/commercial/CommercialPage').then((m) => ({ default: m.CommercialPage })),
 );
 
+function RoleHome() {
+  const { user } = useAuth();
+  return <Navigate to={homeForRole(user?.role)} replace />;
+}
+
 function ProtectedApp() {
   const { loading: authLoading, user } = useAuth();
   const { loading, error, refresh } = useAppState();
@@ -114,7 +120,7 @@ function ProtectedApp() {
         <Route path="reglas" element={<BusinessRulesPage />} />
         <Route path="usuarios" element={<UsersPage />} />
         <Route path="configuracion" element={<SettingsPage />} />
-        <Route path="*" element={<Navigate to="/bodega" replace />} />
+        <Route path="*" element={<RoleHome />} />
       </Route>
     </Routes>
   );

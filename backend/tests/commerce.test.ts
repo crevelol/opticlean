@@ -102,7 +102,7 @@ test('Clients are validated, editable and protected when they have orders', () =
   const s = seed();
   assert.throws(() => createClient(s, { name: 'Nuevo' }), /Completa/);
   const c = createClient(s, {
-    name: 'Hostal Test', contact: 'Ana', address: 'Calle 1', email: 'ana@test.ec', type: 'Hotelería', city: 'Quito',
+    name: 'Hostal Test', contact: 'Ana', address: 'Calle 1', email: 'ana@test.ec', type: 'Hotelería', city: 'Quito', taxId: '1790000009001',
   });
   updateClient(s, c.id, { contact: 'Luis', sector: 'Norte' });
   assert.equal(s.clients.find((x) => x.id === c.id)!.contact, 'Luis');

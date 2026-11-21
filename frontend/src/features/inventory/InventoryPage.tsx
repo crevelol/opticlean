@@ -364,7 +364,7 @@ export function InventoryWorkspace({
           icon="alert"
           tone={attention.length ? 'warning' : 'default'}
           value={attention.length}
-          caption={`${attentionFinished} productos · ${attentionRaw} insumos`}
+          caption={`${attentionFinished} ${attentionFinished === 1 ? 'producto' : 'productos'} · ${attentionRaw} ${attentionRaw === 1 ? 'insumo' : 'insumos'}`}
           active={status === 'attention'}
           onClick={() => updateParams({ estado: status === 'attention' ? '' : 'attention' })}
         />
@@ -375,7 +375,7 @@ export function InventoryWorkspace({
           value={expiringProducts.length}
           caption={
             expiry.length
-              ? `${expiredCount} vencido${expiredCount === 1 ? '' : 's'} · ${soonCount} ≤ 90 días`
+              ? `${expiredCount} ${expiredCount === 1 ? 'lote vencido' : 'lotes vencidos'} · ${soonCount} ${soonCount === 1 ? 'lote' : 'lotes'} en 90 días`
               : 'Sin lotes en 90 días'
           }
           active={status === 'expiring'}
@@ -404,7 +404,7 @@ export function InventoryWorkspace({
                     expiry[0].days < 0 ? 'vencido' : `vence en ${expiry[0].days} días`
                   }`
                 : 'Revisa lotes antes de despachar.'}{' '}
-              Al preparar se usa FIFO (fecha de entrada).
+              Al preparar se usa FEFO: primero el lote que vence antes.
             </span>
           </div>
           <button

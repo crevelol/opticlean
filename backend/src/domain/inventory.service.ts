@@ -79,11 +79,26 @@ export function bundlePrice(s: AppState, bundleId: string) {
 }
 
 /** Lote que se puede vender hoy: ubicación vendible, sin retención, no vencido y con vida útil mínima. */
+export function assertCanSell(s: AppState, productId: string, today = todayGuayaquil()) {
+  const item = product(s, productId);
+  if (!item) return;
+  if (item.requiresSanitary && !item.sanitaryRegistration?.trim()) {
+    throw new Error(`Falta el registro sanitario de ${item.name}.`);
+  }
+  if (item.sanitaryExpires && item.sanitaryExpires < today) {
+    throw new Error(
+      `El registro sanitario de ${item.name} está vencido${item.sanitaryRegistration ? ` (${item.sanitaryRegistration})` : ''}.`,
+    );
+  }
+}
+
 export function isLotSellable(s: AppState, lot: Lot, today = todayGuayaquil()) {
   if (!isSellableLoc(lot.loc) || lot.onHold || lot.qty <= 0) return false;
+  const item = product(s, lot.productId);
+  if (item?.perishable === false) return true;
   const days = daysUntilExpiry(lot.expiry, today);
   if (days == null || days < 0) return false;
-  const minDays = product(s, lot.productId)?.minShelfLifeDays ?? 0;
+  const minDays = item?.minShelfLifeDays ?? 0;
   return days >= minDays;
 }
 
@@ -362,9 +377,7 @@ export function createOrder(
   const shortages: OrderShortage[] = [];
   for (const l of expandedDemand(s, draft)) {
     const item = product(s, l.productId);
-    if (item?.sanitaryExpires && item.sanitaryExpires < todayGuayaquil()) {
-      throw new Error(`El registro sanitario de ${item.name} está vencido.`);
-    }
+    assertCanSell(s, l.productId);
     if (!item || !Number.isInteger(l.qty) || l.qty <= 0) {
       throw new Error(`Cantidad inválida para ${item?.name ?? 'el producto'}.`);
     }
@@ -424,21 +437,24 @@ export function lotEntryDate(s: AppState, lot: Lot): string {
   return '9999-12-31';
 }
 
-/** FIFO por fecha de entrada; empate por caducidad más cercana (y hora de ingreso). */
-export function fefoCompare(a: Lot, b: Lot) {
-  const byEntry = (a.receivedAt ?? '').localeCompare(b.receivedAt ?? '');
-  if (byEntry) return byEntry;
-  return a.expiry.localeCompare(b.expiry) || a.loc.localeCompare(b.loc);
+/** Sin fecha va al final: primero se agota lo que sí caduca. */
+function expiryKey(expiry: string | undefined) {
+  return /^\d{4}-\d{2}-\d{2}/.test(expiry ?? '') ? expiry!.slice(0, 10) : '9999-12-31';
 }
 
-function compareLotsFifo(s: AppState, a: Lot, b: Lot) {
+/** FEFO: vence antes primero. Empate por fecha de ingreso y luego por ubicación. */
+export function fefoCompare(a: Lot, b: Lot) {
+  const byExpiry = expiryKey(a.expiry).localeCompare(expiryKey(b.expiry));
+  if (byExpiry) return byExpiry;
+  return (a.receivedAt ?? '').localeCompare(b.receivedAt ?? '') || a.loc.localeCompare(b.loc);
+}
+
+function compareLotsFefo(s: AppState, a: Lot, b: Lot) {
+  const byExpiry = expiryKey(a.expiry).localeCompare(expiryKey(b.expiry));
+  if (byExpiry) return byExpiry;
   const byEntry = lotEntryDate(s, a).localeCompare(lotEntryDate(s, b));
   if (byEntry) return byEntry;
-  return (
-    (a.receivedAt ?? '').localeCompare(b.receivedAt ?? '') ||
-    (a.expiry || '9999').localeCompare(b.expiry || '9999') ||
-    a.loc.localeCompare(b.loc)
-  );
+  return a.loc.localeCompare(b.loc);
 }
 
 export function pickPlan(s: AppState, order: Order): PickPlanLine[] {
@@ -448,7 +464,7 @@ export function pickPlan(s: AppState, order: Order): PickPlanLine[] {
     let left = line.qty;
     const lots = lotsForActiveWarehouse(s)
       .filter((l) => l.productId === line.productId && isLotSellable(s, l, today))
-      .sort((a, b) => compareLotsFifo(s, a, b));
+      .sort((a, b) => compareLotsFefo(s, a, b));
     for (const l of lots) {
       if (!left) break;
       const qty = Math.min(l.qty, left);
@@ -459,7 +475,6 @@ export function pickPlan(s: AppState, order: Order): PickPlanLine[] {
       throw new Error(`Faltan ${left} unidades de ${product(s, line.productId)?.name}.`);
     }
   }
-  // Mantener orden FIFO (fecha de entrada) en la ruta de picking.
   return plan;
 }
 
@@ -521,6 +536,10 @@ export function dispatch(
   const orders = s.orders.filter((o) => ids.includes(o.id));
   if (!orders.length || orders.some((o) => o.status !== 'Preparado')) {
     throw new Error('Selecciona pedidos preparados.');
+  }
+  const missingPick = orders.find((o) => !o.picks?.length);
+  if (missingPick) {
+    throw new Error(`Prepara ${missingPick.id} antes de despachar: falta el lote de salida.`);
   }
   const current = s.orders.filter(
     (o) => o.vehicle?.toUpperCase() === vehicle.trim().toUpperCase() && ['En ruta', 'Incidencia'].includes(o.status),

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Select } from '../../shared/components/Select';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import { api } from '../../shared/api/client';
@@ -49,7 +49,8 @@ export function ClientsPage() {
   const [creditDraft, setCreditDraft] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [query, setQuery] = useState('');
+  const [params] = useSearchParams();
+  const [query, setQuery] = useState(() => params.get('q') ?? '');
   const [sector, setSector] = useState('all');
   const [creditFilter, setCreditFilter] = useState<CreditFilter>('all');
   const [view, setView] = useState<ViewMode>('list');
@@ -92,7 +93,7 @@ export function ClientsPage() {
           return false;
         if (creditFilter === 'full' && pct < creditRules.creditTightMaxPct) return false;
         if (!q) return true;
-        return [c.name, c.contact, c.email, c.address, c.id, c.sector]
+        return [c.name, c.contact, c.email, c.address, c.id, c.sector, c.taxId]
           .join(' ')
           .toLowerCase()
           .includes(q);
@@ -291,6 +292,7 @@ export function ClientsPage() {
                             <span>
                               <strong>{c.name}</strong>
                               <small>
+                                {c.taxId ? `${c.taxId} · ` : ''}
                                 {c.type}
                                 {c.contact ? ` · ${c.contact}` : ''}
                               </small>
@@ -481,6 +483,10 @@ export function ClientsPage() {
               <div className="cli-detail-body">
                 <dl className="cli-info">
                   <div>
+                    <dt>RUC</dt>
+                    <dd>{selected.client.taxId || 'Sin RUC'}</dd>
+                  </div>
+                  <div>
                     <dt>Contacto</dt>
                     <dd>{selected.client.contact}</dd>
                   </div>
@@ -643,6 +649,10 @@ export function ClientsPage() {
               <div className="field full">
                 <label htmlFor="cl-name">Nombre</label>
                 <input id="cl-name" name="name" required />
+              </div>
+              <div className="field">
+                <label htmlFor="cl-tax">RUC</label>
+                <input id="cl-tax" name="taxId" inputMode="numeric" pattern="\d{13}" minLength={13} maxLength={13} required />
               </div>
               <div className="field">
                 <label htmlFor="cl-person">Contacto</label>
