@@ -1,73 +1,45 @@
 /**
- * Agrupa los avisos de la vista previa de importación.
+ * Ordena los avisos de la vista previa de importación por línea.
  *
  * El backend devuelve texto con forma "CÓDIGO: mensaje" (import-docs.service.ts).
- * Aquí se juntan los que repiten el mismo mensaje y se separan por gravedad:
- * - block: impide crear el documento (falta de stock)
- * - warn:  se puede continuar, pero conviene revisar (falta caducidad)
+ * Aquí se asigna cada aviso a la línea de su código y se clasifica:
+ * - stock:  impide crear el documento
+ * - expiry: la caducidad falta; es opcional, así que no se muestra por línea
+ * - other:  se muestra en el tooltip de la línea
+ * Los avisos sin código, o con un código que no está en la tabla, quedan como generales.
  */
 
-export type WarningLevel = 'block' | 'warn';
-
-export type WarningGroup = {
-  level: WarningLevel;
-  kind: 'stock' | 'expiry' | 'other';
-  title: string;
-  detail: string;
-  codes: string[];
-};
+export type RowIssues = { noStock: boolean; messages: string[] };
 
 const LINE = /^([^:]{1,60}):\s*(.+)$/;
 
-function classify(message: string): WarningGroup['kind'] {
+function classify(message: string) {
   const text = message.toLowerCase();
-  if (text.includes('stock')) return 'stock';
-  if (text.includes('caducidad')) return 'expiry';
-  return 'other';
+  if (text.includes('stock')) return 'stock' as const;
+  if (text.includes('caducidad')) return 'expiry' as const;
+  return 'other' as const;
 }
 
-export function groupImportWarnings(warnings: string[], kind: 'purchase' | 'sale'): WarningGroup[] {
-  const groups = new Map<string, WarningGroup>();
-  const doc = kind === 'sale' ? 'el pedido' : 'la compra';
+export function indexImportWarnings(warnings: string[], codes: string[]) {
+  const known = new Set(codes);
+  const byCode = new Map<string, RowIssues>();
+  const general: string[] = [];
 
   for (const warning of warnings) {
     const match = LINE.exec(warning.trim());
-    const code = match ? match[1].trim() : '';
-    const message = match ? match[2].trim() : warning.trim();
-    const type = classify(message);
-    const key = type === 'other' ? `other:${message}` : type;
-    const current = groups.get(key);
-    if (current) {
-      if (code && !current.codes.includes(code)) current.codes.push(code);
+    const code = match?.[1].trim() ?? '';
+    const message = (match?.[2] ?? warning).trim();
+    const kind = classify(message);
+    if (kind === 'expiry') continue;
+    if (!code || !known.has(code)) {
+      general.push(warning.trim());
       continue;
     }
-    groups.set(key, {
-      level: type === 'stock' ? 'block' : 'warn',
-      kind: type,
-      title: '',
-      detail:
-        type === 'stock'
-          ? 'No hay stock suficiente. Registra la entrada de mercadería y vuelve a importar.'
-          : type === 'expiry'
-            ? 'El archivo no la trae y no se inventa ninguna fecha. Complétala en la tabla si la conoces.'
-            : message,
-      codes: code ? [code] : [],
-    });
+    const issues = byCode.get(code) ?? { noStock: false, messages: [] };
+    if (kind === 'stock') issues.noStock = true;
+    else issues.messages.push(message);
+    byCode.set(code, issues);
   }
 
-  return [...groups.values()]
-    .map((group) => {
-      const n = group.codes.length;
-      const products = n === 1 ? '1 producto' : `${n} productos`;
-      const title =
-        group.kind === 'stock'
-          ? `No se puede crear ${doc}`
-          : group.kind === 'expiry'
-            ? `${products} sin caducidad`
-            : n > 1
-              ? `${products} con avisos`
-              : 'Aviso';
-      return { ...group, title };
-    })
-    .sort((a, b) => (a.level === b.level ? 0 : a.level === 'block' ? -1 : 1));
+  return { byCode, general };
 }

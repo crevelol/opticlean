@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
-import { Badge, Btn } from '../../shared/components/ui';
+import { Btn } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal } from '../../shared/components/Modal';
+import { TooltipButton } from '../../shared/components/Tooltip';
+import { money, num } from '../../shared/lib/inventory';
 import { FileDropZone, type FileDropStatus } from '../../shared/components/FileDrop';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import {
@@ -14,7 +16,7 @@ import {
   type FileMeta,
   type FileRoute,
 } from '../../shared/lib/fileFormats';
-import { groupImportWarnings } from './importWarnings';
+import { indexImportWarnings } from './importWarnings';
 import '../../styles/imports.css';
 
 type ImportKind = 'purchase' | 'sale';
@@ -46,6 +48,10 @@ const MAX_SIZE_MB = 10;
 const AI_STEPS = ['Preparando archivo', 'Leyendo con IA'];
 const PREVIEW_STEPS = ['Leyendo archivo', 'Preparando líneas'];
 
+type RowTone = 'ok' | 'info' | 'warn' | 'err';
+type RowFilter = 'all' | 'err' | 'info';
+type RowView = { tone: RowTone; label: string; title: string; detail: string; action?: string; extra: string[] };
+
 export function ImportDialog({
   kind,
   onClose,
@@ -66,13 +72,61 @@ export function ImportDialog({
   const [busy, setBusy] = useState(false);
 
   const party = kind === 'purchase' ? 'Proveedor' : 'Cliente';
-  const groups = useMemo(() => (preview ? groupImportWarnings(preview.warnings, kind) : []), [preview, kind]);
-  const noStock = useMemo(
-    () => new Set(groups.filter((group) => group.kind === 'stock').flatMap((group) => group.codes)),
-    [groups],
+  const [filter, setFilter] = useState<RowFilter>('all');
+  const issues = useMemo(
+    () => (preview ? indexImportWarnings(preview.warnings, preview.rows.map((row) => row.code)) : null),
+    [preview],
   );
 
+  const viewOf = (row: Row): RowView => {
+    const found = issues?.byCode.get(row.code);
+    const extra = found?.messages ?? [];
+    if (row.status === 'invalid') {
+      return {
+        tone: 'err',
+        label: 'Inválida',
+        title: 'Esta línea no se importará',
+        detail: row.message || 'Le faltan datos obligatorios.',
+        action: 'Corrige el archivo y vuelve a cargarlo si necesitas esta línea.',
+        extra,
+      };
+    }
+    if (found?.noStock) {
+      return {
+        tone: 'err',
+        label: 'Sin stock',
+        title: 'No hay stock suficiente',
+        detail: `Pide ${num(row.qty)} ${row.packCode || 'u.'} y no hay suficiente disponible. El pedido no se creará hasta que entre mercadería.`,
+        action: 'Registra la recepción primero o quita esta línea del archivo.',
+        extra,
+      };
+    }
+    if (row.status === 'new') {
+      return {
+        tone: 'info',
+        label: 'Nuevo',
+        title: 'Producto nuevo',
+        detail: 'No está en el catálogo. Se creará con los datos del archivo al confirmar.',
+        extra,
+      };
+    }
+    if (extra.length) {
+      return { tone: 'warn', label: 'Revisar', title: 'Revisa esta línea', detail: extra[0], extra: extra.slice(1) };
+    }
+    return { tone: 'ok', label: 'Existe', title: '', detail: '', extra };
+  };
+
+  const views = preview?.rows.map(viewOf) ?? [];
+  const blocked = kind === 'sale' ? views.filter((view) => view.label === 'Sin stock').length : 0;
+  const errCount = views.filter((view) => view.tone === 'err').length;
+  const infoCount = views.filter((view) => view.tone === 'info').length;
+  const importable = preview?.rows.filter((row) => row.status !== 'invalid' && row.qty > 0) ?? [];
+  const units = importable.reduce((sum, row) => sum + row.qty, 0);
+  const total = importable.reduce((sum, row) => sum + row.qty * (row.unitPrice || 0), 0);
+  const createLabel = kind === 'sale' ? 'Crear pedido' : 'Crear compra';
+
   const reset = () => {
+    setFilter('all');
     setFile(null);
     setRoute(null);
     setPreview(null);
@@ -92,6 +146,7 @@ export function ImportDialog({
     setFile({ name: picked.name, size: picked.size });
     setRoute(nextRoute);
     setPreview(null);
+    setFilter('all');
     setError('');
     setFileError('');
     setStatus('reading');
@@ -143,7 +198,7 @@ export function ImportDialog({
   };
 
   const commit = async () => {
-    if (!preview || busy) return;
+    if (!preview || busy || blocked) return;
     const rows = preview.rows.filter((row) => row.status !== 'invalid' && row.qty > 0);
     if (!rows.length) {
       setError('No hay líneas válidas para confirmar.');
@@ -190,9 +245,15 @@ export function ImportDialog({
       onClose={onClose}
       footer={
         <>
+          {blocked ? (
+            <span className="import-blocked" role="status">
+              <Icon name="alert" />
+              {blocked === 1 ? '1 línea sin stock' : `${blocked} líneas sin stock`}: no se puede crear el pedido.
+            </span>
+          ) : null}
           <Btn onClick={onClose}>Cancelar</Btn>
-          <Btn variant="primary" icon="save" disabled={!preview || busy} onClick={() => void commit()}>
-            {busy && preview ? 'Importando…' : 'Confirmar'}
+          <Btn variant="primary" icon="save" disabled={!preview || busy || blocked > 0} onClick={() => void commit()}>
+            {busy && preview ? 'Creando…' : createLabel}
           </Btn>
         </>
       }
@@ -240,76 +301,132 @@ export function ImportDialog({
         </div>
       ) : null}
 
-      {groups.length ? (
-        <div className="import-alerts">
-          {groups.map((group) => (
-            <div key={`${group.kind}-${group.detail}`} className={`import-alert ${group.level}`} role={group.level === 'block' ? 'alert' : 'status'}>
-              <Icon name={group.level === 'block' ? 'stop' : 'alert'} />
-              <strong>{group.title}</strong>
-              <p>{group.detail}</p>
-              {group.codes.length ? (
-                <div className="import-alert-codes">
-                  {group.codes.map((code) => (
-                    <span key={code}>{code}</span>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ))}
+      {issues?.general.length ? (
+        <div className="import-general" role="status">
+          <Icon name="info" />
+          <ul>
+            {issues.general.map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
         </div>
       ) : null}
 
       {preview ? (
-        <div className="table-scroll import-table">
-          <table>
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Cantidad</th>
-                <th>Empaque</th>
-                <th>Caducidad</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {preview.rows.map((row, index) => (
-                <tr key={`${row.code}-${index}`}>
-                  <td>
-                    <strong>{row.name}</strong>
-                    <span className="sub">{row.code}</span>
-                  </td>
-                  <td>{row.qty}</td>
-                  <td>{row.packCode}</td>
-                  <td>
-                    <input
-                      aria-label={`Caducidad de ${row.code}`}
-                      type="date"
-                      className={row.expiry ? undefined : 'import-missing'}
-                      value={row.expiry}
-                      onChange={(event) => {
-                        const rows = preview.rows.map((item, i) =>
-                          i === index ? { ...item, expiry: event.target.value } : item,
-                        );
-                        setPreview({ ...preview, rows });
-                      }}
-                    />
-                  </td>
-                  <td>
-                    {row.status === 'invalid' ? (
-                      <Badge text="Inválido" color="red" />
-                    ) : noStock.has(row.code) ? (
-                      <Badge text="Sin stock" color="red" />
-                    ) : row.status === 'matched' ? (
-                      <Badge text="Existe" color="green" />
-                    ) : (
-                      <Badge text="Nuevo" color="blue" />
-                    )}
-                  </td>
+        <>
+          <div className="import-summary">
+            <span>
+              <b>{num(importable.length)}</b> {importable.length === 1 ? 'línea' : 'líneas'}
+            </span>
+            <span>
+              <b>{num(units)}</b> u.
+            </span>
+            {total > 0 ? (
+              <span>
+                Total <b>{money(total)}</b>
+              </span>
+            ) : null}
+            {errCount || infoCount ? (
+              <div className="import-filters" role="group" aria-label="Filtrar líneas">
+                <button type="button" aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
+                  Todas {preview.rows.length}
+                </button>
+                {errCount ? (
+                  <button type="button" className="err" aria-pressed={filter === 'err'} onClick={() => setFilter('err')}>
+                    <i aria-hidden="true" />
+                    Con error {errCount}
+                  </button>
+                ) : null}
+                {infoCount ? (
+                  <button type="button" className="info" aria-pressed={filter === 'info'} onClick={() => setFilter('info')}>
+                    <i aria-hidden="true" />
+                    Nuevos {infoCount}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="table-scroll import-table">
+            <table>
+              <colgroup>
+                <col className="c-product" />
+                <col className="c-qty" />
+                <col className="c-pack" />
+                <col className="c-date" />
+                <col className="c-status" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th>Cantidad</th>
+                  <th>Empaque</th>
+                  <th>
+                    Caducidad <small>opcional</small>
+                  </th>
+                  <th>Estado</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {preview.rows.map((row, index) => {
+                  const view = views[index];
+                  const hidden =
+                    filter !== 'all' && !(filter === 'err' ? view.tone === 'err' : view.tone === 'info');
+                  return (
+                    <tr key={`${row.code}-${index}`} className={`import-row ${view.tone}`} hidden={hidden}>
+                      <td className="import-product">
+                        <strong title={row.name}>{row.name}</strong>
+                        <span className="sub">{row.code}</span>
+                      </td>
+                      <td className="import-qty">{num(row.qty)}</td>
+                      <td className="import-pack">{row.packCode}</td>
+                      <td className="import-date">
+                        <input
+                          aria-label={`Caducidad de ${row.code} (opcional)`}
+                          type="date"
+                          value={row.expiry}
+                          onChange={(event) => {
+                            const rows = preview.rows.map((item, i) =>
+                              i === index ? { ...item, expiry: event.target.value } : item,
+                            );
+                            setPreview({ ...preview, rows });
+                          }}
+                        />
+                      </td>
+                      <td className="import-state">
+                        {view.tone === 'ok' ? (
+                          <span className="import-status ok">{view.label}</span>
+                        ) : (
+                          <TooltipButton
+                            className={`import-status ${view.tone}`}
+                            label={`${view.label}: ${view.title}. Ver detalle`}
+                            content={
+                              <>
+                                <b>{view.title}</b>
+                                {view.detail}
+                                {view.extra.length ? (
+                                  <ul>
+                                    {view.extra.map((message) => (
+                                      <li key={message}>{message}</li>
+                                    ))}
+                                  </ul>
+                                ) : null}
+                                {view.action ? <span className="ui-tooltip-note">{view.action}</span> : null}
+                              </>
+                            }
+                          >
+                            <Icon name={view.tone === 'info' ? 'info' : 'alert'} />
+                            {view.label}
+                          </TooltipButton>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       ) : null}
       {error ? <div className="form-error visible">{error}</div> : null}
     </Modal>
