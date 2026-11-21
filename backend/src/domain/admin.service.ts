@@ -171,8 +171,9 @@ export function menuForCompany(companyId: string) {
        ORDER BY CASE mi.section
                   WHEN 'Operación' THEN 0
                   WHEN 'Abastecimiento' THEN 1
-                  WHEN 'Gestión' THEN 2
-                  ELSE 3
+                  WHEN 'Bodega' THEN 2
+                  WHEN 'Gestión' THEN 3
+                  ELSE 4
                 END,
                 mi.sort_order, mi.label`,
     )

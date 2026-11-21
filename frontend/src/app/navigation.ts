@@ -54,11 +54,13 @@ export const fallbackMenu: MenuSection[] = [
       { id: 'f-home', label: 'Inicio', path: '/', icon: 'home', badge: null },
       { id: 'f-inv', label: 'Inventario', path: '/inventario', icon: 'box', badge: null },
       { id: 'f-rec', label: 'Recepción', path: '/recepcion', icon: 'receive', badge: null },
-      { id: 'f-bod', label: 'Bodega visual', path: '/bodega', icon: 'warehouse', badge: null },
       { id: 'f-quote', label: 'Cotizaciones', path: '/cotizaciones', icon: 'file', badge: null },
       { id: 'f-ped', label: 'Pedidos', path: '/pedidos', icon: 'orders', badge: null },
       { id: 'f-pack', label: 'Empaque', path: '/empaque', icon: 'cube', badge: null },
       { id: 'f-log', label: 'Logística', path: '/logistica', icon: 'truck', badge: null },
+      { id: 'f-route', label: 'Mi ruta', path: '/logistica/rutas', icon: 'route', badge: null },
+      { id: 'f-hist', label: 'Historial rutas', path: '/logistica/historial', icon: 'history', badge: null },
+      { id: 'f-trace', label: 'Trazabilidad', path: '/trazabilidad', icon: 'route', badge: null },
     ],
   },
   {
@@ -70,12 +72,19 @@ export const fallbackMenu: MenuSection[] = [
     ],
   },
   {
-    section: 'Gestión',
+    section: 'Bodega',
     items: [
       { id: 'f-wh', label: 'Bodegas', path: '/bodegas', icon: 'building', badge: null },
+      { id: 'f-bod', label: 'Bodega visual', path: '/bodega', icon: 'warehouse', badge: null },
       { id: 'f-fam', label: 'Familias', path: '/familias', icon: 'layers', badge: null },
+    ],
+  },
+  {
+    section: 'Gestión',
+    items: [
       { id: 'f-cli', label: 'Clientes', path: '/clientes', icon: 'users', badge: null },
       { id: 'f-com', label: 'Comercial', path: '/comercial', icon: 'orders', badge: null },
+      { id: 'f-rep', label: 'Reportes', path: '/reportes', icon: 'chart', badge: null },
       { id: 'f-rules', label: 'Reglas de negocio', path: '/reglas', icon: 'shield', badge: null },
       { id: 'f-users', label: 'Usuarios', path: '/usuarios', icon: 'users', badge: null },
       { id: 'f-cfg', label: 'Configuración', path: '/configuracion', icon: 'settings', badge: null },

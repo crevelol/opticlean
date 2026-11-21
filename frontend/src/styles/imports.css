@@ -1,0 +1,67 @@
+/* Diálogo de importación (features/imports/ImportDialog.tsx). */
+
+.import-party {
+  margin-top: 14px;
+}
+
+.import-alerts {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.import-alert {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  padding: 11px 13px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+.import-alert > .icon {
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+}
+.import-alert strong {
+  font-weight: var(--weight-semibold);
+}
+.import-alert p,
+.import-alert-codes {
+  grid-column: 2;
+  margin: 0;
+}
+.import-alert p {
+  color: var(--color-text-secondary);
+}
+.import-alert.block {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+.import-alert.warn {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+.import-alert-codes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
+}
+.import-alert-codes span {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  padding: 1px 6px;
+}
+
+.import-table {
+  margin-top: 14px;
+}
+.import-table input.import-missing {
+  border-color: var(--amber-400);
+  background: var(--amber-50);
+}

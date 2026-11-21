@@ -1,8 +1,21 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
-import { Btn } from '../../shared/components/ui';
+import { Badge, Btn } from '../../shared/components/ui';
+import { Icon } from '../../shared/components/Icon';
 import { Modal } from '../../shared/components/Modal';
+import { FileDropZone, type FileDropStatus } from '../../shared/components/FileDrop';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
+import {
+  IMPORT_FORMATS,
+  IMPORT_REJECTED,
+  extOf,
+  fileToBase64,
+  findFormat,
+  type FileMeta,
+  type FileRoute,
+} from '../../shared/lib/fileFormats';
+import { groupImportWarnings } from './importWarnings';
+import '../../styles/imports.css';
 
 type ImportKind = 'purchase' | 'sale';
 
@@ -29,6 +42,10 @@ type Preview = {
   rows: Row[];
 };
 
+const MAX_SIZE_MB = 10;
+const AI_STEPS = ['Preparando archivo', 'Leyendo con IA'];
+const PREVIEW_STEPS = ['Leyendo archivo', 'Preparando líneas'];
+
 export function ImportDialog({
   kind,
   onClose,
@@ -40,29 +57,52 @@ export function ImportDialog({
 }) {
   const { applyResponse } = useAppState();
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [file, setFile] = useState<FileMeta | null>(null);
+  const [route, setRoute] = useState<FileRoute | null>(null);
+  const [status, setStatus] = useState<FileDropStatus>('idle');
+  const [step, setStep] = useState(0);
+  const [fileError, setFileError] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const readFile = async (file: File) => {
-    const name = file.name.toLowerCase();
-    const isAiDoc =
-      name.endsWith('.pdf') ||
-      name.endsWith('.docx') ||
-      (name.endsWith('.doc') && !name.endsWith('.docx'));
-    if (isAiDoc) {
-      if (name.endsWith('.doc') && !name.endsWith('.docx')) {
-        setError('El .doc antiguo no está soportado. Usa .docx, PDF, XML, CSV o Excel.');
-        return;
-      }
-      setBusy(true);
-      setError('');
-      setPreview(null);
+  const party = kind === 'purchase' ? 'Proveedor' : 'Cliente';
+  const groups = useMemo(() => (preview ? groupImportWarnings(preview.warnings, kind) : []), [preview, kind]);
+  const noStock = useMemo(
+    () => new Set(groups.filter((group) => group.kind === 'stock').flatMap((group) => group.codes)),
+    [groups],
+  );
+
+  const reset = () => {
+    setFile(null);
+    setRoute(null);
+    setPreview(null);
+    setStatus('idle');
+    setFileError('');
+    setError('');
+  };
+
+  const fail = (message: string) => {
+    setStatus('error');
+    setFileError(message);
+  };
+
+  const readFile = async (picked: File) => {
+    const format = findFormat(IMPORT_FORMATS, picked.name);
+    const nextRoute = format?.route ?? 'preview';
+    setFile({ name: picked.name, size: picked.size });
+    setRoute(nextRoute);
+    setPreview(null);
+    setError('');
+    setFileError('');
+    setStatus('reading');
+    setStep(0);
+    setBusy(true);
+
+    if (nextRoute === 'ai') {
       try {
-        const res = await api.importOrderFile({
-          fileName: file.name,
-          mimeType: file.type,
-          contentBase64: await fileToBase64(file),
-        });
+        const contentBase64 = await fileToBase64(picked);
+        setStep(1);
+        const res = await api.importOrderFile({ fileName: picked.name, mimeType: picked.type, contentBase64 });
         applyResponse(res);
         const created = res.import.productsCreated.length;
         const updated = res.import.productsUpdated.length;
@@ -77,34 +117,26 @@ export function ImportDialog({
           `${res.import.orderId} · IA · ${clientMsg}${prodMsg ? ` · ${prodMsg}` : ''} · ${res.import.invoice.docNumber}`,
         );
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'No se pudo leer el documento con IA.');
+        fail(err instanceof Error ? err.message : 'No se pudo leer el documento con IA.');
       } finally {
         setBusy(false);
       }
       return;
     }
 
-    const format = name.endsWith('.xml')
-      ? 'xml'
-      : name.endsWith('.csv') || name.endsWith('.txt')
-        ? 'csv'
-        : 'xlsx';
-    if (!/\.(xml|csv|txt|xlsx|xls)$/.test(name)) {
-      setError('Usa un archivo XML, PDF, Word (.docx), CSV o Excel.');
-      return;
-    }
-    setBusy(true);
-    setError('');
+    const ext = extOf(picked.name);
+    const fmt = ext === 'xml' ? 'xml' : ext === 'csv' || ext === 'txt' ? 'csv' : 'xlsx';
     try {
       const body =
-        format === 'xlsx'
-          ? { kind, format, base64: await fileToBase64(file) }
-          : { kind, format, text: await file.text() };
+        fmt === 'xlsx'
+          ? { kind, format: fmt, base64: await fileToBase64(picked) }
+          : { kind, format: fmt, text: await picked.text() };
+      setStep(1);
       const next = await api.previewImport(body);
       setPreview(next);
+      setStatus('ready');
     } catch (err) {
-      setPreview(null);
-      setError(err instanceof Error ? err.message : 'No se pudo leer el archivo.');
+      fail(err instanceof Error ? err.message : 'No se pudo leer el archivo.');
     } finally {
       setBusy(false);
     }
@@ -146,63 +178,89 @@ export function ImportDialog({
     }
   };
 
+  const lines = preview?.rows.length ?? 0;
+  const summary = preview
+    ? `${lines} ${lines === 1 ? 'línea' : 'líneas'}${preview.partyName ? ` · ${preview.partyName}` : ''}`
+    : undefined;
+
   return (
     <Modal
       title={kind === 'purchase' ? 'Importar compra' : 'Importar pedido'}
-      subtitle="PDF, Word, XML, CSV o Excel. La IA lee PDF/Word; CSV/Excel pasan por vista previa."
+      subtitle="PDF y Word se leen con IA. XML, CSV y Excel pasan por una vista previa antes de confirmar."
       onClose={onClose}
       footer={
         <>
           <Btn onClick={onClose}>Cancelar</Btn>
           <Btn variant="primary" icon="save" disabled={!preview || busy} onClick={() => void commit()}>
-            {busy ? 'Importando…' : 'Confirmar'}
+            {busy && preview ? 'Importando…' : 'Confirmar'}
           </Btn>
         </>
       }
     >
-      <div className="form-grid">
-        <div className="field full">
-          <label htmlFor="import-file">Archivo</label>
-          <input
-            id="import-file"
-            type="file"
-            accept=".xml,.pdf,.docx,.csv,.txt,.xlsx,.xls,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void readFile(file);
-            }}
-          />
+      <FileDropZone
+        id="import-file"
+        formats={IMPORT_FORMATS}
+        rejected={IMPORT_REJECTED}
+        maxSizeMb={MAX_SIZE_MB}
+        status={status}
+        file={file}
+        route={route}
+        steps={route === 'ai' ? AI_STEPS : PREVIEW_STEPS}
+        step={step}
+        summary={summary}
+        error={fileError}
+        onFiles={([picked]) => void readFile(picked)}
+        onReject={(message, rejectedFile) => {
+          setFile({ name: rejectedFile.name, size: rejectedFile.size });
+          setRoute(null);
+          setPreview(null);
+          fail(message);
+        }}
+        onClear={reset}
+      />
+
+      {preview ? (
+        <div className="form-grid import-party">
+          <div className="field">
+            <label htmlFor="import-party">{party}</label>
+            <input
+              id="import-party"
+              value={preview.partyName}
+              onChange={(event) => setPreview({ ...preview, partyName: event.target.value })}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="import-doc">Documento</label>
+            <input
+              id="import-doc"
+              value={preview.docNumber}
+              onChange={(event) => setPreview({ ...preview, docNumber: event.target.value })}
+            />
+          </div>
         </div>
-        {preview ? (
-          <>
-            <div className="field">
-              <label htmlFor="import-party">{kind === 'purchase' ? 'Proveedor' : 'Cliente'}</label>
-              <input
-                id="import-party"
-                value={preview.partyName}
-                onChange={(event) => setPreview({ ...preview, partyName: event.target.value })}
-              />
+      ) : null}
+
+      {groups.length ? (
+        <div className="import-alerts">
+          {groups.map((group) => (
+            <div key={`${group.kind}-${group.detail}`} className={`import-alert ${group.level}`} role={group.level === 'block' ? 'alert' : 'status'}>
+              <Icon name={group.level === 'block' ? 'stop' : 'alert'} />
+              <strong>{group.title}</strong>
+              <p>{group.detail}</p>
+              {group.codes.length ? (
+                <div className="import-alert-codes">
+                  {group.codes.map((code) => (
+                    <span key={code}>{code}</span>
+                  ))}
+                </div>
+              ) : null}
             </div>
-            <div className="field">
-              <label htmlFor="import-doc">Documento</label>
-              <input
-                id="import-doc"
-                value={preview.docNumber}
-                onChange={(event) => setPreview({ ...preview, docNumber: event.target.value })}
-              />
-            </div>
-          </>
-        ) : null}
-      </div>
-      {preview?.warnings.length ? (
-        <div className="form-error visible" style={{ marginTop: 12 }}>
-          {preview.warnings.slice(0, 4).map((warning) => (
-            <p key={warning}>{warning}</p>
           ))}
         </div>
       ) : null}
+
       {preview ? (
-        <div className="table-scroll" style={{ marginTop: 12 }}>
+        <div className="table-scroll import-table">
           <table>
             <thead>
               <tr>
@@ -226,6 +284,7 @@ export function ImportDialog({
                     <input
                       aria-label={`Caducidad de ${row.code}`}
                       type="date"
+                      className={row.expiry ? undefined : 'import-missing'}
                       value={row.expiry}
                       onChange={(event) => {
                         const rows = preview.rows.map((item, i) =>
@@ -235,32 +294,24 @@ export function ImportDialog({
                       }}
                     />
                   </td>
-                  <td>{row.status === 'matched' ? 'Existe' : row.status === 'new' ? 'Nuevo' : 'Inválido'}</td>
+                  <td>
+                    {row.status === 'invalid' ? (
+                      <Badge text="Inválido" color="red" />
+                    ) : noStock.has(row.code) ? (
+                      <Badge text="Sin stock" color="red" />
+                    ) : row.status === 'matched' ? (
+                      <Badge text="Existe" color="green" />
+                    ) : (
+                      <Badge text="Nuevo" color="blue" />
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      ) : (
-        <p className="subtle" style={{ marginTop: 12 }}>
-          {busy
-            ? 'Leyendo archivo…'
-            : 'Elige PDF/Word (IA), XML, CSV o Excel del proveedor o cliente.'}
-        </p>
-      )}
+      ) : null}
       {error ? <div className="form-error visible">{error}</div> : null}
     </Modal>
   );
-}
-
-function fileToBase64(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const value = String(reader.result ?? '');
-      resolve(value.slice(value.indexOf(',') + 1));
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
 }

@@ -8,6 +8,7 @@ import { refreshPurchase } from './purchase-lines.js';
 import { ensureSuppliers } from './suppliers.service.js';
 import { ensureCommercial } from './commercial.service.js';
 import { ensureOutbound } from './outbound.service.js';
+import { linkOpeningReceipts } from './opening-stock.js';
 import type { AppState } from './types.js';
 import { mergeBusinessRules } from './business-rules.js';
 import { DEFAULT_WAREHOUSE_ID, syncSettingsWarehouseLabel } from './warehouse-admin.service.js';
@@ -230,6 +231,7 @@ export function migrateState(raw: AppState): AppState {
   }
 
   ensureOutbound(base);
+  if (isDemo) linkOpeningReceipts(base);
   if (isDemo) {
     for (const vehicle of ensureVehicles(base)) {
       if (!vehicle.fuel) vehicle.fuel = vehicle.maxKg >= 2000 ? 'diesel' : 'gasolina';

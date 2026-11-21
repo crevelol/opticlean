@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { seed } from '../src/domain/seed.js';
+import { migrateState } from '../src/domain/state-migrate.js';
 import { getWarehouseGeometry } from '../src/domain/warehouse-layout.js';
 import {
   stock,
@@ -16,6 +17,20 @@ import {
 } from '../src/domain/inventory.service.js';
 import { suggest } from '../src/domain/placement.service.js';
 import { createPurchase } from '../src/domain/commerce.service.js';
+
+test('El stock de ejemplo tiene una entrada y una orden recibida por lote', () => {
+  const s = migrateState(seed());
+  for (const lot of s.lots.filter((item) => item.qty > 0)) {
+    const receipt = s.receipts.find((item) => item.lotId === lot.id);
+    assert.ok(receipt, lot.id);
+    assert.equal(receipt.productId, lot.productId);
+    assert.equal(receipt.batch, lot.batch);
+    assert.equal(lot.receiptId, receipt.id);
+    assert.ok(receipt.qty >= lot.qty);
+    const po = s.purchases.find((item) => item.id === receipt.purchaseId);
+    assert.equal(po?.status, 'Recibida');
+  }
+});
 
 test('Every seeded location respects capacity and one-product storage', () => {
   const s = seed();

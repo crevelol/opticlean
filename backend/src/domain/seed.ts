@@ -5,6 +5,7 @@ import { DEFAULT_LAYOUT, toDelanteraLocId } from './warehouse-layout.js';
 import { defaultFamilies } from './families.service.js';
 import { defaultVehicles } from './fleet.service.js';
 import { DEFAULT_BUNDLES } from './bundles.service.js';
+import { linkOpeningReceipts } from './opening-stock.js';
 
 const QUITO_LAYOUT = { ...DEFAULT_LAYOUT, depthFaces: 2 as const };
 
@@ -696,7 +697,7 @@ export function seed(): AppState {
     ...buildDispatchHistory(),
   ];
 
-  return {
+  const state: AppState = {
     version: 2,
     demo: true,
     products,
@@ -709,17 +710,7 @@ export function seed(): AppState {
     families: defaultFamilies(),
     vehicles: defaultVehicles(),
     bundles: DEFAULT_BUNDLES.map((b) => ({ ...b, lines: b.lines.map((l) => ({ ...l })) })),
-    receipts: [
-      {
-        id: 'REC-0083',
-        supplier: 'Química Andina',
-        date: '2026-10-27',
-        productId: 'P001',
-        qty: 24,
-        loc: 'A-02-01-D',
-        batch: 'LT-26025',
-      },
-    ],
+    receipts: [],
     settings: {
       company: 'OPTICLEAN AI',
       warehouse: 'Bodega principal · Quito',
@@ -727,4 +718,9 @@ export function seed(): AppState {
       activeWarehouseId: DEFAULT_WAREHOUSE_ID,
     },
   };
+  linkOpeningReceipts(state);
+  const opening = state.receipts.find((r) => r.productId === 'P001');
+  const reception = state.events.find((e) => e.id === 'ev-3');
+  if (reception && opening) reception.ref = opening.id;
+  return state;
 }
