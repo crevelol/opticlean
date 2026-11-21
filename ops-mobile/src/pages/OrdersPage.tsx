@@ -104,9 +104,12 @@ export function OrdersPage({
         <section className="panel">
           <div className="panel-head">
             <span className="panel-title">
-              <Icon name="route" /> Ruta de picking
+              <Icon name="route" /> Ruta de picking (FIFO)
             </span>
           </div>
+          <p className="subtle" style={{ margin: '0 14px 8px' }}>
+            Sale primero el lote con fecha de entrada más antigua.
+          </p>
           <ul className="pick-list">
             {(steps.length ? steps : selected.lines).map((step, i) => {
               const p = state.products.find((x) => x.id === step.productId);
@@ -119,6 +122,10 @@ export function OrdersPage({
                       {step.qty} u.
                       {'loc' in step && step.loc ? ` · ${step.loc}` : ''}
                       {'batch' in step && step.batch ? ` · ${step.batch}` : ''}
+                      {'receivedAt' in step && step.receivedAt
+                        ? ` · entrada ${step.receivedAt}`
+                        : ''}
+                      {'expiry' in step && step.expiry ? ` · vence ${step.expiry}` : ''}
                     </span>
                   </div>
                 </li>

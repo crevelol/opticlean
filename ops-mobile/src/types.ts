@@ -21,6 +21,7 @@ export type Lot = {
   batch: string;
   expiry: string;
   warehouseId?: string;
+  receivedAt?: string;
 };
 
 export type WarehouseFamily = {
@@ -157,4 +158,5 @@ export type PickStep = {
   loc?: string;
   batch?: string;
   expiry?: string;
+  receivedAt?: string;
 };

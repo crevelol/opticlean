@@ -337,7 +337,10 @@ export function DashboardPage() {
                       : 'Sin lotes en los próximos 90 días.'}{' '}
                     El vencido queda en cuarentena y no se puede preparar.
                   </small>
-                  <button type="button" onClick={() => navigate('/inventario')}>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/inventario?estado=expiring&orden=expiry')}
+                  >
                     Revisar caducidades
                   </button>
                 </div>

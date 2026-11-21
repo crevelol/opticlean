@@ -177,14 +177,28 @@ export function seed(): AppState {
     const options = finishedOnly.filter((p) => p.category === loc.category && p.id !== 'P015');
     if (!options.length) continue;
     const p = options[(i + Math.floor(i / 4)) % options.length];
+    // Algunos lotes cercanos a caducar / vencidos para demos de alerta (≤ 90 días).
+    const nearExpiry =
+      i % 17 === 1
+        ? '2026-11-13' // vencido
+        : i % 17 === 2
+          ? '2026-11-30' // ≤ 30 días
+          : i % 17 === 4
+            ? '2026-12-20' // ≤ 30 días
+            : i % 17 === 6
+              ? '2027-01-05' // ≤ 60 días
+              : i % 17 === 8
+                ? '2027-02-05' // ≤ 90 días
+                : `2027-${String(2 + (i % 9)).padStart(2, '0')}-28`;
     lots.push({
       id: `lot-${i}`,
       productId: p.id,
       loc: toDelanteraLocId(loc.id),
       qty: 12 + ((i * 7) % 33),
       batch: `LT-26${String(i + 1).padStart(3, '0')}`,
-      expiry: `2027-${String(2 + (i % 9)).padStart(2, '0')}-28`,
+      expiry: nearExpiry,
       warehouseId: DEFAULT_WAREHOUSE_ID,
+      receivedAt: `2026-${String(1 + (i % 11)).padStart(2, '0')}-${String(5 + (i % 20)).padStart(2, '0')}`,
     });
   }
   lots.push({
@@ -193,8 +207,9 @@ export function seed(): AppState {
     loc: 'A-01-01-D',
     qty: 8,
     batch: 'LT-26018',
-    expiry: '2027-02-18',
+    expiry: '2026-12-10',
     warehouseId: DEFAULT_WAREHOUSE_ID,
+    receivedAt: '2026-01-15',
   });
 
   // Stock bajo a propósito en algunos insumos para demostrar alertas padre→hijo
@@ -222,6 +237,7 @@ export function seed(): AppState {
       batch: `MP-26${String(i + 1).padStart(2, '0')}`,
       expiry: '2027-12-31',
       warehouseId: DEFAULT_WAREHOUSE_ID,
+      receivedAt: `2026-02-${String(10 + i).padStart(2, '0')}`,
     });
   });
 

@@ -6,7 +6,8 @@ import { api } from '../../shared/api/client';
 import { activeWarehouseId, num } from '../../shared/lib/inventory';
 import { childrenStatus, componentsOf, isRaw } from '../../shared/lib/bom';
 import { downloadCSV } from '../../shared/lib/csv';
-import { Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
+import { expiryAlerts } from '../../shared/lib/wholesale';
+import { Badge, Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import type { AppState, Metrics } from '../../shared/types';
 import { InventoryDetailPanel } from './InventoryDetailPanel';
@@ -27,6 +28,7 @@ const PAGE_CHUNK = 10;
 const statusOptions: { value: InventoryFilter; label: string }[] = [
   { value: 'all', label: 'Todos' },
   { value: 'attention', label: 'Por reponer' },
+  { value: 'expiring', label: 'Por caducar' },
   { value: 'unavailable', label: 'Sin disponibilidad' },
   { value: 'reserved', label: 'Con reservas' },
   { value: 'healthy', label: 'En nivel mínimo o superior' },
@@ -34,6 +36,7 @@ const statusOptions: { value: InventoryFilter; label: string }[] = [
 ];
 const sortOptions: { value: InventorySort; label: string }[] = [
   { value: 'attention', label: 'Prioridad' },
+  { value: 'expiry', label: 'Caducidad más cercana' },
   { value: 'name', label: 'Nombre: A–Z' },
   { value: 'stock-desc', label: 'Mayor stock físico' },
   { value: 'available-asc', label: 'Menor disponibilidad' },
@@ -118,6 +121,13 @@ export function InventoryWorkspace({
   const attentionFinished = attention.filter((r) => !isRaw(r.product)).length;
   const attentionRaw = attention.filter((r) => isRaw(r.product)).length;
   const unavailableCount = allRows.filter((row) => row.status === 'unavailable').length;
+  const expiry = useMemo(() => expiryAlerts(state), [state]);
+  const expiredCount = expiry.filter((item) => item.band === 'vencido').length;
+  const soonCount = expiry.filter((item) => item.band !== 'vencido').length;
+  const expiringProducts = useMemo(
+    () => filterInventoryRows(allRows, { status: 'expiring', kind }),
+    [allRows, kind],
+  );
   const reservedCount = allRows.filter((row) => row.reserved > 0).length;
   const linkedBlocked = useMemo(
     () =>
@@ -244,6 +254,7 @@ export function InventoryWorkspace({
   const quickFilters: { value: InventoryFilter; label: string; count: number }[] = [
     { value: 'all', label: 'Todos', count: allRows.length },
     { value: 'attention', label: 'Por reponer', count: attention.length },
+    { value: 'expiring', label: 'Por caducar', count: expiringProducts.length },
     { value: 'unavailable', label: 'Sin disponibilidad', count: unavailableCount },
     { value: 'reserved', label: 'Con reservas', count: reservedCount },
   ];
@@ -357,7 +368,56 @@ export function InventoryWorkspace({
           active={status === 'attention'}
           onClick={() => updateParams({ estado: status === 'attention' ? '' : 'attention' })}
         />
+        <Kpi
+          label="Por caducar"
+          icon="calendar"
+          tone={expiry.length ? 'warning' : 'default'}
+          value={expiringProducts.length}
+          caption={
+            expiry.length
+              ? `${expiredCount} vencido${expiredCount === 1 ? '' : 's'} · ${soonCount} ≤ 90 días`
+              : 'Sin lotes en 90 días'
+          }
+          active={status === 'expiring'}
+          onClick={() =>
+            updateParams({
+              estado: status === 'expiring' ? '' : 'expiring',
+              orden: status === 'expiring' ? '' : 'expiry',
+            })
+          }
+        />
       </KpiGrid>
+
+      {expiry.length > 0 ? (
+        <div className="inv-expiry-banner" role="status">
+          <Icon name="alert" />
+          <div className="inv-expiry-banner-copy">
+            <strong>
+              {expiredCount > 0
+                ? `${expiredCount} lote${expiredCount === 1 ? '' : 's'} vencido${expiredCount === 1 ? '' : 's'}`
+                : 'Productos por caducar'}
+              {soonCount > 0 ? ` · ${soonCount} por vencer en ≤ 90 días` : ''}
+            </strong>
+            <span>
+              {expiry[0]
+                ? `${expiry[0].name} · ${expiry[0].loc} · ${
+                    expiry[0].days < 0 ? 'vencido' : `vence en ${expiry[0].days} días`
+                  }`
+                : 'Revisa lotes antes de despachar.'}{' '}
+              Al preparar se usa FIFO (fecha de entrada).
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              updateParams({ estado: 'expiring', orden: 'expiry', tipo: '' });
+              catalogRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+          >
+            Ver caducidades <Icon name="arrow" />
+          </button>
+        </div>
+      ) : null}
 
       {linkedBlocked.length > 0 ? (
         <div className="inv-linked-banner" role="status">
@@ -811,10 +871,31 @@ export function InventoryWorkspace({
 }
 
 function StatusBadge({ row }: { row: InventoryRow }) {
+  const expiry =
+    row.nearestExpiryDays != null && row.nearestExpiryDays <= 90 ? (
+      <Badge
+        text={
+          row.nearestExpiryDays < 0
+            ? 'Vencido'
+            : row.nearestExpiryDays <= 30
+              ? `Vence ${row.nearestExpiryDays}d`
+              : `Caduca ${row.nearestExpiryDays}d`
+        }
+        color={row.nearestExpiryDays <= 30 ? 'amber' : 'muted'}
+      />
+    ) : null;
   if (row.status === 'healthy') {
-    return <span className="inv-status-badge healthy">En nivel</span>;
+    return (
+      <span className="inv-status-stack">
+        <span className="inv-status-badge healthy">En nivel</span>
+        {expiry}
+      </span>
+    );
   }
   return (
-    <span className={`inv-status-badge ${row.status}`}>{inventoryStatusLabels[row.status]}</span>
+    <span className="inv-status-stack">
+      <span className={`inv-status-badge ${row.status}`}>{inventoryStatusLabels[row.status]}</span>
+      {expiry}
+    </span>
   );
 }

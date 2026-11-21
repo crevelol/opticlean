@@ -313,7 +313,13 @@ export function move(
   if (blocked) throw new Error(blocked);
   const from = lot.loc;
   lot.qty -= qty;
-  s.lots.push({ ...lot, id: uid('lot'), qty, loc: data.to });
+  s.lots.push({
+    ...lot,
+    id: uid('lot'),
+    qty,
+    loc: data.to,
+    receivedAt: lot.receivedAt ?? todayGuayaquil(),
+  });
   s.lots = s.lots.filter((l) => l.qty > 0);
   addEvent(s, 'Traslado', lot.productId, qty, from, data.to, uid('MOV'), lot.batch);
 }
@@ -403,9 +409,36 @@ export function createOrder(
 
 export type PickPlanLine = Lot & { qty: number };
 
-/** FEFO: primero lo que vence antes; a igual vencimiento, lo que entró primero. */
+/** Fecha de entrada: receivedAt → recepción del lote → caducidad como último recurso. */
+export function lotEntryDate(s: AppState, lot: Lot): string {
+  if (lot.receivedAt && /^\d{4}-\d{2}-\d{2}/.test(lot.receivedAt)) {
+    return lot.receivedAt.slice(0, 10);
+  }
+  const linked = receiptOfLot(s, lot);
+  if (linked?.date && /^\d{4}-\d{2}-\d{2}/.test(linked.date)) return linked.date.slice(0, 10);
+  const receipt = s.receipts.find(
+    (r) => r.productId === lot.productId && r.batch === lot.batch && /^\d{4}-\d{2}-\d{2}/.test(r.date),
+  );
+  if (receipt) return receipt.date.slice(0, 10);
+  if (lot.expiry && /^\d{4}-\d{2}-\d{2}/.test(lot.expiry)) return lot.expiry.slice(0, 10);
+  return '9999-12-31';
+}
+
+/** FIFO por fecha de entrada; empate por caducidad más cercana (y hora de ingreso). */
 export function fefoCompare(a: Lot, b: Lot) {
-  return a.expiry.localeCompare(b.expiry) || (a.receivedAt ?? '').localeCompare(b.receivedAt ?? '');
+  const byEntry = (a.receivedAt ?? '').localeCompare(b.receivedAt ?? '');
+  if (byEntry) return byEntry;
+  return a.expiry.localeCompare(b.expiry) || a.loc.localeCompare(b.loc);
+}
+
+function compareLotsFifo(s: AppState, a: Lot, b: Lot) {
+  const byEntry = lotEntryDate(s, a).localeCompare(lotEntryDate(s, b));
+  if (byEntry) return byEntry;
+  return (
+    (a.receivedAt ?? '').localeCompare(b.receivedAt ?? '') ||
+    (a.expiry || '9999').localeCompare(b.expiry || '9999') ||
+    a.loc.localeCompare(b.loc)
+  );
 }
 
 export function pickPlan(s: AppState, order: Order): PickPlanLine[] {
@@ -415,18 +448,19 @@ export function pickPlan(s: AppState, order: Order): PickPlanLine[] {
     let left = line.qty;
     const lots = lotsForActiveWarehouse(s)
       .filter((l) => l.productId === line.productId && isLotSellable(s, l, today))
-      .sort(fefoCompare);
+      .sort((a, b) => compareLotsFifo(s, a, b));
     for (const l of lots) {
       if (!left) break;
       const qty = Math.min(l.qty, left);
-      plan.push({ ...l, qty });
+      plan.push({ ...l, qty, receivedAt: lotEntryDate(s, l) });
       left -= qty;
     }
     if (left) {
       throw new Error(`Faltan ${left} unidades de ${product(s, line.productId)?.name}.`);
     }
   }
-  return plan.sort((a, b) => a.loc.localeCompare(b.loc));
+  // Mantener orden FIFO (fecha de entrada) en la ruta de picking.
+  return plan;
 }
 
 export function prepare(s: AppState, orderId: string) {

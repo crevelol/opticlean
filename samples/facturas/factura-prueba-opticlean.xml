@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<factura id="comprobante" version="1.1.0">
+  <infoTributaria>
+    <ambiente>1</ambiente>
+    <tipoEmision>1</tipoEmision>
+    <razonSocial>OPTICLEAN DISTRIBUIDORA CIA. LTDA.</razonSocial>
+    <nombreComercial>OptiClean</nombreComercial>
+    <ruc>1792146739001</ruc>
+    <claveAcceso>2011202601179214673900110010010000001231234567811</claveAcceso>
+    <codDoc>01</codDoc>
+    <estab>001</estab>
+    <ptoEmi>001</ptoEmi>
+    <secuencial>000000123</secuencial>
+    <dirMatriz>Av. Amazonas N34-120 y Rumipamba, Quito</dirMatriz>
+  </infoTributaria>
+  <infoFactura>
+    <fechaEmision>20/11/2026</fechaEmision>
+    <dirEstablecimiento>Av. Amazonas N34-120 y Rumipamba, Quito</dirEstablecimiento>
+    <obligadoContabilidad>SI</obligadoContabilidad>
+    <tipoIdentificacionComprador>04</tipoIdentificacionComprador>
+    <razonSocialComprador>Hotel Alameda S.A.</razonSocialComprador>
+    <identificacionComprador>1790012345001</identificacionComprador>
+    <direccionComprador>Av. 12 de Octubre N24-562 y Cordero, Quito</direccionComprador>
+    <correoComprador>compras@alameda.example</correoComprador>
+    <totalSinImpuestos>86.50</totalSinImpuestos>
+    <totalDescuento>0.00</totalDescuento>
+    <totalConImpuestos>
+      <totalImpuesto>
+        <codigo>2</codigo>
+        <codigoPorcentaje>2</codigoPorcentaje>
+        <baseImponible>86.50</baseImponible>
+        <valor>12.98</valor>
+      </totalImpuesto>
+    </totalConImpuestos>
+    <propina>0.00</propina>
+    <importeTotal>99.48</importeTotal>
+    <moneda>DOLAR</moneda>
+  </infoFactura>
+  <detalles>
+    <detalle>
+      <codigoPrincipal>P001</codigoPrincipal>
+      <descripcion>Limpiador multiusos 1 L</descripcion>
+      <cantidad>12</cantidad>
+      <precioUnitario>2.50</precioUnitario>
+      <descuento>0.00</descuento>
+      <precioTotalSinImpuesto>30.00</precioTotalSinImpuesto>
+      <unidadMedida>unidad</unidadMedida>
+      <lote>LT-VAL-001</lote>
+      <fechaCaducidad>2027-06-30</fechaCaducidad>
+      <impuestos>
+        <impuesto>
+          <codigo>2</codigo>
+          <codigoPorcentaje>2</codigoPorcentaje>
+          <tarifa>15</tarifa>
+          <baseImponible>30.00</baseImponible>
+          <valor>4.50</valor>
+        </impuesto>
+      </impuestos>
+    </detalle>
+    <detalle>
+      <codigoPrincipal>P032</codigoPrincipal>
+      <descripcion>Limpiador de pisos 5 L</descripcion>
+      <cantidad>4</cantidad>
+      <precioUnitario>8.50</precioUnitario>
+      <descuento>0.00</descuento>
+      <precioTotalSinImpuesto>34.00</precioTotalSinImpuesto>
+      <unidadMedida>unidad</unidadMedida>
+      <lote>LT-VAL-032</lote>
+      <fechaCaducidad>2027-03-15</fechaCaducidad>
+      <impuestos>
+        <impuesto>
+          <codigo>2</codigo>
+          <codigoPorcentaje>2</codigoPorcentaje>
+          <tarifa>15</tarifa>
+          <baseImponible>34.00</baseImponible>
+          <valor>5.10</valor>
+        </impuesto>
+      </impuestos>
+    </detalle>
+    <detalle>
+      <codigoPrincipal>P018</codigoPrincipal>
+      <descripcion>Cloro 5 L</descripcion>
+      <cantidad>5</cantidad>
+      <precioUnitario>4.50</precioUnitario>
+      <descuento>0.00</descuento>
+      <precioTotalSinImpuesto>22.50</precioTotalSinImpuesto>
+      <unidadMedida>unidad</unidadMedida>
+      <lote>LT-VAL-018</lote>
+      <fechaCaducidad>2027-01-20</fechaCaducidad>
+      <impuestos>
+        <impuesto>
+          <codigo>2</codigo>
+          <codigoPorcentaje>2</codigoPorcentaje>
+          <tarifa>15</tarifa>
+          <baseImponible>22.50</baseImponible>
+          <valor>3.38</valor>
+        </impuesto>
+      </impuestos>
+    </detalle>
+  </detalles>
+  <infoAdicional>
+    <campoAdicional nombre="Email">compras@alameda.example</campoAdicional>
+    <campoAdicional nombre="Observacion">Factura de prueba OptiClean · validación importación</campoAdicional>
+  </infoAdicional>
+</factura>

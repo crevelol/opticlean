@@ -68,6 +68,7 @@ export type Lot = {
   warehouseId?: string;
   purchaseId?: string;
   receiptId?: string;
+  /** Fecha/hora de ingreso a bodega (FIFO al preparar). */
   receivedAt?: string;
   /** Retenido en inspección de calidad. */
   onHold?: boolean;

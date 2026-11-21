@@ -60,9 +60,9 @@ export const sellableStock = (s: AppState, id: string) =>
 
 export const available = (s: AppState, id: string) => sellableStock(s, id) - reserved(s, id);
 
-/** FEFO: vence antes primero; a igual vencimiento, lo que entró antes. */
+/** FIFO: entró antes primero; a igual ingreso, vence antes. */
 export const fefoCompare = (a: Lot, b: Lot) =>
-  a.expiry.localeCompare(b.expiry) || (a.receivedAt ?? '').localeCompare(b.receivedAt ?? '');
+  (a.receivedAt ?? '').localeCompare(b.receivedAt ?? '') || a.expiry.localeCompare(b.expiry);
 
 /** Lotes vendibles de un producto en orden de salida (1 = sale primero). */
 export const exitOrder = (s: AppState, productId: string) =>

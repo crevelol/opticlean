@@ -249,7 +249,9 @@ export function InventoryDetailPanel({
       <div id={`${id}-lots`} className="inv-detail-tab-content" role="tabpanel" aria-labelledby={`${id}-lots-tab`} hidden={tab !== 'lots'} tabIndex={0}>
         {lots.length > 0 ? (
           <>
-            <p className="inv-detail-section-note">En orden de salida: primero lo que vence antes; a igual fecha, lo que entró antes.</p>
+            <p className="inv-detail-section-note">
+              En orden de salida: primero lo que entró antes (FIFO); a igual fecha, lo que vence antes.
+            </p>
             <ul className="inv-detail-lots">
               {lots.map((lot) => {
                 const sellable = isLotSellable(state, lot);

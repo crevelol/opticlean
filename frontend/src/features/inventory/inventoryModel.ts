@@ -1,4 +1,5 @@
 import { reserved, scopedLots, isLotSellable } from '../../shared/lib/inventory';
+import { expiryAlerts } from '../../shared/lib/wholesale';
 import type { AppState, Lot, Product } from '../../shared/types';
 
 export type InventoryRow = {
@@ -14,11 +15,27 @@ export type InventoryRow = {
   status: 'healthy' | 'low' | 'unavailable';
   shortage: number;
   stockValue: number;
+  /** Días al lote más próximo a vencer (negativo = vencido). Null si no aplica. */
+  nearestExpiryDays: number | null;
+  nearestExpiry: string | null;
 };
 
-export type InventoryFilter = 'all' | 'attention' | 'low' | 'unavailable' | 'reserved' | 'healthy';
+export type InventoryFilter =
+  | 'all'
+  | 'attention'
+  | 'low'
+  | 'unavailable'
+  | 'reserved'
+  | 'healthy'
+  | 'expiring';
 export type InventoryKindFilter = 'all' | 'finished' | 'raw';
-export type InventorySort = 'attention' | 'name' | 'stock-desc' | 'available-asc' | 'value-desc';
+export type InventorySort =
+  | 'attention'
+  | 'name'
+  | 'stock-desc'
+  | 'available-asc'
+  | 'value-desc'
+  | 'expiry';
 
 export type InventoryFilters = {
   query?: string;
@@ -38,6 +55,18 @@ export const inventoryStatusLabels: Record<InventoryRow['status'], string> = {
 const collator = new Intl.Collator('es', { numeric: true, sensitivity: 'base' });
 const statusPriority = { unavailable: 0, low: 1, healthy: 2 };
 
+function nearestExpiryInfo(lots: Lot[]) {
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+  const todayMs = Date.parse(`${today}T12:00:00Z`);
+  let best: { days: number; expiry: string } | null = null;
+  for (const lot of lots) {
+    if (!lot.expiry || !/^\d{4}-\d{2}-\d{2}/.test(lot.expiry)) continue;
+    const days = Math.round((Date.parse(`${lot.expiry.slice(0, 10)}T12:00:00Z`) - todayMs) / 864e5);
+    if (!best || days < best.days) best = { days, expiry: lot.expiry.slice(0, 10) };
+  }
+  return best;
+}
+
 export function buildInventoryRows(state: AppState): InventoryRow[] {
   const lotsByProduct = new Map<string, Lot[]>();
   for (const lot of scopedLots(state)) {
@@ -55,6 +84,7 @@ export function buildInventoryRows(state: AppState): InventoryRow[] {
     // Solo cuenta como disponible lo vendible hoy (sin vencidos, retenidos ni bajo vida útil mínima).
     const sellable = lots.filter((lot) => isLotSellable(state, lot)).reduce((total, lot) => total + lot.qty, 0);
     const available = sellable - reservedQty;
+    const nearest = nearestExpiryInfo(lots);
     return {
       product,
       stock,
@@ -68,8 +98,14 @@ export function buildInventoryRows(state: AppState): InventoryRow[] {
       // Valor a costo promedio, el que cuadra con contabilidad.
       stockValue: stock * (product.avgCost ?? 0),
       saleValue: stock * product.price,
+      nearestExpiryDays: nearest?.days ?? null,
+      nearestExpiry: nearest?.expiry ?? null,
     };
   });
+}
+
+export function productIdsWithExpiryAlert(state: AppState) {
+  return new Set(expiryAlerts(state).map((a) => a.productId));
 }
 
 const normalizeSearch = (value: string) =>
@@ -90,7 +126,16 @@ export function filterInventoryRows(rows: InventoryRow[], filters: InventoryFilt
     if (supplier && row.product.supplier !== supplier) return false;
     if (status === 'attention' && row.status === 'healthy') return false;
     if (status === 'reserved' && row.reserved <= 0) return false;
-    if (status !== 'all' && status !== 'attention' && status !== 'reserved' && row.status !== status) return false;
+    if (status === 'expiring') {
+      if (row.nearestExpiryDays == null || row.nearestExpiryDays > 90) return false;
+    } else if (
+      status !== 'all' &&
+      status !== 'attention' &&
+      status !== 'reserved' &&
+      row.status !== status
+    ) {
+      return false;
+    }
     if (!tokens.length) return true;
     const searchable = normalizeSearch([
       row.product.name,
@@ -111,6 +156,10 @@ export function filterInventoryRows(rows: InventoryRow[], filters: InventoryFilt
         return a.available - b.available || byName(a, b);
       case 'value-desc':
         return b.stockValue - a.stockValue || byName(a, b);
+      case 'expiry':
+        return (
+          (a.nearestExpiryDays ?? 99999) - (b.nearestExpiryDays ?? 99999) || byName(a, b)
+        );
       default:
         return byName(a, b);
     }

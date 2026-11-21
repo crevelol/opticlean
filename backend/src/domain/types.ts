@@ -84,7 +84,7 @@ export type Lot = {
   purchaseId?: string;
   /** Recepción que lo ingresó. */
   receiptId?: string;
-  /** Fecha y hora de ingreso a bodega (desempate FIFO). */
+  /** Fecha/hora de ingreso a bodega (FIFO al preparar). */
   receivedAt?: string;
   /** Retenido en inspección de calidad: no se vende hasta liberarlo. */
   onHold?: boolean;
