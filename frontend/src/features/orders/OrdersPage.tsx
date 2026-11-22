@@ -11,12 +11,13 @@ import {
   product,
   statusColor,
 } from '../../shared/lib/inventory';
-import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
+import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead, Button } from '../../shared/components/ui';
 import { SegmentedControl } from '../../shared/components/Tabs';
 import { Modal } from '../../shared/components/Modal';
 import { Icon } from '../../shared/components/Icon';
 import { AssignPicker } from './AssignPicker';
 import '../../styles/orders.css';
+import { Pagination } from '../../shared/components/Pagination';
 
 const tabs = [
   'Todos',
@@ -114,8 +115,6 @@ export function OrdersPage() {
   const pageCount = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const pageList = list.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-  const rangeFrom = list.length ? (safePage - 1) * PAGE_SIZE + 1 : 0;
-  const rangeTo = Math.min(safePage * PAGE_SIZE, list.length);
   const detail = detailId ? liveOrders.find((o) => o.id === detailId) : null;
   const detailClient = detail ? client(state, detail.clientId) : null;
   const detailTotal = detail ? orderValue(state, detail) : 0;
@@ -267,40 +266,15 @@ export function OrdersPage() {
           />
         )}
         {list.length ? (
-          <div className="ord-pagination" aria-label="Paginación de pedidos">
-            <span>
-              Mostrando {rangeFrom}–{rangeTo} de {list.length}
-            </span>
-            <div>
-              <button
-                type="button"
-                disabled={safePage <= 1}
-                aria-label="Página anterior"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                <Icon name="back" />
-              </button>
-              {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  className={n === safePage ? 'is-active' : ''}
-                  aria-current={n === safePage ? 'page' : undefined}
-                  onClick={() => setPage(n)}
-                >
-                  {n}
-                </button>
-              ))}
-              <button
-                type="button"
-                disabled={safePage >= pageCount}
-                aria-label="Página siguiente"
-                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-              >
-                <Icon name="arrow" />
-              </button>
-            </div>
-          </div>
+          <Pagination
+            label="Paginación de pedidos"
+            className="ord-pagination"
+            page={safePage}
+            pageCount={pageCount}
+            total={list.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+          />
         ) : null}
       </section>
 
@@ -374,13 +348,9 @@ export function OrdersPage() {
                       {detail.purchaseIds.map((id, i) => (
                         <span key={id}>
                           {i ? ', ' : ''}
-                          <button
-                            type="button"
-                            className="fx-link"
-                            onClick={() => navigate('/compras', { state: { focus: id } })}
-                          >
+                          <Button variant="link" className="fx-link" onClick={() => navigate('/compras', { state: { focus: id } })}>
                             {id}
-                          </button>
+                          </Button>
                         </span>
                       ))}
                     </p>

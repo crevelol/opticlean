@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { product, dateShort, time } from '../../shared/lib/inventory';
 import { exportEvents } from '../../shared/lib/csv';
-import { Badge, Btn, Empty, PageHead } from '../../shared/components/ui';
+import { Badge, Btn, Empty, PageHead, Button } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { SegmentedControl } from '../../shared/components/Tabs';
 import { useAuth } from '../../shared/hooks/AuthProvider';
@@ -181,20 +181,12 @@ export function TraceabilityPage() {
                     </small>
                     {isRoute && e.ref ? (
                       <div className="trz-actions">
-                        <button
-                          type="button"
-                          className="trz-link"
-                          onClick={() => navigate('/logistica/historial')}
-                        >
+                        <Button variant="link" className="trz-link" onClick={() => navigate('/logistica/historial')}>
                           Ver en rutas
-                        </button>
-                        <button
-                          type="button"
-                          className="trz-link"
-                          onClick={() => navigate('/pedidos')}
-                        >
+                        </Button>
+                        <Button variant="link" className="trz-link" onClick={() => navigate('/pedidos')}>
                           Ir a pedidos
-                        </button>
+                        </Button>
                       </div>
                     ) : null}
                   </div>

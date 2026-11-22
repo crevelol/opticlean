@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { Modal } from '../../shared/components/Modal';
 import { Select } from '../../shared/components/Select';
-import { Btn } from '../../shared/components/ui';
+import { Btn, Button } from '../../shared/components/ui';
 import {
   basisLabel,
   calcLabel,
@@ -349,12 +349,12 @@ export function VehicleCostRulesModal({
                     <td>{formatUnitCost(rule)}</td>
                     <td>{rule.active ? 'Activa' : 'Off'}</td>
                     <td className="fleet-config-actions">
-                      <button type="button" disabled={busy} onClick={() => void toggle(rule)}>
+                      <Button size="small" disabled={busy} onClick={() => void toggle(rule)}>
                         {rule.active ? 'Desactivar' : 'Activar'}
-                      </button>
-                      <button type="button" disabled={busy} onClick={() => void remove(rule)}>
+                      </Button>
+                      <Button variant="danger" size="small" disabled={busy} onClick={() => void remove(rule)}>
                         Eliminar
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}

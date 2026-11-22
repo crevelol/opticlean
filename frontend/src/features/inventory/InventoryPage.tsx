@@ -26,8 +26,8 @@ import {
 } from './inventoryModel';
 import '../../styles/inventory.css';
 import { Checkbox } from '../../shared/components/Checkbox';
-import { Tooltip } from '../../shared/components/Tooltip';
 import { ChipGroup } from '../../shared/components/Chip';
+import { IconButton } from '../../shared/components/IconButton';
 
 const PAGE_CHUNK = 10;
 const statusOptions: { value: InventoryFilter; label: string }[] = [
@@ -391,15 +391,12 @@ export function InventoryWorkspace({
               Al preparar se usa FIFO (fecha de entrada).
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => {
+          <Button variant="link" onClick={() => {
               updateParams({ estado: 'expiring', orden: 'expiry', tipo: '' });
               catalogRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }}
-          >
+            }}>
             Ver caducidades <Icon name="arrow" />
-          </button>
+          </Button>
         </div>
       ) : null}
 
@@ -409,15 +406,12 @@ export function InventoryWorkspace({
           <span>
             <strong>{linkedBlocked.length}</strong> productos vinculados a insumos bajo mínimo
           </span>
-          <button
-            type="button"
-            onClick={() => {
+          <Button variant="link" onClick={() => {
               updateParams({ estado: 'attention', tipo: '' });
               catalogRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }}
-          >
+            }}>
             Ver afectados <Icon name="arrow" />
-          </button>
+          </Button>
         </div>
       ) : null}
 
@@ -503,15 +497,15 @@ export function InventoryWorkspace({
                 ))}
               </Select>
             </label>
-            <button
-              type="button"
+            <Button
               className={`inv-more-filters ${filtersOpen || supplier ? 'is-active' : ''}`}
               aria-expanded={filtersOpen}
+              data-state={filtersOpen ? 'open' : 'closed'}
               onClick={() => setFiltersOpen((open) => !open)}
             >
               Más filtros
-              <Icon name="chevron" />
-            </button>
+              <Icon name="chevron" className="ui-menu-chevron" />
+            </Button>
             <label className="inv-select inv-sort-select">
               <span>Orden</span>
               <Select
@@ -547,9 +541,9 @@ export function InventoryWorkspace({
                 </Select>
               </label>
               {hasFilters ? (
-                <button type="button" className="inv-text-button" onClick={resetFilters}>
+                <Button variant="link" className="inv-text-button" onClick={resetFilters}>
                   <Icon name="close" /> Limpiar filtros
-                </button>
+                </Button>
               ) : null}
             </div>
           ) : null}
@@ -679,24 +673,11 @@ export function InventoryWorkspace({
                               </td>
                               <td className="inv-col-actions">
                                 <div className="inv-table-actions">
-                                  <button
-                                    type="button"
-                                    className="inv-receive-btn"
-                                    onClick={() => receive(row.product.id)}
-                                  >
+                                  <Button size="small" className="inv-receive-btn" onClick={() => receive(row.product.id)}>
                                     <Icon name="receive" />
                                     Recibir
-                                  </button>
-                                  <Tooltip content={"Más acciones"}><button
-                                    type="button"
-                                    className="inv-more-btn"
-                                    aria-label={`Más acciones de ${row.product.name}`}
-                                    onClick={() => selectProduct(row.product.id)}
-                                  >
-                                    <span />
-                                    <span />
-                                    <span />
-                                  </button></Tooltip>
+                                  </Button>
+                                  <IconButton icon="more" label={`Más acciones de ${row.product.name}`} className="inv-more-btn" onClick={() => selectProduct(row.product.id)} />
                                 </div>
                               </td>
                             </tr>
@@ -755,13 +736,9 @@ export function InventoryWorkspace({
                     Mostrando {visibleRows.length} de {rows.length} ítems
                   </span>
                   {visibleCount < rows.length ? (
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => setVisibleCount((n) => n + PAGE_CHUNK)}
-                    >
+                    <Button type="button" onClick={() => setVisibleCount((n) => n + PAGE_CHUNK)}>
                       Cargar más
-                    </button>
+                    </Button>
                   ) : null}
                 </div>
               </>

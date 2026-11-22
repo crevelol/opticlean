@@ -5,6 +5,7 @@ import { cx } from '../../shared/components/ui';
 import { spring } from '../../shared/motion/presets';
 import type { MenuSection } from '../navigation';
 import { Tooltip } from '../../shared/components/Tooltip';
+import { IconButton } from '../../shared/components/IconButton';
 
 type Props = {
   sections: MenuSection[];
@@ -107,14 +108,7 @@ export function Sidebar({
             <strong>{user.name}</strong>
             <span>{user.role}</span>
           </div></Tooltip>
-          <Tooltip content={"Cerrar sesión"} side="right"><button
-            type="button"
-            className="icon-btn sidebar-logout"
-            onClick={onLogout}
-            aria-label="Cerrar sesión"
-          >
-            <Icon name="logout" />
-          </button></Tooltip>
+          <IconButton tooltipSide="right" icon="logout" label="Cerrar sesión" className="sidebar-logout" onClick={onLogout} />
         </div>
       </div>
     </aside>

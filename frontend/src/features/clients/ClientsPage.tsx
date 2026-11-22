@@ -11,7 +11,7 @@ import {
   orderValue,
   statusColor,
 } from '../../shared/lib/inventory';
-import { Badge, Btn, PageHead } from '../../shared/components/ui';
+import { Badge, Btn, PageHead, Button } from '../../shared/components/ui';
 import { Menu, MoreButton } from '../../shared/components/Menu';
 import { TabPanel, Tabs, SegmentedControl } from '../../shared/components/Tabs';
 import { resolveBusinessRules } from '../../shared/lib/businessRules';
@@ -19,6 +19,8 @@ import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import type { Client, Order } from '../../shared/types';
 import '../../styles/clients.css';
+import { Pagination } from '../../shared/components/Pagination';
+import { IconButton } from '../../shared/components/IconButton';
 
 type CreditFilter = 'all' | 'ok' | 'tight' | 'full';
 type ViewMode = 'list' | 'cards';
@@ -118,8 +120,6 @@ export function ClientsPage() {
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const pageRows = rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-  const rangeFrom = rows.length ? (safePage - 1) * PAGE_SIZE + 1 : 0;
-  const rangeTo = Math.min(safePage * PAGE_SIZE, rows.length);
 
   if (!state) return null;
 
@@ -378,40 +378,15 @@ export function ClientsPage() {
           )}
 
           {rows.length ? (
-            <div className="cli-pagination" aria-label="Paginación de clientes">
-              <span>
-                Mostrando {rangeFrom}–{rangeTo} de {rows.length}
-              </span>
-              <div>
-                <button
-                  type="button"
-                  disabled={safePage <= 1}
-                  aria-label="Página anterior"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  <Icon name="back" />
-                </button>
-                {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    className={n === safePage ? 'is-active' : ''}
-                    aria-current={n === safePage ? 'page' : undefined}
-                    onClick={() => setPage(n)}
-                  >
-                    {n}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  disabled={safePage >= pageCount}
-                  aria-label="Página siguiente"
-                  onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-                >
-                  <Icon name="arrow" />
-                </button>
-              </div>
-            </div>
+            <Pagination
+              label="Paginación de clientes"
+              className="cli-pagination"
+              page={safePage}
+              pageCount={pageCount}
+              total={rows.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+            />
           ) : null}
         </section>
 
@@ -423,14 +398,7 @@ export function ClientsPage() {
                 <h2>{selected.client.name}</h2>
                 <Badge text={selected.client.type} color="blue" />
               </div>
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label="Cerrar ficha"
-                onClick={() => setSelectedId(null)}
-              >
-                <Icon name="close" />
-              </button>
+              <IconButton icon="close" label="Cerrar ficha" onClick={() => setSelectedId(null)} />
             </header>
 
             <Tabs
@@ -465,9 +433,9 @@ export function ClientsPage() {
                     <div className="cli-credit-box-head">
                       <strong>Cupo de crédito</strong>
                       {isAdmin ? (
-                        <button type="button" onClick={() => openCredit(selected.client)}>
+                        <Button variant="link" onClick={() => openCredit(selected.client)}>
                           Editar
-                        </button>
+                        </Button>
                       ) : null}
                     </div>
                     <div className="cli-credit-stats">
@@ -487,13 +455,9 @@ export function ClientsPage() {
                     <div className="cli-credit-bar">
                       <span style={{ width: `${selected.pct}%` }} />
                     </div>
-                    <button
-                      type="button"
-                      className="cli-text-link"
-                      onClick={() => setTab('pedidos')}
-                    >
+                    <Button variant="link" className="cli-text-link" onClick={() => setTab('pedidos')}>
                       Ver pedidos que usan el cupo
-                    </button>
+                    </Button>
                   </div>
 
                   <div className="cli-orders-summary">
@@ -588,13 +552,9 @@ export function ClientsPage() {
               >
                 Crear pedido
               </Btn>
-              <button
-                type="button"
-                className="cli-text-link"
-                onClick={() => openCredit(selected.client)}
-              >
+              <Button variant="link" className="cli-text-link" onClick={() => openCredit(selected.client)}>
                 Editar cliente
-              </button>
+              </Button>
             </footer>
           </aside>
         ) : null}

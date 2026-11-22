@@ -5,7 +5,7 @@ import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
 import { activeWarehouseId, available, product, qtyAt, stock } from '../../shared/lib/inventory';
 import { buildWarehouseGeometry, faceLabel, normalizeLayout } from '../../shared/lib/warehouseLayout';
-import { Btn, PageHead, cx } from '../../shared/components/ui';
+import { Btn, PageHead, cx, Button } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal } from '../../shared/components/Modal';
 import { WarehouseEmbed } from '../warehouse/WarehouseEmbed';
@@ -520,9 +520,9 @@ export function ReceptionNewPage() {
                         <dt>{row.k}</dt>
                         <dd>
                           <span>{row.v}</span>
-                          <button type="button" className="reception-edit" onClick={() => setStep(row.step)}>
+                          <Button variant="link" className="reception-edit" onClick={() => setStep(row.step)}>
                             Editar
-                          </button>
+                          </Button>
                         </dd>
                       </div>
                     ))}
@@ -548,14 +548,14 @@ export function ReceptionNewPage() {
                 </Btn>
               )}
               {step < steps.length - 1 ? (
-                <button type="submit" className="btn primary" disabled={!stepValid[step]}>
+                <Button variant="primary" type="submit" disabled={!stepValid[step]}>
                   Siguiente
-                </button>
+                </Button>
               ) : (
-                <button type="submit" className="btn primary" disabled={!canSubmit}>
+                <Button variant="primary" type="submit" disabled={!canSubmit}>
                   <Icon name="check" />
                   {saving ? 'Registrando…' : 'Confirmar recepción'}
-                </button>
+                </Button>
               )}
             </div>
           </fieldset>

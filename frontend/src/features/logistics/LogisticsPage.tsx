@@ -11,7 +11,7 @@ import {
   product,
   statusColor,
 } from '../../shared/lib/inventory';
-import { Badge, Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
+import { Badge, Btn, Kpi, KpiGrid, PageHead, Button } from '../../shared/components/ui';
 import { SegmentedControl } from '../../shared/components/Tabs';
 import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
@@ -506,18 +506,13 @@ export function LogisticsPage() {
                                 </span>
                               </button>
                               {o.status === 'Por preparar' ? (
-                                <button
-                                  type="button"
-                                  className="log-order-ready btn small primary"
-                                  disabled={preparingId === o.id}
-                                  onClick={(e) => {
+                                <Button variant="primary" size="small" className="log-order-ready" type="button" disabled={preparingId === o.id} onClick={(e) => {
                                     e.stopPropagation();
                                     void markReady(o.id);
-                                  }}
-                                >
+                                  }}>
                                   <Icon name="check" />
                                   {preparingId === o.id ? 'Preparando…' : 'Marcar listo'}
-                                </button>
+                                </Button>
                               ) : null}
                             </li>
                           );
@@ -576,14 +571,10 @@ export function LogisticsPage() {
                 <Icon name="truck" />
                 Vehículos disponibles
               </h3>
-              <button
-                type="button"
-                className="log-filter-btn"
-                onClick={() => setFleetConfigOpen(true)}
-              >
+              <Button size="small" className="log-filter-btn" onClick={() => setFleetConfigOpen(true)}>
                 <Icon name="settings" />
                 Configurar flota
-              </button>
+              </Button>
             </div>
             <ul className="log-truck-list">
               {fleet.map((t) => {

@@ -15,7 +15,7 @@ import {
   outstandingReceivable,
   product,
 } from '../../shared/lib/inventory';
-import { Btn, Empty, PageHead } from '../../shared/components/ui';
+import { Btn, Empty, PageHead, Button } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { SegmentedControl } from '../../shared/components/Tabs';
 import { ImportDialog } from '../imports/ImportDialog';
@@ -288,9 +288,9 @@ export function NewOrderPage() {
               <section className="no-card">
                 <header className="no-card-head">
                   <h2>Cliente</h2>
-                  <button type="button" className="no-link" onClick={() => navigate('/clientes')}>
+                  <Button variant="link" className="no-link" onClick={() => navigate('/clientes')}>
                     <Icon name="plus" /> Nuevo cliente
-                  </button>
+                  </Button>
                 </header>
 
                 <label className="no-search-field">
@@ -361,9 +361,9 @@ export function NewOrderPage() {
                 <header className="no-card-head">
                   <h2>Entrega</h2>
                   {selected ? (
-                    <button type="button" className="no-link" onClick={() => navigate('/clientes')}>
+                    <Button variant="link" className="no-link" onClick={() => navigate('/clientes')}>
                       <Icon name="edit" /> Editar dirección
-                    </button>
+                    </Button>
                   ) : null}
                 </header>
 
@@ -516,9 +516,9 @@ export function NewOrderPage() {
                             <Icon name="plus" />
                           </em>
                         </button>
-                        <button type="button" className="btn" onClick={() => setArming({ id: b.id, qty: 1, batch: '', expiry: '' })}>
+                        <Button type="button" onClick={() => setArming({ id: b.id, qty: 1, batch: '', expiry: '' })}>
                           Armar en bodega
-                        </button>
+                        </Button>
                       </div>
                     ))}
               </div>
@@ -544,7 +544,7 @@ export function NewOrderPage() {
                     <input id="arm-expiry" type="date" value={arming.expiry} onChange={(event) => setArming({ ...arming, expiry: event.target.value })} required />
                   </div>
                   <div className="field">
-                    <button type="submit" className="btn primary" disabled={busy}>Armar</button>
+                    <Button variant="primary" type="submit" disabled={busy}>Armar</Button>
                   </div>
                 </form>
               ) : null}

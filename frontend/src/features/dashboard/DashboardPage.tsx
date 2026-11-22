@@ -17,12 +17,13 @@ import {
 } from '../../shared/lib/inventory';
 import { buildForecast } from '../../shared/lib/forecast';
 import { expiryAlerts } from '../../shared/lib/wholesale';
-import { Badge, Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
+import { Badge, Btn, Kpi, KpiGrid, PageHead, Button } from '../../shared/components/ui';
 import { SegmentedControl } from '../../shared/components/Tabs';
 import { Icon } from '../../shared/components/Icon';
 import { AssignPicker } from '../orders/AssignPicker';
 import '../../styles/dashboard.css';
 import '../../styles/orders.css';
+import { Pagination } from '../../shared/components/Pagination';
 
 const ORDERS_PAGE_SIZE = 6;
 
@@ -83,8 +84,6 @@ export function DashboardPage() {
   const pageCount = Math.max(1, Math.ceil(listed.length / ORDERS_PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const pageOrders = listed.slice((safePage - 1) * ORDERS_PAGE_SIZE, safePage * ORDERS_PAGE_SIZE);
-  const rangeFrom = listed.length ? (safePage - 1) * ORDERS_PAGE_SIZE + 1 : 0;
-  const rangeTo = Math.min(safePage * ORDERS_PAGE_SIZE, listed.length);
   const productionAlerts =
     forecast.productionRisks.length ||
     forecast.recommendations.filter((r) => r.urgency === 'now').length;
@@ -172,9 +171,9 @@ export function DashboardPage() {
           value={low.length}
           tone={low.length ? 'warning' : 'default'}
           caption={
-            <button type="button" onClick={() => navigate('/inventario')}>
+            <Button variant="link" onClick={() => navigate('/inventario')}>
               Revisar reposición
-            </button>
+            </Button>
           }
         />
         <Kpi
@@ -263,40 +262,15 @@ export function DashboardPage() {
               </table>
             </div>
             {listed.length ? (
-              <div className="dash-pagination" aria-label="Paginación de pedidos">
-                <span>
-                  Mostrando {rangeFrom}–{rangeTo} de {listed.length}
-                </span>
-                <div>
-                  <button
-                    type="button"
-                    disabled={safePage <= 1}
-                    aria-label="Página anterior"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  >
-                    <Icon name="back" />
-                  </button>
-                  {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      className={n === safePage ? 'is-active' : ''}
-                      aria-current={n === safePage ? 'page' : undefined}
-                      onClick={() => setPage(n)}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    disabled={safePage >= pageCount}
-                    aria-label="Página siguiente"
-                    onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-                  >
-                    <Icon name="arrow" />
-                  </button>
-                </div>
-              </div>
+              <Pagination
+                label="Paginación de pedidos"
+                className="dash-pagination"
+                page={safePage}
+                pageCount={pageCount}
+                total={listed.length}
+                pageSize={ORDERS_PAGE_SIZE}
+                onPageChange={setPage}
+              />
             ) : null}
           </section>
 
@@ -312,9 +286,9 @@ export function DashboardPage() {
                 <div className="dash-prio-body">
                   <strong>{low.length} productos bajo mínimo</strong>
                   <small>Consulta existencias y mínimos.</small>
-                  <button type="button" onClick={() => navigate('/inventario')}>
+                  <Button variant="link" onClick={() => navigate('/inventario')}>
                     Revisar productos
-                  </button>
+                  </Button>
                 </div>
               </article>
               <article className="dash-prio-item">
@@ -324,9 +298,9 @@ export function DashboardPage() {
                 <div className="dash-prio-body">
                   <strong>{pending.length} pedidos por preparar</strong>
                   <small>Consulta posiciones y lotes.</small>
-                  <button type="button" onClick={() => navigate('/bodega')}>
+                  <Button variant="link" onClick={() => navigate('/bodega')}>
                     Ir a preparación
-                  </button>
+                  </Button>
                 </div>
               </article>
               <article className="dash-prio-item">
@@ -344,12 +318,9 @@ export function DashboardPage() {
                       : 'Sin lotes en los próximos 90 días.'}{' '}
                     El vencido queda en cuarentena y no se puede preparar.
                   </small>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/inventario?estado=expiring&orden=expiry')}
-                  >
+                  <Button variant="link" onClick={() => navigate('/inventario?estado=expiring&orden=expiry')}>
                     Revisar caducidades
-                  </button>
+                  </Button>
                 </div>
               </article>
               <article className="dash-prio-item">
@@ -362,9 +333,9 @@ export function DashboardPage() {
                   </strong>
                   <span className="dash-prio-tag">Por validar</span>
                   <small>Revisa el stock antes de actuar.</small>
-                  <button type="button" onClick={() => navigate('/compras')}>
+                  <Button variant="link" onClick={() => navigate('/compras')}>
                     Revisar alertas
-                  </button>
+                  </Button>
                 </div>
               </article>
             </div>
@@ -417,18 +388,14 @@ export function DashboardPage() {
               ) : null}
               {waiting ? (
                 <p>
-                  <button type="button" className="fx-link" onClick={() => navigate('/pedidos')}>
+                  <Button variant="link" className="fx-link" onClick={() => navigate('/pedidos')}>
                     {waiting} pedido(s) esperando stock
-                  </button>
+                  </Button>
                 </p>
               ) : null}
-              <button
-                type="button"
-                className="dash-kpi-link"
-                onClick={() => navigate('/inventario')}
-              >
+              <Button variant="link" className="dash-kpi-link" onClick={() => navigate('/inventario')}>
                 Ver detalle
-              </button>
+              </Button>
             </div>
           </section>
         </div>

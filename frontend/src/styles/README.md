@@ -32,7 +32,7 @@ igual, todo valor visual sale de [`tokens.css`](./tokens.css).
 
    | Componente   | Clase base   | Notas                                                                   |
    | ------------ | ------------ | ----------------------------------------------------------------------- |
-   | `Button`     | `.btn`       | Estilo **glass** común (degradado translúcido, blur, brillo superior, sombra de color). `variant`: secondary · primary · dark · danger · green · ghost — `size`: small · medium · large — `full` Para una variante nueva, define solo las variables `--btn-*` |
+   | `Button`     | `.btn`       | Estilo **glass** común (degradado translúcido, blur, brillo superior, sombra de color). `variant`: secondary · primary · dark · danger · green · ghost · **link** (acción de texto en línea: «Ver más», «Revisar…») — `size`: small · medium · large — `full` Para una variante nueva, define solo las variables `--btn-*` |
    | `Badge`      | `.badge`     | `color`: blue · green · amber · red · purple                            |
    | `Panel`      | `.panel`     | `title`, `subtitle`, `icon`, `actions`, `padded`                        |
    | `Field`      | `.field`     | `label`, `hint`, `error`, `full` (dentro de `.form-grid`)               |
@@ -47,6 +47,8 @@ igual, todo valor visual sale de [`tokens.css`](./tokens.css).
    | `Checkbox` | `.ui-checkbox` | **Radix Checkbox.** Seleccionar elementos u opciones puntuales. `checked`/`onCheckedChange(boolean)`, `indeterminate`, `label`, `hint`; con `name`/`value` sigue llegando a `FormData` |
    | `Switch` | `.ui-switch` | **Radix Switch.** Activar/desactivar una configuración (Activo, Inspección…). Misma API que `Checkbox` |
    | `Tooltip` | `.ui-tooltip` | **Radix Tooltip.** Sustituye al `title` nativo: aparece con hover **y con teclado**, se enlaza con `aria-describedby`. `content` vacío = sin tooltip; envuelve solo los botones deshabilitados para que también lo muestren. No uses `title=` en elementos para tooltips |
+   | `IconButton` | `.icon-btn` | Botón de solo icono. `icon` y `label` obligatorios (aria-label + tooltip automático). `variant`: ghost · secondary; `size`: small · medium |
+   | `Pagination` | `.ui-pagination` | «Mostrando a–b de n» + páginas (con «…» si son muchas). `page`, `pageCount`, `total`, `pageSize`, `onPageChange` |
    | `ChipGroup` | `.ui-chip-group` | **Radix Toggle Group.** Píldoras de filtro: `type="single"` (siempre una activa) o `type="multiple"`. Items con `count`, `icon`, `leading` y `tone` (color del contador). Para pocas opciones compactas usa `SegmentedControl` |
    | `RemovableChip` | `.ui-chip.is-static` | Etiqueta con ✕ para quitarla (`onRemove`) |
    | `Empty`      | `.empty-state` | Estado vacío                                                          |
@@ -113,4 +115,4 @@ con los presets de [shared/motion/presets.ts](../shared/motion/presets.ts):
 `MotionConfig reducedMotion="user"` (en `main.tsx`) respeta la preferencia de
 "reducir movimiento" del sistema. En CSS usa `--duration-*` y `--ease-*`.
 
-   **Capas animadas:** todo diálogo, drawer o desplegable entra **y sale** animado, y la entrada es el espejo exacto de la salida (`layer` en `shared/motion/presets.ts`: misma duración, curva y valores). La salida la hace `<ExitGhost>` (`shared/motion/ExitGhost.tsx`): al desmontarse la capa deja una copia inerte que se desvanece, así funciona aunque la pantalla la cierre de golpe (`{open ? <Modal/> : null}`). Si creas una capa nueva, coloca un `<ExitGhost>` dentro. No implementes a mano trampas de foco, listeners de Escape ni bloqueo de scroll: usa estos componentes.
+   **Capas animadas:** todo diálogo, drawer o desplegable entra **y sale** animado, y la entrada es el espejo exacto de la salida (`layer` en `shared/motion/presets.ts`: misma duración, curva y valores). La salida la hace `<ExitGhost>` (`shared/motion/ExitGhost.tsx`): al desmontarse la capa deja una copia inerte que se desvanece, así funciona aunque la pantalla la cierre de golpe (`{open ? <Modal/> : null}`). Si creas una capa nueva, coloca un `<ExitGhost>` dentro. **No uses `<button>` sueltos** para acciones: usa `Button`, `IconButton` o `Menu`. Solo las tarjetas, filas o celdas clicables (que no se ven como botón) pueden ser `<button>` con estilo propio. No implementes a mano trampas de foco, listeners de Escape ni bloqueo de scroll: usa estos componentes.

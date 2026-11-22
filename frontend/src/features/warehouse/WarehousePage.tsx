@@ -8,7 +8,7 @@ import { useAuth } from '../../shared/hooks/AuthProvider';
 import { can } from '../../shared/auth/permissions';
 import { activeWarehouseId, available, product, qtyAt, scopedLots, time } from '../../shared/lib/inventory';
 import { buildWarehouseGeometry, normalizeLayout } from '../../shared/lib/warehouseLayout';
-import { Btn, Kpi, PageHead } from '../../shared/components/ui';
+import { Btn, Kpi, PageHead, Button } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { SegmentedControl } from '../../shared/components/Tabs';
 import { WarehouseMap, type MapMode } from './WarehouseMap';
@@ -19,7 +19,7 @@ import { PickingModal, type PickLine } from './PickingModal';
 import { ExitLayer } from './ExitLayer';
 import '../../styles/warehouse-positioning.css';
 import '../../styles/warehouse-page.css';
-import { Tooltip } from '../../shared/components/Tooltip';
+import { IconButton } from '../../shared/components/IconButton';
 
 const MOVES_PER_PAGE = 6;
 const moveTone = (type: string) => {
@@ -265,9 +265,7 @@ export function WarehousePage() {
             <span>{pickDone} de {pickPlan.length} posiciones verificadas · las posiciones del recorrido se resaltan en el mapa</span>
           </div>
           <Btn variant="primary" icon="check" onClick={() => setPickOpen(true)}>Ver lista</Btn>
-          <button type="button" className="icon-btn" aria-label="Cancelar picking" onClick={() => { setPickOrderId(null); setPickOpen(false); }}>
-            <Icon name="close" />
-          </button>
+          <IconButton icon="close" label="Cancelar picking" onClick={() => { setPickOrderId(null); setPickOpen(false); }} />
         </div>
       ) : null}
 
@@ -321,14 +319,7 @@ export function WarehousePage() {
               <option key={l} value={l}>Nivel {l}</option>
             ))}
           </Select>
-          <Tooltip content={"Restablecer vista"}><button
-            type="button"
-            className="icon-btn"
-            aria-label="Restablecer vista"
-            onClick={() => { setZoom(1); setLevel('all'); setViewYaw(0); setWarehouseSearch(''); }}
-          >
-            <Icon name="refresh" />
-          </button></Tooltip>
+          <IconButton icon="refresh" label="Restablecer vista" onClick={() => { setZoom(1); setLevel('all'); setViewYaw(0); setWarehouseSearch(''); }} />
         </div>
 
         {query ? (
@@ -357,9 +348,9 @@ export function WarehousePage() {
           <div className="wh-subbar">
             <span><Icon name="cube" /> Girar vista</span>
             <div className="wh-subbar-controls">
-              <button type="button" className="btn small" aria-label="Girar vista a la izquierda" disabled={viewYaw <= YAW_MIN} onClick={() => setViewYaw((y) => Math.max(YAW_MIN, y - Math.PI / 12))}>◀</button>
+              <Button size="small" type="button" aria-label="Girar vista a la izquierda" disabled={viewYaw <= YAW_MIN} onClick={() => setViewYaw((y) => Math.max(YAW_MIN, y - Math.PI / 12))}>◀</Button>
               <input type="range" min={YAW_MIN} max={YAW_MAX} step={0.04} value={viewYaw} onChange={(e) => setViewYaw(Number(e.target.value))} aria-label="Ángulo de rotación 3D" />
-              <button type="button" className="btn small" aria-label="Girar vista a la derecha" disabled={viewYaw >= YAW_MAX} onClick={() => setViewYaw((y) => Math.min(YAW_MAX, y + Math.PI / 12))}>▶</button>
+              <Button size="small" type="button" aria-label="Girar vista a la derecha" disabled={viewYaw >= YAW_MAX} onClick={() => setViewYaw((y) => Math.min(YAW_MAX, y + Math.PI / 12))}>▶</Button>
               <span className="wh-subbar-value">{Math.round((viewYaw * 180) / Math.PI)}°</span>
             </div>
           </div>
@@ -508,13 +499,9 @@ export function WarehousePage() {
               {safeMovesPage * MOVES_PER_PAGE + 1}–{Math.min(state.events.length, (safeMovesPage + 1) * MOVES_PER_PAGE)} de {state.events.length}
             </span>
             <div>
-              <button type="button" className="icon-btn" aria-label="Página anterior" disabled={safeMovesPage === 0} onClick={() => setMovesPage(safeMovesPage - 1)}>
-                <Icon name="chevron-left" />
-              </button>
+              <IconButton icon="chevron-left" label="Página anterior" disabled={safeMovesPage === 0} onClick={() => setMovesPage(safeMovesPage - 1)} />
               <span className="wh-pager-current">{safeMovesPage + 1} / {movePages}</span>
-              <button type="button" className="icon-btn" aria-label="Página siguiente" disabled={safeMovesPage >= movePages - 1} onClick={() => setMovesPage(safeMovesPage + 1)}>
-                <Icon name="chevron" />
-              </button>
+              <IconButton icon="chevron" label="Página siguiente" disabled={safeMovesPage >= movePages - 1} onClick={() => setMovesPage(safeMovesPage + 1)} />
             </div>
           </nav>
         ) : null}

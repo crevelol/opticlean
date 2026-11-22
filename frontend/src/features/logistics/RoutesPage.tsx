@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
 import { client, orderWeight, product } from '../../shared/lib/inventory';
-import { Badge, Btn, PageHead } from '../../shared/components/ui';
+import { Badge, Btn, PageHead, Button } from '../../shared/components/ui';
 import { SegmentedControl } from '../../shared/components/Tabs';
 import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
@@ -351,9 +351,9 @@ export function RoutesPage() {
 
       <p className="log-route-footnote">
         Las entregas e incidencias se guardan en el servidor y alimentan el{' '}
-        <button type="button" className="linkish" onClick={() => navigate('/logistica/historial')}>
+        <Button variant="link" className="linkish" onClick={() => navigate('/logistica/historial')}>
           Historial de rutas
-        </button>{' '}
+        </Button>{' '}
         y la trazabilidad.
       </p>
 

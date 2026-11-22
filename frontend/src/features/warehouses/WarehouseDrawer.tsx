@@ -8,6 +8,7 @@ import { StatusPills } from './WarehouseList';
 import { CAPACITY_WARN, pct, type WarehouseRow } from './warehouseRows';
 import '../../styles/warehouses-list.css';
 import { Tooltip } from '../../shared/components/Tooltip';
+import { IconButton } from '../../shared/components/IconButton';
 
 export type DrawerConfirm = 'use' | 'delete' | null;
 
@@ -70,7 +71,7 @@ export function WarehouseDrawer({ row, activeRow, confirm, pending, error, onCon
       <header className="whx-d-head">
         <div className="whx-d-head-top">
           <div><span className="whx-code">{w.code}</span><DialogTitle asChild><h2>{w.name}</h2></DialogTitle></div>
-          <button ref={closeBtn} type="button" className="icon-btn" aria-label="Cerrar detalles" onClick={onClose} disabled={pending}><Icon name="close" /></button>
+          <IconButton icon="close" label="Cerrar detalles" ref={closeBtn} onClick={onClose} disabled={pending} />
         </div>
         <div className="whx-who-top"><StatusPills row={row} isActive={isActive} /></div>
       </header>

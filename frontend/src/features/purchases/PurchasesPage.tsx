@@ -10,7 +10,7 @@ import { isRaw } from '../../shared/lib/bom';
 import { packsOf, purchaseLines } from '../../shared/lib/wholesale';
 import { ImportDialog } from '../imports/ImportDialog';
 import { buildForecast, suggestedPurchaseQty, type ConfidenceLevel } from '../../shared/lib/forecast';
-import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead, ProductCell } from '../../shared/components/ui';
+import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead, ProductCell, Button } from '../../shared/components/ui';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import { dateShort, num } from '../../shared/lib/inventory';
 import { Icon } from '../../shared/components/Icon';
@@ -293,9 +293,9 @@ export function PurchasesPage() {
                             {o.orderIds.map((id, i) => (
                               <span key={id}>
                                 {i ? ', ' : ''}
-                                <button type="button" className="fx-link" onClick={() => navigate('/pedidos', { state: { open: id } })}>
+                                <Button variant="link" className="fx-link" onClick={() => navigate('/pedidos', { state: { open: id } })}>
                                   {id}
-                                </button>
+                                </Button>
                               </span>
                             ))}
                           </span>
@@ -487,20 +487,16 @@ export function PurchasesPage() {
                 <input id="pur-expected" name="expectedDate" type="date" />
               </div>
               <div className="field full">
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => {
+                <Button type="button" onClick={() => {
                     const item = state.products[0];
                     if (!item) return;
                     setLines((current) => [
                       ...current,
                       { productId: item.id, qty: 1, packCode: 'unidad', unitPrice: item.price },
                     ]);
-                  }}
-                >
+                  }}>
                   Añadir línea
-                </button>
+                </Button>
               </div>
               <div className="field full">
                 <label htmlFor="pur-notes">Observaciones</label>

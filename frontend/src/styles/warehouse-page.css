@@ -207,8 +207,7 @@
   flex: 1;
   overflow-x: auto;
 }
-.level-pager-pages button,
-.level-pager-arrow {
+.level-pager-pages button {
   position: relative;
   min-width: 38px;
   min-height: 32px;
@@ -222,18 +221,19 @@
   cursor: pointer;
 }
 .level-pager-arrow {
+  position: relative;
+  min-width: 38px;
+}
+.level-pager-arrow {
   display: grid;
   place-items: center;
   min-width: 32px;
-  background: white;
-  border-color: var(--slate-200);
 }
 .level-pager-arrow .icon {
   width: 15px;
   height: 15px;
 }
-.level-pager-pages button:hover:not(:disabled),
-.level-pager-arrow:hover:not(:disabled) {
+.level-pager-pages button:hover:not(:disabled) {
   background: white;
   border-color: var(--slate-250);
 }

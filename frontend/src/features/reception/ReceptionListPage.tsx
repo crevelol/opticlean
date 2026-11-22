@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { dateShort, daysUntil, expiryTone, product } from '../../shared/lib/inventory';
-import { Btn, Empty, Kpi, KpiGrid, PageHead, ProductCell } from '../../shared/components/ui';
+import { Btn, Empty, Kpi, KpiGrid, PageHead, ProductCell, Button } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal } from '../../shared/components/Modal';
 import { api } from '../../shared/api/client';
@@ -177,9 +177,9 @@ export function ReceptionListPage() {
                       </td>
                       <td>
                         {r.purchaseId ? (
-                          <button type="button" className="fx-link" onClick={() => navigate('/compras', { state: { focus: r.purchaseId } })}>
+                          <Button variant="link" className="fx-link" onClick={() => navigate('/compras', { state: { focus: r.purchaseId } })}>
                             {r.purchaseId}
-                          </button>
+                          </Button>
                         ) : (
                           <span className="fx-chip">{r.reason ?? 'Sin orden'}</span>
                         )}

@@ -70,17 +70,6 @@
   color: var(--color-primary);
   flex: none;
 }
-.fx-link {
-  background: none;
-  border: 0;
-  padding: 0;
-  color: var(--color-primary);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-.fx-link:hover { text-decoration: underline; }
-.fx-link:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: 2px; }
 .fx-muted { color: var(--color-text-muted); }
 
 /* Tabla de entradas por producto */

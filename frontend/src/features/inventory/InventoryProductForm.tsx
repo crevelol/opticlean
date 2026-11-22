@@ -14,6 +14,8 @@ import type { HazardClass, Product, ProductComponent, ProductKind } from '../../
 import { HAZARD_OPTIONS } from '../../shared/lib/wholesale';
 import './inventory-product-form.css';
 import { Switch } from '../../shared/components/Checkbox';
+import { Button } from '../../shared/components/ui';
+import { IconButton } from '../../shared/components/IconButton';
 
 type ProductFormProps = {
   product?: Product;
@@ -366,7 +368,7 @@ export function InventoryProductForm({ product, categories, products, onClose, o
             </p>
             </DialogDescription>
           </div>
-          <button type="button" className="icon-btn" onClick={close} disabled={pending} aria-label="Cerrar formulario"><Icon name="close" /></button>
+          <IconButton icon="close" label="Cerrar formulario" onClick={close} disabled={pending} />
         </div>
 
         <nav className="inv-stepper" aria-label="Pasos del formulario">
@@ -637,9 +639,7 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                                   aria-label={`Cantidad del insumo ${index + 1}`}
                                 />
                               </label>
-                              <button type="button" className="icon-btn" aria-label={`Quitar insumo ${index + 1}`} onClick={() => removeComponent(index)}>
-                                <Icon name="trash" />
-                              </button>
+                              <IconButton icon="trash" label={`Quitar insumo ${index + 1}`} onClick={() => removeComponent(index)} />
                             </div>
                           ))}
                         </>
@@ -650,9 +650,9 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                           <small>Puedes añadirlos ahora o más adelante.</small>
                         </div>
                       )}
-                      <button type="button" className="btn inv-bom-add" onClick={addComponent}>
+                      <Button className="inv-bom-add" type="button" onClick={addComponent}>
                         <Icon name="plus" /> Añadir insumo
-                      </button>
+                      </Button>
                       {errors.components ? <span className="inv-product-field-error">{errors.components}</span> : null}
                     </div>
                   </>
@@ -673,14 +673,14 @@ export function InventoryProductForm({ product, categories, products, onClose, o
           </span>
           <div>
             {step > 0
-              ? <button type="button" className="btn" onClick={() => goToStep(step - 1)} disabled={pending}><Icon name="chevron-left" /> Atrás</button>
-              : <button type="button" className="btn" onClick={close} disabled={pending}>Cancelar</button>}
+              ? <Button type="button" onClick={() => goToStep(step - 1)} disabled={pending}><Icon name="chevron-left" /> Atrás</Button>
+              : <Button type="button" onClick={close} disabled={pending}>Cancelar</Button>}
             {product && !isLastStep ? (
-              <button type="button" className="btn" onClick={() => goToStep(step + 1)} disabled={pending}>
+              <Button type="button" onClick={() => goToStep(step + 1)} disabled={pending}>
                 Siguiente <Icon name="chevron" />
-              </button>
+              </Button>
             ) : null}
-            <button type="submit" form={formId} className="btn primary" disabled={pending}>
+            <Button variant="primary" type="submit" form={formId} disabled={pending}>
               {isLastStep || product ? (
                 <>
                   <Icon name={pending ? 'refresh' : 'save'} />
@@ -689,7 +689,7 @@ export function InventoryProductForm({ product, categories, products, onClose, o
               ) : (
                 <>Siguiente <Icon name="chevron" /></>
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </DialogContent>

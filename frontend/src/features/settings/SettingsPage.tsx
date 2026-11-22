@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
-import { Btn, PageHead } from '../../shared/components/ui';
+import { Btn, PageHead, Button } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal } from '../../shared/components/Modal';
 import { FleetPanel } from './FleetPanel';
@@ -81,10 +81,10 @@ export function SettingsPage() {
             </div>
           </div>
           <div className="form-footer">
-            <button type="submit" className="btn primary">
+            <Button variant="primary" type="submit">
               <Icon name="save" />
               Guardar cambios
-            </button>
+            </Button>
           </div>
         </form>
         {resetAllowed ? (

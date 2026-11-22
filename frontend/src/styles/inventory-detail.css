@@ -39,17 +39,8 @@
 }
 .inv-detail .inv-detail-close {
   width: 36px;
-  height: 36px;
   display: grid;
   place-items: center;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--slate-600);
-}
-.inv-detail .inv-detail-close:hover {
-  background: var(--slate-100);
-  color: var(--slate-900);
 }
 .inv-detail-product {
   padding: 20px 20px 18px;
@@ -209,40 +200,10 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 40px;
-  padding: 9px 8px;
-  border: 1px solid var(--slate-250);
-  border-radius: var(--radius-sm);
-  background: var(--slate-0);
-  color: var(--slate-750);
-  font-size: var(--text-md);
-  font-weight: var(--weight-semibold);
 }
 .inv-detail-action .icon {
   width: 16px;
   height: 16px;
-}
-.inv-detail .inv-detail-action:hover:not(:disabled) {
-  border-color: var(--blue-300);
-  background: var(--slate-75);
-}
-.inv-detail .inv-detail-action-primary {
-  background: var(--blue-600);
-  border-color: var(--blue-600);
-  color: var(--slate-0);
-}
-.inv-detail .inv-detail-action-primary:hover:not(:disabled) {
-  background: var(--blue-700);
-  border-color: var(--blue-700);
-}
-.inv-detail .inv-detail-action-buy {
-  background: var(--amber-50);
-  border-color: var(--amber-200);
-  color: var(--amber-800);
-}
-.inv-detail .inv-detail-action-buy:hover:not(:disabled) {
-  background: var(--amber-100);
-  border-color: var(--amber-300);
 }
 .inv-detail-tab-content {
   padding: 16px 20px 20px;
@@ -558,17 +519,6 @@
   justify-content: center;
   align-items: center;
   gap: 7px;
-  min-height: 40px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--slate-700);
-  font-size: var(--text-md);
-  font-weight: var(--weight-medium);
-}
-.inv-detail-footer > button:hover {
-  background: var(--blue-50);
-  color: var(--blue-700);
 }
 .inv-detail-footer .icon {
   height: 16px;
@@ -591,9 +541,6 @@
   }
   .inv-detail .inv-detail-product h2 {
     font-size: var(--text-3xl);
-  }
-  .inv-detail .inv-detail-action {
-    font-size: var(--text-md);
   }
   .inv-detail-location-icon {
     display: none;

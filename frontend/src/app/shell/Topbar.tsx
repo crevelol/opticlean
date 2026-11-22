@@ -5,6 +5,7 @@ import { Icon } from '../../shared/components/Icon';
 import { SearchInput } from '../../shared/components/SearchInput';
 import type { Crumb } from '../navigation';
 import { Tooltip } from '../../shared/components/Tooltip';
+import { IconButton } from '../../shared/components/IconButton';
 
 const today = new Intl.DateTimeFormat('es-EC', {
   day: 'numeric',
@@ -50,14 +51,7 @@ export function Topbar({
       </button></Tooltip>
 
       <div className="topbar-left">
-        <button
-          type="button"
-          className="icon-btn mobile-menu"
-          aria-label="Abrir menú"
-          onClick={onOpenMobileMenu}
-        >
-          <Icon name="menu" />
-        </button>
+        <IconButton icon="menu" label="Abrir menú" className="mobile-menu" onClick={onOpenMobileMenu} />
         <nav className="breadcrumbs" aria-label="Ruta de navegación">
           <ol>
             {crumbs.map((c, i) => {
@@ -118,15 +112,7 @@ export function Topbar({
           <Icon name="calendar" />
           {today.format(new Date())}
         </span>
-        <button
-          type="button"
-          className="icon-btn"
-          aria-label="Ver notificaciones"
-          onClick={onNotifications}
-        >
-          <Icon name="bell" />
-          {hasNotifications ? <span className="notification-dot" /> : null}
-        </button>
+        <IconButton icon="bell" label="Ver notificaciones" onClick={onNotifications}>{hasNotifications ? <span className="notification-dot" /> : null}</IconButton>
       </div>
     </header>
   );

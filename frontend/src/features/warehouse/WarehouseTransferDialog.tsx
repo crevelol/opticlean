@@ -6,7 +6,7 @@ import { product, qtyAt } from '../../shared/lib/inventory';
 import { faceLabel } from '../../shared/lib/warehouseLayout';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { Modal } from '../../shared/components/Modal';
-import { Btn } from '../../shared/components/ui';
+import { Btn, Button } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 
 export function WarehouseTransferDialog({ state, lot, onClose, onMoved }: { state: AppState; lot: Lot; onClose: () => void; onMoved: (destination: string) => void }) {
@@ -54,7 +54,7 @@ export function WarehouseTransferDialog({ state, lot, onClose, onMoved }: { stat
       if (mounted.current) setError(message); else toast(message);
     } finally { locked.current = false; if (mounted.current) setSaving(false); }
   };
-  return <Modal title="Reubicar producto" subtitle={`${item?.name ?? lot.productId} · Lote ${lot.batch}`} onClose={close} footer={<><Btn onClick={close} disabled={saving}>Cancelar</Btn><button type="submit" form="warehouse-transfer" className="btn primary" disabled={saving || !ready || !destination || !!result.error}><Icon name="swap" />{saving ? 'Trasladando…' : 'Confirmar traslado'}</button></>}>
+  return <Modal title="Reubicar producto" subtitle={`${item?.name ?? lot.productId} · Lote ${lot.batch}`} onClose={close} footer={<><Btn onClick={close} disabled={saving}>Cancelar</Btn><Button variant="primary" type="submit" form="warehouse-transfer" disabled={saving || !ready || !destination || !!result.error}><Icon name="swap" />{saving ? 'Trasladando…' : 'Confirmar traslado'}</Button></>}>
     <form id="warehouse-transfer" onSubmit={(event) => void submit(event)} aria-busy={saving}>
       <div className="transfer-source"><span>ORIGEN</span><strong>{lot.loc}</strong><small>{lot.qty} unidades en este lote</small></div>
       <fieldset className="transfer-fields" disabled={saving}>

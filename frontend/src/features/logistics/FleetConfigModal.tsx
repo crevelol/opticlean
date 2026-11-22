@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Select } from '../../shared/components/Select';
 import { api } from '../../shared/api/client';
 import { Modal } from '../../shared/components/Modal';
-import { Btn } from '../../shared/components/ui';
+import { Btn, Button } from '../../shared/components/ui';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import type { Truck, VehicleKind } from './fleet';
 import { VehicleCostRulesModal } from './VehicleCostRulesModal';
@@ -370,16 +370,12 @@ export function FleetConfigModal({
                   </option>
                 ))}
               </Select>
-              <button
-                type="button"
-                disabled={!zonePreview}
-                onClick={() => {
+              <Button size="small" disabled={!zonePreview} onClick={() => {
                   addZonePath(zonePreview);
                   setZoneSector('');
-                }}
-              >
+                }}>
                 Agregar zona
-              </button>
+              </Button>
             </div>
             {zonePreview ? (
               <p className="muted">Se agregará: <strong>{zonePreview}</strong></p>
@@ -397,15 +393,12 @@ export function FleetConfigModal({
                   }
                 }}
               />
-              <button
-                type="button"
-                onClick={() => {
+              <Button size="small" onClick={() => {
                   addZonePath(sectorDraft);
                   setSectorDraft('');
-                }}
-              >
+                }}>
                 Agregar
-              </button>
+              </Button>
             </div>
             {knownSectors.length ? (
               <ChipGroup
@@ -514,19 +507,15 @@ export function FleetConfigModal({
                       </td>
                       <td>{v.active ? 'Activo' : 'Inactivo'}</td>
                       <td className="fleet-config-actions">
-                        <button type="button" disabled={busy || !v.active} onClick={() => setCostVehicleId(v.id)}>
+                        <Button size="small" disabled={busy || !v.active} onClick={() => setCostVehicleId(v.id)}>
                           Costo real
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => void patch(v.id, { active: !v.active })}
-                        >
+                        </Button>
+                        <Button size="small" disabled={busy} onClick={() => void patch(v.id, { active: !v.active })}>
                           {v.active ? 'Desactivar' : 'Activar'}
-                        </button>
-                        <button type="button" disabled={busy} onClick={() => void remove(v)}>
+                        </Button>
+                        <Button variant="danger" size="small" disabled={busy} onClick={() => void remove(v)}>
                           Eliminar
-                        </button>
+                        </Button>
                       </td>
                     </tr>
                   );

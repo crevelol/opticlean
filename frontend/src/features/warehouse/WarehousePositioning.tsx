@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Select } from '../../shared/components/Select';
-import { Icon } from '../../shared/components/Icon';
 import type { AppState, Location, WarehouseLayout } from '../../shared/types';
 import { scopedLots } from '../../shared/lib/inventory';
 import { WarehouseFloorPlan, type RackStats } from './WarehouseFloorPlan';
 import { Tooltip } from '../../shared/components/Tooltip';
 import { ChipGroup } from '../../shared/components/Chip';
+import { IconButton } from '../../shared/components/IconButton';
 
 type Props = {
   state: AppState;
@@ -127,9 +127,7 @@ export function WarehousePositioning({ state, layout, locations, selectedLoc, le
       />
 
       <div className="level-pager" role="navigation" aria-label="Niveles del rack">
-        <button type="button" className="level-pager-arrow" aria-label="Nivel anterior" disabled={level !== 'all' || shownLevel <= 1} onClick={() => goToLevel(shownLevel - 1)}>
-          <Icon name="chevron-left" />
-        </button>
+        <IconButton icon="chevron-left" label="Nivel anterior" className="level-pager-arrow" disabled={level !== 'all' || shownLevel <= 1} onClick={() => goToLevel(shownLevel - 1)} />
         <div className="level-pager-pages">
           {levelNumbers.map((value) => {
             const info = levelStats(value);
@@ -145,9 +143,7 @@ export function WarehousePositioning({ state, layout, locations, selectedLoc, le
             </button></Tooltip>;
           })}
         </div>
-        <button type="button" className="level-pager-arrow" aria-label="Nivel siguiente" disabled={level !== 'all' || shownLevel >= layout.levels} onClick={() => goToLevel(shownLevel + 1)}>
-          <Icon name="chevron" />
-        </button>
+        <IconButton icon="chevron" label="Nivel siguiente" className="level-pager-arrow" disabled={level !== 'all' || shownLevel >= layout.levels} onClick={() => goToLevel(shownLevel + 1)} />
       </div>
 
       <section className="positioning-level" aria-label={`Nivel ${shownLevel}`}>

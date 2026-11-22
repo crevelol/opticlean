@@ -15,6 +15,8 @@ import { faceLabel } from '../../shared/lib/warehouseLayout';
 import type { AppState } from '../../shared/types';
 import { inventoryStatusLabels, type InventoryRow } from './inventoryModel';
 import '../../styles/inventory-detail.css';
+import { IconButton } from '../../shared/components/IconButton';
+import { Button } from '../../shared/components/ui';
 
 type InventoryDetailPanelProps = {
   state: AppState;
@@ -124,14 +126,7 @@ export function InventoryDetailPanel({
         <span>
           <Icon name="box" /> Detalle del producto
         </span>
-        <button
-          type="button"
-          className="inv-detail-close"
-          aria-label="Cerrar detalle del producto"
-          onClick={onClose}
-        >
-          <Icon name="close" />
-        </button>
+        <IconButton icon="close" label="Cerrar detalle del producto" className="inv-detail-close" onClick={onClose} />
       </div>
 
       <div className="inv-detail-product">
@@ -282,33 +277,20 @@ export function InventoryDetailPanel({
       </div>
 
       <div className="inv-detail-actions">
-        <button
-          type="button"
-          className="inv-detail-action inv-detail-action-primary"
-          onClick={onReceive}
-        >
+        <Button variant="primary" size="small" className="inv-detail-action inv-detail-action-primary" onClick={onReceive}>
           <Icon name="receive" />
           Recibir stock
-        </button>
+        </Button>
         {status !== 'healthy' && (
-          <button
-            type="button"
-            className="inv-detail-action inv-detail-action-buy"
-            onClick={onPurchase}
-          >
+          <Button size="small" className="inv-detail-action inv-detail-action-buy" onClick={onPurchase}>
             <Icon name="cart" />
             Solicitar compra
-          </button>
+          </Button>
         )}
-        <button
-          type="button"
-          className="inv-detail-action"
-          onClick={() => onLocate()}
-          disabled={locations.length === 0}
-        >
+        <Button size="small" className="inv-detail-action" onClick={() => onLocate()} disabled={locations.length === 0}>
           <Icon name="map" />
           Ver en bodega
-        </button>
+        </Button>
       </div>
 
       <Tabs
@@ -412,13 +394,9 @@ export function InventoryDetailPanel({
                         {!sellable ? <span className="fx-chip red">{blockReason(lot)}</span> : null}
                         {lot.purchaseId ? (
                           onOpenPurchase ? (
-                            <button
-                              type="button"
-                              className="fx-link"
-                              onClick={() => onOpenPurchase(lot.purchaseId!)}
-                            >
+                            <Button variant="link" className="fx-link" onClick={() => onOpenPurchase(lot.purchaseId!)}>
                               {lot.purchaseId}
-                            </button>
+                            </Button>
                           ) : (
                             <span>{lot.purchaseId}</span>
                           )
@@ -479,13 +457,9 @@ export function InventoryDetailPanel({
                         <td>
                           {receipt.purchaseId ? (
                             onOpenPurchase ? (
-                              <button
-                                type="button"
-                                className="fx-link"
-                                onClick={() => onOpenPurchase(receipt.purchaseId!)}
-                              >
+                              <Button variant="link" className="fx-link" onClick={() => onOpenPurchase(receipt.purchaseId!)}>
                                 {receipt.purchaseId}
-                              </button>
+                              </Button>
                             ) : (
                               receipt.purchaseId
                             )
@@ -530,21 +504,21 @@ export function InventoryDetailPanel({
       </dl>
       <div className="inv-detail-footer">
         {onEdit ? (
-          <button type="button" onClick={onEdit}>
+          <Button size="small" onClick={onEdit}>
             <Icon name="edit" />
             Editar ficha
-          </button>
+          </Button>
         ) : null}
         {onDelete ? (
-          <button type="button" onClick={onDelete}>
+          <Button variant="danger" size="small" onClick={onDelete}>
             <Icon name="trash" />
             Eliminar
-          </button>
+          </Button>
         ) : null}
-        <button type="button" onClick={onTrace}>
+        <Button size="small" onClick={onTrace}>
           <Icon name="history" />
           Trazabilidad
-        </button>
+        </Button>
       </div>
     </aside>
   );

@@ -5,6 +5,7 @@ import { useAppState } from '../shared/hooks/AppStateProvider';
 import { useAuth } from '../shared/hooks/AuthProvider';
 import { LoginPage } from '../features/auth/LoginPage';
 import { AppSkeleton } from './shell/PageSkeleton';
+import { Button } from '../shared/components/ui';
 
 // Cada pantalla se descarga solo al visitarla (code splitting por ruta).
 const DashboardPage = lazy(() =>
@@ -84,9 +85,9 @@ function ProtectedApp() {
       <div className="page" style={{ padding: 40 }}>
         <p>{error}</p>
         <p className="subtle">Asegúrate de que el backend esté en ejecución.</p>
-        <button type="button" className="btn primary" onClick={() => void refresh()}>
+        <Button variant="primary" type="button" onClick={() => void refresh()}>
           Reintentar
-        </button>
+        </Button>
       </div>
     );
   }

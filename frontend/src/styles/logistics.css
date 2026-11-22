@@ -515,23 +515,10 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--color-border);
-  background: var(--slate-0);
-  border-radius: var(--radius-md);
-  padding: 7px 10px;
-  font: inherit;
-  font-size: var(--text-md);
-  font-weight: var(--weight-semibold);
-  color: var(--slate-700);
-  cursor: pointer;
 }
 .log-filter-btn .icon {
   width: 14px;
   height: 14px;
-}
-.log-filter-btn:hover {
-  border-color: var(--slate-300);
-  color: var(--color-text);
 }
 
 .log-truck-list,
@@ -917,16 +904,6 @@
   top: 10px;
   right: 10px;
   z-index: 500;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: var(--slate-0);
-  box-shadow: 0 2px 8px rgba(23, 50, 79, 0.12);
-  padding: 7px 10px;
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-  color: var(--blue-600);
-  cursor: pointer;
 }
 .log-map-routing {
   position: absolute;
@@ -1177,15 +1154,6 @@
   font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
-.log-route-footnote .linkish {
-  border: 0;
-  background: none;
-  color: var(--blue-600);
-  font: inherit;
-  font-weight: var(--weight-bold);
-  cursor: pointer;
-  padding: 0;
-}
 
 .log-history-filters {
   margin-bottom: 14px;
@@ -1373,15 +1341,6 @@
   gap: 8px;
   white-space: nowrap;
 }
-.fleet-config-actions button {
-  border: 1px solid var(--slate-200);
-  background: var(--slate-0);
-  border-radius: var(--radius-md);
-  padding: 6px 8px;
-  font-size: var(--text-md);
-  cursor: pointer;
-  color: var(--blue-600);
-}
 .fleet-config .muted {
   color: var(--slate-600);
   font-size: var(--text-base);
@@ -1413,8 +1372,7 @@
   gap: 8px;
   margin-bottom: 8px;
 }
-.fleet-zone-builder select,
-.fleet-zone-builder button {
+.fleet-zone-builder select {
   border: 1px solid var(--slate-200);
   background: var(--slate-0);
   border-radius: var(--radius-md);
@@ -1422,13 +1380,7 @@
   font: inherit;
 }
 .fleet-zone-builder button {
-  color: var(--blue-600);
-  cursor: pointer;
   white-space: nowrap;
-}
-.fleet-zone-builder button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 @media (max-width: 900px) {
   .fleet-zone-builder {
@@ -1445,14 +1397,6 @@
   border: 1px solid var(--slate-200);
   border-radius: var(--radius-md);
   padding: 8px 10px;
-}
-.fleet-sector-add button {
-  border: 1px solid var(--slate-200);
-  background: var(--slate-0);
-  border-radius: var(--radius-md);
-  padding: 8px 10px;
-  color: var(--blue-600);
-  cursor: pointer;
 }
 .log-truck-zones {
   margin-top: 8px;
