@@ -4,6 +4,8 @@ import { motion } from 'motion/react';
 import { Icon } from './Icon';
 import { cx } from './ui';
 import { fade, pop, transition } from '../motion/presets';
+import { ExitGhost } from '../motion/ExitGhost';
+import { exitParts } from '../motion/exitAnimation';
 
 /**
  * Diálogos de la app sobre Radix Dialog (accesibilidad) + nuestros estilos
@@ -85,7 +87,13 @@ export function DialogContent({
   return (
     <RD.Portal>
       <RD.Overlay asChild>
-        <motion.div className={overlayClassName} variants={fade} initial="hidden" animate="show">
+        <motion.div
+          className={overlayClassName}
+          data-dialog-overlay=""
+          variants={fade}
+          initial="hidden"
+          animate="show"
+        >
           <RD.Content
             asChild
             {...(noDescription ? { 'aria-describedby': undefined } : null)}
@@ -93,6 +101,15 @@ export function DialogContent({
           >
             <motion.section className={className} {...panelMotion}>
               {children}
+              {/* Salida animada aunque el diálogo se desmonte de golpe. */}
+              <ExitGhost
+                closest="[data-dialog-overlay]"
+                parts={
+                  motionPreset === 'slide'
+                    ? exitParts.drawer(':scope > section')
+                    : exitParts.dialog(':scope > section')
+                }
+              />
             </motion.section>
           </RD.Content>
         </motion.div>
