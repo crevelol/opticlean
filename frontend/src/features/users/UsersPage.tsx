@@ -9,6 +9,7 @@ import { Modal, ModalActions } from '../../shared/components/Modal';
 import { Icon } from '../../shared/components/Icon';
 import { roleLabel } from '../../shared/auth/permissions';
 import { Switch } from '../../shared/components/Checkbox';
+import { Select } from '../../shared/components/Select';
 
 const ROLES = ['ops', 'dispatch', 'driver', 'admin'] as const;
 
@@ -290,13 +291,13 @@ export function UsersPage() {
             </label>
             <label className="field">
               <span>Rol</span>
-              <select name="role" defaultValue={edit?.role ?? 'ops'} id="user-role">
+              <Select name="role" defaultValue={edit?.role ?? 'ops'} id="user-role">
                 {ROLES.map((r) => (
                   <option key={r} value={r}>
                     {roleLabel[r]}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span>Placa (conductor)</span>

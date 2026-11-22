@@ -515,24 +515,6 @@
   flex-wrap: wrap;
   gap: 6px;
 }
-.reception-chip {
-  border: 1px solid var(--slate-250);
-  background: var(--slate-0);
-  color: var(--slate-700);
-  border-radius: var(--radius-full);
-  padding: 6px 12px;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-}
-.reception-chip:hover {
-  border-color: var(--blue-300);
-}
-.reception-chip.is-active {
-  background: var(--color-text);
-  border-color: var(--color-text);
-  color: var(--slate-0);
-}
 .reception-table td {
   vertical-align: middle;
 }

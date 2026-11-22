@@ -27,6 +27,7 @@ import {
 import '../../styles/inventory.css';
 import { Checkbox } from '../../shared/components/Checkbox';
 import { Tooltip } from '../../shared/components/Tooltip';
+import { ChipGroup } from '../../shared/components/Chip';
 
 const PAGE_CHUNK = 10;
 const statusOptions: { value: InventoryFilter; label: string }[] = [
@@ -553,19 +554,14 @@ export function InventoryWorkspace({
             </div>
           ) : null}
 
-          <div className="inv-quick-filters" role="group" aria-label="Filtros rápidos">
-            {quickFilters.map((filter) => (
-              <button
-                type="button"
-                key={filter.value}
-                className={status === filter.value ? 'active' : ''}
-                aria-pressed={status === filter.value}
-                onClick={() => updateParams({ estado: filter.value === 'all' ? '' : filter.value })}
-              >
-                {filter.label} <em>{filter.count}</em>
-              </button>
-            ))}
-          </div>
+          <ChipGroup
+            type="single"
+            label="Filtros rápidos"
+            className="inv-quick-filters"
+            value={status}
+            onValueChange={(value) => updateParams({ estado: value === 'all' ? '' : value })}
+            items={quickFilters.map((filter) => ({ value: filter.value, label: filter.label, count: filter.count }))}
+          />
 
           {view === 'table' ? (
             rows.length ? (

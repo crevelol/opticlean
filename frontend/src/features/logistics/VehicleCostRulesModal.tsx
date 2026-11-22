@@ -17,6 +17,7 @@ import {
 import { estimateRouteCost } from '../../shared/lib/businessRules';
 import { money } from '../../shared/lib/inventory';
 import type { Truck } from './fleet';
+import { ChipGroup } from '../../shared/components/Chip';
 
 type Sibling = { id: string; plate: string; label: string };
 
@@ -372,26 +373,14 @@ export function VehicleCostRulesModal({
             <p className="muted">No hay otros vehículos activos.</p>
           ) : (
             <>
-              <div className="fleet-sector-chips">
-                {siblings.map((s) => {
-                  const on = dupTargets.includes(s.id);
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      className={`fleet-chip ${on ? 'is-on' : ''}`}
-                      disabled={busy || !rules.length}
-                      onClick={() =>
-                        setDupTargets((prev) =>
-                          on ? prev.filter((id) => id !== s.id) : [...prev, s.id],
-                        )
-                      }
-                    >
-                      {s.label} · {s.plate}
-                    </button>
-                  );
-                })}
-              </div>
+              <ChipGroup
+                type="multiple"
+                label="Vehículos destino"
+                disabled={busy || !rules.length}
+                value={dupTargets}
+                onValueChange={setDupTargets}
+                items={siblings.map((s) => ({ value: s.id, label: `${s.label} · ${s.plate}` }))}
+              />
               <div className="cost-rules-toolbar">
                 <Btn
                   disabled={busy || !rules.length}

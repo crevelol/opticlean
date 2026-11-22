@@ -7,6 +7,7 @@ import { Modal } from '../../shared/components/Modal';
 import { Btn } from '../../shared/components/ui';
 import type { AppState, Purchase } from '../../shared/types';
 import { Checkbox } from '../../shared/components/Checkbox';
+import { Select } from '../../shared/components/Select';
 
 type Row = {
   productId: string;
@@ -181,7 +182,7 @@ export function ReceivePurchaseDialog({ state, purchase, onClose }: { state: App
                         />
                       </td>
                       <td>
-                        <select
+                        <Select
                           id={`rp-loc-${i}`}
                           value={row.loc}
                           aria-label={`Ubicación de ${name}`}
@@ -193,7 +194,7 @@ export function ReceivePurchaseDialog({ state, purchase, onClose }: { state: App
                               {id}
                             </option>
                           ))}
-                        </select>
+                        </Select>
                       </td>
                       <td>
                         <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>

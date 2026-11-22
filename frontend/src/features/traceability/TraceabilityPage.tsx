@@ -8,6 +8,7 @@ import { Icon } from '../../shared/components/Icon';
 import { SegmentedControl } from '../../shared/components/Tabs';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import '../../styles/traceability.css';
+import { ChipGroup } from '../../shared/components/Chip';
 
 const TYPE_FILTERS = [
   { id: 'all', label: 'Todos' },
@@ -147,18 +148,14 @@ export function TraceabilityPage() {
           <Badge text={`${events.length} movimientos`} color="blue" />
         </div>
 
-        <div className="trz-filters" role="group" aria-label="Tipo de movimiento">
-          {TYPE_FILTERS.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              className={type === f.id ? 'active' : ''}
-              onClick={() => setType(f.id)}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+        <ChipGroup
+          type="single"
+          label="Tipo de movimiento"
+          className="trz-filters"
+          value={type}
+          onValueChange={setType}
+          items={TYPE_FILTERS.map((item) => ({ value: item.id, label: item.label }))}
+        />
 
         {events.length ? (
           <div className="timeline trz-timeline">

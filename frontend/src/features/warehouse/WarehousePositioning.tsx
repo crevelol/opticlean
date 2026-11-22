@@ -5,6 +5,7 @@ import type { AppState, Location, WarehouseLayout } from '../../shared/types';
 import { scopedLots } from '../../shared/lib/inventory';
 import { WarehouseFloorPlan, type RackStats } from './WarehouseFloorPlan';
 import { Tooltip } from '../../shared/components/Tooltip';
+import { ChipGroup } from '../../shared/components/Chip';
 
 type Props = {
   state: AppState;
@@ -102,16 +103,28 @@ export function WarehousePositioning({ state, layout, locations, selectedLoc, le
         </Select>
       </div>
 
-      <div className="positioning-filters" role="group" aria-label="Filtrar ubicaciones por disponibilidad">
-        {filters.map((filter) => <button key={filter.id} type="button" aria-pressed={availability === filter.id} className={`is-${filter.id}${availability === filter.id ? ' active' : ''}`} onClick={() => {
-          setAvailability(filter.id);
-          const next = levelLocations.find((location) => isVisible(location, filter.id)) ?? rackLocations.find((location) => isVisible(location, filter.id));
+      <ChipGroup
+        type="single"
+        label="Filtrar ubicaciones por disponibilidad"
+        className="positioning-filters"
+        value={availability}
+        onValueChange={(id) => {
+          setAvailability(id);
+          const next =
+            levelLocations.find((location) => isVisible(location, id)) ??
+            rackLocations.find((location) => isVisible(location, id));
           if (next && !(next.id === selectedLoc)) {
-            const stillOk = rackLocations.some((location) => location.id === selectedLoc && isVisible(location, filter.id));
+            const stillOk = rackLocations.some((location) => location.id === selectedLoc && isVisible(location, id));
             if (!stillOk) onSelect(next.id);
           }
-        }}>{filter.label}<span>{rackLocations.filter((location) => isVisible(location, filter.id)).length}</span></button>)}
-      </div>
+        }}
+        items={filters.map((filter) => ({
+          value: filter.id,
+          label: filter.label,
+          count: rackLocations.filter((location) => isVisible(location, filter.id)).length,
+          tone: filter.id === 'free' ? 'success' : filter.id === 'occupied' ? 'info' : filter.id === 'full' ? 'warning' : undefined,
+        }))}
+      />
 
       <div className="level-pager" role="navigation" aria-label="Niveles del rack">
         <button type="button" className="level-pager-arrow" aria-label="Nivel anterior" disabled={level !== 'all' || shownLevel <= 1} onClick={() => goToLevel(shownLevel - 1)}>

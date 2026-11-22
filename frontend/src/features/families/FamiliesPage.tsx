@@ -7,6 +7,7 @@ import { Icon } from '../../shared/components/Icon';
 import type { WarehouseFamily } from '../../shared/types';
 import '../../styles/families.css';
 import { Switch } from '../../shared/components/Checkbox';
+import { ChipGroup } from '../../shared/components/Chip';
 
 const emptyFamily = (): WarehouseFamily => ({
   id: '',
@@ -47,8 +48,6 @@ export function FamiliesPage() {
     setEdit({ ...f, productCategories: [...f.productCategories], rackIds: [...f.rackIds] });
   };
 
-  const toggleIn = (list: string[], value: string) =>
-    list.includes(value) ? list.filter((x) => x !== value) : [...list, value];
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,35 +185,23 @@ export function FamiliesPage() {
               </div>
               <div className="field full">
                 <label>Líneas de producto</label>
-                <div className="fam-chips">
-                  {categories.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      className={edit.productCategories.includes(c) ? 'is-on' : ''}
-                      onClick={() =>
-                        setEdit({ ...edit, productCategories: toggleIn(edit.productCategories, c) })
-                      }
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
+                <ChipGroup
+                  type="multiple"
+                  label="Categorías de producto"
+                  value={edit.productCategories}
+                  onValueChange={(productCategories) => setEdit({ ...edit, productCategories })}
+                  items={categories.map((c) => ({ value: c, label: c }))}
+                />
               </div>
               <div className="field full">
                 <label>Racks de bodega</label>
-                <div className="fam-chips">
-                  {racks.map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      className={edit.rackIds.includes(r) ? 'is-on' : ''}
-                      onClick={() => setEdit({ ...edit, rackIds: toggleIn(edit.rackIds, r) })}
-                    >
-                      Rack {r}
-                    </button>
-                  ))}
-                </div>
+                <ChipGroup
+                  type="multiple"
+                  label="Racks de bodega"
+                  value={edit.rackIds}
+                  onValueChange={(rackIds) => setEdit({ ...edit, rackIds })}
+                  items={racks.map((r) => ({ value: r, label: `Rack ${r}` }))}
+                />
               </div>
               <div className="field full">
                 <label className="fam-check">

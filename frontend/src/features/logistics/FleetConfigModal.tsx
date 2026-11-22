@@ -13,6 +13,7 @@ import {
   sectorsOf,
   zonePathOf,
 } from '../../shared/lib/zones';
+import { ChipGroup, RemovableChip } from '../../shared/components/Chip';
 
 type VehicleRow = {
   id: string;
@@ -316,19 +317,14 @@ export function FleetConfigModal({
             </p>
             <div className="fleet-sector-chips">
               {form.allowedSectors.map((s) => (
-                <button
+                <RemovableChip
                   key={s}
-                  type="button"
-                  className="fleet-chip is-on"
-                  onClick={() =>
-                    setForm({
-                      ...form,
-                      allowedSectors: form.allowedSectors.filter((x) => x !== s),
-                    })
+                  onRemove={() =>
+                    setForm({ ...form, allowedSectors: form.allowedSectors.filter((x) => x !== s) })
                   }
                 >
-                  {s} ×
-                </button>
+                  {s}
+                </RemovableChip>
               ))}
             </div>
             <div className="fleet-zone-builder">
@@ -412,28 +408,24 @@ export function FleetConfigModal({
               </button>
             </div>
             {knownSectors.length ? (
-              <div className="fleet-sector-chips">
-                {knownSectors.map((s) => {
-                  const on = form.allowedSectors.some((x) => x.toLowerCase() === s.toLowerCase());
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      className={`fleet-chip ${on ? 'is-on' : ''}`}
-                      onClick={() =>
-                        setForm({
-                          ...form,
-                          allowedSectors: on
-                            ? form.allowedSectors.filter((x) => x.toLowerCase() !== s.toLowerCase())
-                            : addSector(s, form.allowedSectors),
-                        })
-                      }
-                    >
-                      {s}
-                    </button>
+              <ChipGroup
+                type="multiple"
+                label="Sectores conocidos"
+                className="fleet-sector-chips"
+                value={knownSectors.filter((s) => form.allowedSectors.some((x) => x.toLowerCase() === s.toLowerCase()))}
+                onValueChange={(next) => {
+                  const current = knownSectors.filter((s) =>
+                    form.allowedSectors.some((x) => x.toLowerCase() === s.toLowerCase()),
                   );
-                })}
-              </div>
+                  const removed = current.filter((s) => !next.includes(s));
+                  let list = form.allowedSectors.filter(
+                    (x) => !removed.some((r) => r.toLowerCase() === x.toLowerCase()),
+                  );
+                  for (const s of next.filter((s) => !current.includes(s))) list = addSector(s, list);
+                  setForm({ ...form, allowedSectors: list });
+                }}
+                items={knownSectors.map((s) => ({ value: s, label: s }))}
+              />
             ) : null}
           </div>
 
@@ -486,19 +478,13 @@ export function FleetConfigModal({
                         <div className="fleet-sector-chips">
                           {sectors.length ? (
                             sectors.map((s) => (
-                              <button
+                              <RemovableChip
                                 key={s}
-                                type="button"
-                                className="fleet-chip is-on"
                                 disabled={busy}
-                                onClick={() =>
-                                  void patch(v.id, {
-                                    allowedSectors: sectors.filter((x) => x !== s),
-                                  })
-                                }
+                                onRemove={() => void patch(v.id, { allowedSectors: sectors.filter((x) => x !== s) })}
                               >
-                                {s} ×
-                              </button>
+                                {s}
+                              </RemovableChip>
                             ))
                           ) : (
                             <em className="muted">Sin restricción</em>

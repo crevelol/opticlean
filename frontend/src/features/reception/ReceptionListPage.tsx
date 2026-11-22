@@ -2,12 +2,13 @@ import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { dateShort, daysUntil, expiryTone, product } from '../../shared/lib/inventory';
-import { Btn, Empty, Kpi, KpiGrid, PageHead, ProductCell, cx } from '../../shared/components/ui';
+import { Btn, Empty, Kpi, KpiGrid, PageHead, ProductCell } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal } from '../../shared/components/Modal';
 import { api } from '../../shared/api/client';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import '../../styles/reception.css';
+import { ChipGroup } from '../../shared/components/Chip';
 
 type Period = 'all' | 'today' | '7d' | '30d';
 
@@ -132,19 +133,14 @@ export function ReceptionListPage() {
               aria-label="Buscar recepciones"
             />
           </div>
-          <div className="reception-chips" role="group" aria-label="Periodo">
-            {periods.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className={cx('reception-chip', period === p.id && 'is-active')}
-                aria-pressed={period === p.id}
-                onClick={() => setPeriod(p.id)}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+          <ChipGroup
+            type="single"
+            label="Periodo"
+            className="reception-chips"
+            value={period}
+            onValueChange={setPeriod}
+            items={periods.map((p) => ({ value: p.id, label: p.label }))}
+          />
         </div>
 
         {list.length ? (

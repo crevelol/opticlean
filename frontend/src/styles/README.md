@@ -47,6 +47,8 @@ igual, todo valor visual sale de [`tokens.css`](./tokens.css).
    | `Checkbox` | `.ui-checkbox` | **Radix Checkbox.** Seleccionar elementos u opciones puntuales. `checked`/`onCheckedChange(boolean)`, `indeterminate`, `label`, `hint`; con `name`/`value` sigue llegando a `FormData` |
    | `Switch` | `.ui-switch` | **Radix Switch.** Activar/desactivar una configuración (Activo, Inspección…). Misma API que `Checkbox` |
    | `Tooltip` | `.ui-tooltip` | **Radix Tooltip.** Sustituye al `title` nativo: aparece con hover **y con teclado**, se enlaza con `aria-describedby`. `content` vacío = sin tooltip; envuelve solo los botones deshabilitados para que también lo muestren. No uses `title=` en elementos para tooltips |
+   | `ChipGroup` | `.ui-chip-group` | **Radix Toggle Group.** Píldoras de filtro: `type="single"` (siempre una activa) o `type="multiple"`. Items con `count`, `icon`, `leading` y `tone` (color del contador). Para pocas opciones compactas usa `SegmentedControl` |
+   | `RemovableChip` | `.ui-chip.is-static` | Etiqueta con ✕ para quitarla (`onRemove`) |
    | `Empty`      | `.empty-state` | Estado vacío                                                          |
 
    **No redefinas** altura, padding ni tamaño de letra de `.btn`, `.badge` o `.panel` dentro

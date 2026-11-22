@@ -266,43 +266,9 @@ button.whx-rack:hover {
   margin: 0 6px 0 0;
   font-size: var(--text-xl);
 }
+/* El aspecto de los chips lo da .ui-chip-group (shared/components/Chip.tsx). */
 .whx-chips {
   display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 3px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-}
-.whx-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-secondary);
-  font: inherit;
-  font-size: var(--text-md);
-  font-weight: var(--weight-semibold);
-  cursor: pointer;
-}
-.whx-chip:hover {
-  background: var(--color-surface-hover);
-}
-.whx-chip b {
-  font-weight: var(--weight-semibold);
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-.whx-chip[aria-pressed='true'] {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-}
-.whx-chip[aria-pressed='true'] b {
-  color: var(--color-primary);
 }
 .whx-warn-dot {
   width: 6px;

@@ -4,6 +4,7 @@ import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import type { Order } from '../../shared/types';
 import { Tooltip } from '../../shared/components/Tooltip';
+import { Select } from '../../shared/components/Select';
 
 type Props = {
   order: Order;
@@ -68,7 +69,7 @@ export function AssignPicker({ order, compact }: Props) {
   return (
     <label className={compact ? 'assign-picker is-compact' : 'assign-picker'}>
       {!compact ? <span>Asignar a</span> : null}
-      <select
+      <Select
         disabled={busy}
         value={order.assignedToUserId ?? ''}
         onChange={(e) => void onChange(e.target.value)}
@@ -80,7 +81,7 @@ export function AssignPicker({ order, compact }: Props) {
             {b.name}
           </option>
         ))}
-      </select>
+      </Select>
     </label>
   );
 }

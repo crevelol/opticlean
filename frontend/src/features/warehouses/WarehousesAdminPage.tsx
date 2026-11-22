@@ -17,6 +17,7 @@ import { WarehouseDrawer, type DrawerConfirm } from './WarehouseDrawer';
 import { useWarehouseRows } from './warehouseRows';
 import '../../styles/warehouses-admin.css';
 import '../../styles/warehouses-list.css';
+import { ChipGroup } from '../../shared/components/Chip';
 
 type Draft = Omit<WarehouseSite, 'id' | 'racks'> & { id?: string; notes: string };
 type FieldErrors = Partial<Record<'code' | 'name', string>>;
@@ -98,7 +99,6 @@ function WarehouseAdmin({ state }: { state: AppState }) {
   if (editId === 'new' || editing) {
     return <WarehouseEditor key={editId} state={state} warehouse={editing} initialStep={editing && params.get('step') === 'layout' ? 1 : 0} onCancel={() => setParams({})} onSaved={(id) => { setSavedId(id); setQuery(''); setFilter('all'); setParams({}); }} />;
   }
-  const chip = (key: ListFilter, label: string, warn = false) => <button type="button" className="whx-chip" data-filter={key} aria-pressed={filter === key} onClick={() => setFilter(key)}>{warn ? <span className="whx-warn-dot" /> : null}{label} <b>{counts[key]}</b></button>;
 
   return <div className="wh-admin">
     <PageHead eyebrow="Red logística" title="Tus bodegas" desc={rows.length ? `${rows.length} bodegas · ${counts.Operativa} operativas · ${num(totalUnits)} u. en inventario` : 'Organiza tus espacios, consulta su ocupación y elige dónde operar.'} actions={<Btn variant="primary" icon="plus" onClick={startNew}>Nueva bodega</Btn>} />
@@ -110,7 +110,21 @@ function WarehouseAdmin({ state }: { state: AppState }) {
     {rows.length ? <section className="whx-section" aria-labelledby="whx-list-title">
       <div className="whx-toolbar" ref={toolbar}>
         <h2 id="whx-list-title" className="whx-list-title">Todas las bodegas</h2>
-        <div className="whx-chips" role="group" aria-label="Filtrar bodegas">{chip('all', 'Todas')}{chip('Operativa', 'Operativas')}{chip('Inactiva', 'Inactivas')}{counts.attention ? chip('attention', 'Requieren atención', true) : null}</div>
+        <ChipGroup
+          type="single"
+          label="Filtrar bodegas"
+          className="whx-chips"
+          value={filter}
+          onValueChange={setFilter}
+          items={[
+            { value: 'all' as ListFilter, label: 'Todas', count: counts.all },
+            { value: 'Operativa' as ListFilter, label: 'Operativas', count: counts.Operativa },
+            { value: 'Inactiva' as ListFilter, label: 'Inactivas', count: counts.Inactiva },
+            ...(counts.attention
+              ? [{ value: 'attention' as ListFilter, label: 'Requieren atención', count: counts.attention, tone: 'warning' as const, leading: <span className="whx-warn-dot" /> }]
+              : []),
+          ]}
+        />
         <div className="search-input whx-search"><Icon name="search" /><input aria-label="Buscar bodegas" type="search" placeholder="Nombre, código o ciudad" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
         <span className="wh-result-count" role="status">{filtered.length} de {rows.length}</span>
       </div>

@@ -1407,21 +1407,6 @@
   gap: 6px;
   margin-bottom: 8px;
 }
-.fleet-chip {
-  border: 1px solid var(--slate-200);
-  background: var(--slate-75);
-  color: var(--slate-750);
-  border-radius: var(--radius-full);
-  padding: 5px 10px;
-  font-size: var(--text-md);
-  cursor: pointer;
-}
-.fleet-chip.is-on {
-  background: var(--blue-50);
-  border-color: var(--blue-300);
-  color: var(--blue-600);
-  font-weight: var(--weight-semibold);
-}
 .fleet-zone-builder {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr)) auto;

@@ -190,9 +190,6 @@
 .wh-page .positioning-rack {
   background: white;
 }
-.wh-page .positioning-filters button.is-free:not(.active) span { color: var(--green-600); opacity: 1; }
-.wh-page .positioning-filters button.is-occupied:not(.active) span { color: var(--blue-600); opacity: 1; }
-.wh-page .positioning-filters button.is-full:not(.active) span { color: var(--amber-600); opacity: 1; }
 
 .level-pager {
   display: flex;
