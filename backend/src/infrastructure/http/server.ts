@@ -10,14 +10,17 @@ import { readLabel } from '../../domain/outbound.service.js';
 import { renderReport } from '../../domain/report-file.js';
 import {
   adminRequired,
+  assertEmailAvailable,
   authRequired,
   createUser,
   deactivateUser,
   getUserById,
   listUsers,
   login,
+  platformAdminRequired,
   prepareAuth,
   publicUserFromRequest,
+  setCompanyActiveCheck,
   updateUser,
   type AuthRole,
 } from '../auth/auth.js';
@@ -26,8 +29,10 @@ import {
   companyModuleIds,
   createCompany,
   createVehicle,
+  deleteCompany,
   deleteVehicle,
   fleetForCompany,
+  getCompany,
   getVehicle,
   listAllModules,
   listCompanies,
@@ -54,6 +59,15 @@ import { scheduleAuthBackups } from '../persistence/auth-backup.js';
 const isProd = () => process.env.NODE_ENV === 'production';
 /** El reinicio a datos demo solo existe fuera de producción (o con permiso explícito). */
 const resetAllowed = () => !isProd() || process.env.OPTICLEAN_ALLOW_RESET === '1';
+/** Registro público de empresas: activo en desarrollo; en producción solo con OPTICLEAN_SIGNUP_ENABLED=1. */
+const signupEnabled = () =>
+  process.env.OPTICLEAN_SIGNUP_ENABLED === '1' || (!isProd() && process.env.OPTICLEAN_SIGNUP_ENABLED !== '0');
+
+// Usuarios de una empresa desactivada no pueden entrar ni usar sesiones abiertas.
+setCompanyActiveCheck((companyId) => {
+  const company = getCompany(companyId);
+  return !company || company.active === 1;
+});
 
 function companyIdOf(req: express.Request) {
   return String(req.user?.companyId || 'co-innovamf');
@@ -175,9 +189,17 @@ function roleDenied(req: express.Request) {
   return 'Tu rol no tiene permiso para esta acción.';
 }
 
+const PUBLIC_API_PATHS = new Set([
+  '/api/health',
+  '/api/auth/login',
+  '/api/auth/signup',
+  '/api/public/config',
+  '/api/public/delivery-code',
+]);
+
 app.use((req, res, next) => {
   if (!req.path.startsWith('/api/')) return next();
-  if (req.path === '/api/health' || req.path === '/api/auth/login' || req.path === '/api/public/delivery-code') return next();
+  if (PUBLIC_API_PATHS.has(req.path)) return next();
   if (req.path.startsWith('/api/admin')) return next();
   authRequired(req, res, () => {
     if (res.headersSent) return;
@@ -234,12 +256,59 @@ app.post('/api/auth/login', (req, res) => {
   }
 });
 
+app.get('/api/public/config', (_req, res) => {
+  res.json({ signupEnabled: signupEnabled() });
+});
+
+/**
+ * Registro de una empresa nueva: crea la empresa (tenant) y su primer administrador,
+ * y devuelve la sesión iniciada. El administrador creado es de su empresa, nunca de la plataforma.
+ */
+app.post('/api/auth/signup', (req, res) => {
+  const ip = req.ip || 'desconocida';
+  const email = String(req.body?.email ?? '');
+  try {
+    if (!signupEnabled()) {
+      res.status(403).json({ error: 'El registro de empresas no está disponible.' });
+      return;
+    }
+    const wait = loginBlockedFor(ip, `signup:${ip}`);
+    if (wait) {
+      res.set('Retry-After', String(wait));
+      res.status(429).json({ error: `Demasiados registros desde esta red. Espera ${Math.ceil(wait / 60)} minuto(s).` });
+      return;
+    }
+    // Cada intento cuenta: limita la creación masiva de empresas desde una misma IP.
+    registerLoginFailure(ip, `signup:${ip}`);
+
+    const companyName = String(req.body?.companyName ?? '').trim();
+    const name = String(req.body?.name ?? '').trim();
+    const password = String(req.body?.password ?? '');
+    if (companyName.length < 2 || companyName.length > 80) throw new Error('El nombre de la empresa debe tener entre 2 y 80 caracteres.');
+    if (!name) throw new Error('Tu nombre es obligatorio.');
+    if (password.length < 10) throw new Error('La contraseña debe tener al menos 10 caracteres.');
+    // Validar todo antes de crear la empresa para no dejar empresas huérfanas.
+    const cleanEmail = assertEmailAvailable(email);
+
+    const company = createCompany({ name: companyName, uniqueSlug: true });
+    try {
+      createUser({ email: cleanEmail, name, password, role: 'admin', companyId: company.id });
+    } catch (e) {
+      deleteCompany(company.id);
+      throw e;
+    }
+    res.status(201).json({ ...login(cleanEmail, password), company });
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : 'No se pudo completar el registro' });
+  }
+});
+
 app.get('/api/auth/me', authRequired, (req, res) => {
   res.json({ user: publicUserFromRequest(req) });
 });
 
 app.use('/api', (req, res, next) => {
-  if (req.path === '/health' || req.path === '/auth/login') return next();
+  if (PUBLIC_API_PATHS.has(`/api${req.path}`)) return next();
   return authRequired(req, res, next);
 });
 
@@ -922,14 +991,15 @@ app.delete('/api/fleet/:id', authRequired, (req, res, next) => {
 /** Roles móviles habilitados para la empresa */
 app.get('/api/mobile/config', authRequired, (req, res, next) => {
   try {
-    const companyId = String(req.query.companyId || req.user?.companyId || companyIdOf(req));
-    res.json(mobileConfigForCompany(companyId));
+    // Solo la plataforma puede consultar la configuración de otra empresa.
+    const requested = req.user?.platformAdmin && req.query.companyId ? String(req.query.companyId) : '';
+    res.json(mobileConfigForCompany(requested || companyIdOf(req)));
   } catch (e) {
     next(e);
   }
 });
 
-app.get('/api/admin/companies', adminRequired, (_req, res, next) => {
+app.get('/api/admin/companies', platformAdminRequired, (_req, res, next) => {
   try {
     res.json({ companies: listCompanies() });
   } catch (e) {
@@ -937,7 +1007,7 @@ app.get('/api/admin/companies', adminRequired, (_req, res, next) => {
   }
 });
 
-app.post('/api/admin/companies', adminRequired, (req, res, next) => {
+app.post('/api/admin/companies', platformAdminRequired, (req, res, next) => {
   try {
     const company = createCompany({
       name: String(req.body?.name ?? ''),
@@ -949,7 +1019,7 @@ app.post('/api/admin/companies', adminRequired, (req, res, next) => {
   }
 });
 
-app.patch('/api/admin/companies/:id', adminRequired, (req, res, next) => {
+app.patch('/api/admin/companies/:id', platformAdminRequired, (req, res, next) => {
   try {
     const company = updateCompany(req.params.id, {
       name: req.body?.name ? String(req.body.name) : undefined,
@@ -961,7 +1031,7 @@ app.patch('/api/admin/companies/:id', adminRequired, (req, res, next) => {
   }
 });
 
-app.get('/api/admin/companies/:id/modules', adminRequired, (req, res, next) => {
+app.get('/api/admin/companies/:id/modules', platformAdminRequired, (req, res, next) => {
   try {
     res.json({
       moduleIds: companyModuleIds(req.params.id),
@@ -972,7 +1042,7 @@ app.get('/api/admin/companies/:id/modules', adminRequired, (req, res, next) => {
   }
 });
 
-app.put('/api/admin/companies/:id/modules', adminRequired, (req, res, next) => {
+app.put('/api/admin/companies/:id/modules', platformAdminRequired, (req, res, next) => {
   try {
     const moduleIds = Array.isArray(req.body?.moduleIds)
       ? req.body.moduleIds.map((x: unknown) => String(x))
@@ -984,7 +1054,7 @@ app.put('/api/admin/companies/:id/modules', adminRequired, (req, res, next) => {
   }
 });
 
-app.get('/api/admin/companies/:id/mobile-roles', adminRequired, (req, res, next) => {
+app.get('/api/admin/companies/:id/mobile-roles', platformAdminRequired, (req, res, next) => {
   try {
     res.json({
       roleIds: companyMobileRoleIds(req.params.id),
@@ -995,7 +1065,7 @@ app.get('/api/admin/companies/:id/mobile-roles', adminRequired, (req, res, next)
   }
 });
 
-app.put('/api/admin/companies/:id/mobile-roles', adminRequired, (req, res, next) => {
+app.put('/api/admin/companies/:id/mobile-roles', platformAdminRequired, (req, res, next) => {
   try {
     const roleIds = Array.isArray(req.body?.roleIds)
       ? req.body.roleIds.map((x: unknown) => String(x))
@@ -1007,7 +1077,7 @@ app.put('/api/admin/companies/:id/mobile-roles', adminRequired, (req, res, next)
   }
 });
 
-app.get('/api/admin/companies/:id/vehicles', adminRequired, (req, res, next) => {
+app.get('/api/admin/companies/:id/vehicles', platformAdminRequired, (req, res, next) => {
   try {
     res.json({ vehicles: listVehicles(req.params.id).map((v) => vehicleDto(v)) });
   } catch (e) {
@@ -1015,7 +1085,7 @@ app.get('/api/admin/companies/:id/vehicles', adminRequired, (req, res, next) => 
   }
 });
 
-app.post('/api/admin/companies/:id/vehicles', adminRequired, (req, res, next) => {
+app.post('/api/admin/companies/:id/vehicles', platformAdminRequired, (req, res, next) => {
   try {
     const vehicle = createVehicle(req.params.id, {
       plate: String(req.body?.plate ?? ''),
@@ -1036,7 +1106,7 @@ app.post('/api/admin/companies/:id/vehicles', adminRequired, (req, res, next) =>
   }
 });
 
-app.patch('/api/admin/vehicles/:id', adminRequired, (req, res, next) => {
+app.patch('/api/admin/vehicles/:id', platformAdminRequired, (req, res, next) => {
   try {
     const vehicle = updateVehicle(req.params.id, {
       plate: req.body?.plate ? String(req.body.plate) : undefined,
@@ -1058,7 +1128,7 @@ app.patch('/api/admin/vehicles/:id', adminRequired, (req, res, next) => {
   }
 });
 
-app.delete('/api/admin/vehicles/:id', adminRequired, (req, res, next) => {
+app.delete('/api/admin/vehicles/:id', platformAdminRequired, (req, res, next) => {
   try {
     res.json(deleteVehicle(req.params.id));
   } catch (e) {
@@ -1066,7 +1136,7 @@ app.delete('/api/admin/vehicles/:id', adminRequired, (req, res, next) => {
   }
 });
 
-app.get('/api/admin/modules', adminRequired, (_req, res, next) => {
+app.get('/api/admin/modules', platformAdminRequired, (_req, res, next) => {
   try {
     res.json({ modules: listModules() });
   } catch (e) {
@@ -1074,7 +1144,7 @@ app.get('/api/admin/modules', adminRequired, (_req, res, next) => {
   }
 });
 
-app.get('/api/admin/mobile-roles', adminRequired, (_req, res, next) => {
+app.get('/api/admin/mobile-roles', platformAdminRequired, (_req, res, next) => {
   try {
     res.json({ roles: listMobileRoles() });
   } catch (e) {
@@ -1082,7 +1152,7 @@ app.get('/api/admin/mobile-roles', adminRequired, (_req, res, next) => {
   }
 });
 
-app.get('/api/admin/menu', adminRequired, (_req, res, next) => {
+app.get('/api/admin/menu', platformAdminRequired, (_req, res, next) => {
   try {
     res.json({ items: listMenuItems() });
   } catch (e) {
@@ -1090,7 +1160,7 @@ app.get('/api/admin/menu', adminRequired, (_req, res, next) => {
   }
 });
 
-app.patch('/api/admin/menu/:id', adminRequired, (req, res, next) => {
+app.patch('/api/admin/menu/:id', platformAdminRequired, (req, res, next) => {
   try {
     const item = updateMenuItem(req.params.id, {
       label: req.body?.label ? String(req.body.label) : undefined,

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import {
   getAdminDb,
   type Company,
@@ -61,15 +62,25 @@ export function getCompany(id: string) {
   return db.prepare('SELECT * FROM companies WHERE id = ?').get(id) as Company | undefined;
 }
 
-export function createCompany(input: { name: string; slug?: string }) {
+/**
+ * `uniqueSlug`: si el slug ya existe (o queda vacío) se agrega un sufijo aleatorio en vez de fallar.
+ * Lo usa el registro público para no revelar qué empresas existen.
+ */
+export function createCompany(input: { name: string; slug?: string; uniqueSlug?: boolean }) {
   const name = input.name.trim();
   if (!name) throw new Error('Nombre de empresa requerido');
-  const slug = (input.slug?.trim() || slugify(name)).toLowerCase();
+  const db = getAdminDb();
+  const taken = (id: string, slug: string) =>
+    Boolean(db.prepare('SELECT id FROM companies WHERE id = ? OR slug = ?').get(id, slug));
+  let slug = (input.slug?.trim() || slugify(name)).toLowerCase().slice(0, 30);
+  if (input.uniqueSlug) {
+    const base = slug || 'empresa';
+    slug = base;
+    while (taken(`co-${slug}`, slug)) slug = `${base}-${randomBytes(3).toString('hex')}`;
+  }
   if (!slug) throw new Error('Slug inválido');
   const id = `co-${slug}`.slice(0, 40);
-  const db = getAdminDb();
-  const exists = db.prepare('SELECT id FROM companies WHERE id = ? OR slug = ?').get(id, slug);
-  if (exists) throw new Error('Ya existe una empresa con ese nombre o slug');
+  if (taken(id, slug)) throw new Error('Ya existe una empresa con ese nombre o slug');
   db.prepare(
     `INSERT INTO companies (id, name, slug, active, created_at) VALUES (?, ?, ?, 1, ?)`,
   ).run(id, name, slug, new Date().toISOString());
@@ -96,6 +107,15 @@ export function updateCompany(id: string, input: { name?: string; active?: boole
     id,
   );
   return getCompany(id)!;
+}
+
+/** Borra una empresa sin uso (p. ej. un registro que falló a medias). */
+export function deleteCompany(id: string) {
+  const db = getAdminDb();
+  db.prepare('DELETE FROM company_modules WHERE company_id = ?').run(id);
+  db.prepare('DELETE FROM company_mobile_roles WHERE company_id = ?').run(id);
+  db.prepare('DELETE FROM vehicles WHERE company_id = ?').run(id);
+  db.prepare('DELETE FROM companies WHERE id = ?').run(id);
 }
 
 export function listModules() {

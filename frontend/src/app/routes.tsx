@@ -5,6 +5,7 @@ import { useAppState } from '../shared/hooks/AppStateProvider';
 import { useAuth } from '../shared/hooks/AuthProvider';
 import { homeForRole } from './navigation';
 import { LoginPage } from '../features/auth/LoginPage';
+import { SignupPage } from '../features/auth/SignupPage';
 import { AppSkeleton } from './shell/PageSkeleton';
 
 // Cada pantalla se descarga solo al visitarla (code splitting por ruta).
@@ -147,6 +148,7 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/registro" element={<SignupPage />} />
       <Route path="/entrega" element={<DeliveryCodePage />} />
       <Route path="/*" element={<ProtectedApp />} />
     </Routes>

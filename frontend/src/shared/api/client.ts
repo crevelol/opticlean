@@ -27,7 +27,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers,
   });
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401 && path !== '/api/auth/login') {
+  if (res.status === 401 && !path.startsWith('/api/auth/') && !path.startsWith('/api/public/')) {
     clearSession();
     if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
       window.location.assign('/login');
@@ -62,6 +62,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
+  signup: (body: { companyName: string; name: string; email: string; password: string }) =>
+    request<{ token: string; user: AuthUser; company: { id: string; name: string } }>('/api/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  publicConfig: () => request<{ signupEnabled: boolean }>('/api/public/config'),
   me: () => request<{ user: AuthUser }>('/api/auth/me'),
   getMeta: () => request<Meta>('/api/meta'),
   getState: () => request<StateResponse>('/api/state'),
