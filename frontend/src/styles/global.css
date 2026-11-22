@@ -2763,3 +2763,106 @@ td .sub {
 .ui-segment[data-tone='success'][data-state='on'] {
   color: var(--color-success);
 }
+
+/* ── Desplegables (Select, Menu): entrada = espejo de exitParts.popover ── */
+@keyframes ui-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+@keyframes ui-popover-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+
+/* ── Menu (shared/components/Menu.tsx) ─────────────────────────────── */
+.ui-menu {
+  z-index: 240;
+  min-width: 200px;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 6px;
+  background: color-mix(in srgb, var(--slate-0) 94%, transparent);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--slate-0) 90%, transparent),
+    0 16px 40px color-mix(in srgb, var(--slate-950) 14%, transparent),
+    0 2px 6px color-mix(in srgb, var(--slate-950) 6%, transparent);
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+  animation: ui-popover-in var(--duration-base) var(--ease-in-out);
+}
+.ui-menu[data-side='top'] {
+  animation-name: ui-popover-in-up;
+}
+.ui-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-md);
+  color: var(--color-text);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+.ui-menu-item .icon {
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-subtle);
+}
+.ui-menu-item[data-highlighted] {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+.ui-menu-item[data-highlighted] .icon {
+  color: var(--color-primary);
+}
+.ui-menu-item[data-tone='danger'] {
+  color: var(--color-danger);
+}
+.ui-menu-item[data-tone='danger'] .icon {
+  color: var(--color-danger);
+}
+.ui-menu-item[data-tone='danger'][data-highlighted] {
+  background: var(--color-danger-soft);
+}
+.ui-menu-item[data-disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.ui-menu-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.ui-menu-text small {
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+}
+.ui-menu-separator {
+  height: 1px;
+  margin: 5px 4px;
+  background: var(--color-border);
+}
+/* Chevron de botones que abren menú: gira al abrir */
+.ui-menu-chevron {
+  transform: rotate(90deg);
+  transition: transform var(--duration-base) var(--ease-in-out);
+}
+[data-state='open'] > .ui-menu-chevron {
+  transform: rotate(-90deg);
+}
+.ui-more-btn[data-state='open'] {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}

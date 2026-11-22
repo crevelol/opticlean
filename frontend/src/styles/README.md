@@ -43,6 +43,7 @@ igual, todo valor visual sale de [`tokens.css`](./tokens.css).
    | `Select`     | `.ui-select` | **Radix Popover** + lista propia: búsqueda automática con >8 opciones, `<option>`/`<optgroup>` como hijos, `<select>` oculto para formularios. Funciona dentro de diálogos |
    | `Tabs` + `TabPanel` | `.ui-tabs` | **Radix Tabs.** Cambian de PANEL. Línea inferior deslizante, flechas/Home/End, ARIA pestaña↔panel. Items: `value`, `label`, `icon`, `count` |
    | `SegmentedControl` | `.ui-segmented` | **Radix Toggle Group.** Filtran o cambian la VISTA del mismo contenido (estado, Lista/Tarjetas, periodo). Pastilla glass deslizante; `size="small"`, `full`, `tone` por segmento |
+   | `Menu` + `MoreButton` | `.ui-menu` | **Radix Dropdown Menu.** Escape, clic fuera, flechas y foco devuelto al botón. `items`: `label`, `icon`, `hint`, `tone: 'danger'`, `onSelect`, `'separator'`. `MoreButton` es el "⋮" estándar de acciones de fila. Para el chevron de un botón que abre menú usa `<Icon name="chevron" className="ui-menu-chevron" />` |
    | `Empty`      | `.empty-state` | Estado vacío                                                          |
 
    **No redefinas** altura, padding ni tamaño de letra de `.btn`, `.badge` o `.panel` dentro
@@ -107,4 +108,4 @@ con los presets de [shared/motion/presets.ts](../shared/motion/presets.ts):
 `MotionConfig reducedMotion="user"` (en `main.tsx`) respeta la preferencia de
 "reducir movimiento" del sistema. En CSS usa `--duration-*` y `--ease-*`.
 
-   **Capas animadas:** todo diálogo, drawer o desplegable entra **y sale** animado. La salida la hace `<ExitGhost>` (`shared/motion/ExitGhost.tsx`): al desmontarse la capa deja una copia inerte que se desvanece, así funciona aunque la pantalla la cierre de golpe (`{open ? <Modal/> : null}`). Si creas una capa nueva, coloca un `<ExitGhost>` dentro. No implementes a mano trampas de foco, listeners de Escape ni bloqueo de scroll: usa estos componentes.
+   **Capas animadas:** todo diálogo, drawer o desplegable entra **y sale** animado, y la entrada es el espejo exacto de la salida (`layer` en `shared/motion/presets.ts`: misma duración, curva y valores). La salida la hace `<ExitGhost>` (`shared/motion/ExitGhost.tsx`): al desmontarse la capa deja una copia inerte que se desvanece, así funciona aunque la pantalla la cierre de golpe (`{open ? <Modal/> : null}`). Si creas una capa nueva, coloca un `<ExitGhost>` dentro. No implementes a mano trampas de foco, listeners de Escape ni bloqueo de scroll: usa estos componentes.

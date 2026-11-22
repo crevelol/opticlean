@@ -290,7 +290,6 @@ export function Select({
             <ExitGhost
               closest="[data-radix-popper-content-wrapper]"
               parts={exitParts.popover('.ui-select-menu')}
-              ms={140}
             />
           </Popover.Content>
         </Popover.Portal>

@@ -1,4 +1,4 @@
-import { duration, ease } from './presets';
+import { duration, ease, layer } from './presets';
 
 /**
  * Animación de salida para capas que se desmontan de golpe.
@@ -86,7 +86,7 @@ export const exitParts = {
       selector: panelSelector,
       keyframes: [
         { opacity: 1, transform: 'scale(1)' },
-        { opacity: 0, transform: 'scale(0.97)' },
+        { opacity: 0, transform: `scale(${layer.dialogScale})` },
       ],
     },
   ],
@@ -97,7 +97,7 @@ export const exitParts = {
       selector: panelSelector,
       keyframes: [
         { transform: 'translateX(0)', opacity: 1 },
-        { transform: 'translateX(48px)', opacity: 0 },
+        { transform: `translateX(${layer.drawerOffset}px)`, opacity: 0 },
       ],
     },
   ],
@@ -110,7 +110,7 @@ export const exitParts = {
       selector: menuSelector,
       keyframes: [
         { opacity: 1, transform: 'translateY(0) scale(1)' },
-        { opacity: 0, transform: 'translateY(-4px) scale(0.98)' },
+        { opacity: 0, transform: `translateY(-${layer.popoverOffset}px) scale(${layer.popoverScale})` },
       ],
     },
   ],

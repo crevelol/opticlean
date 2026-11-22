@@ -1458,45 +1458,10 @@
   flex-wrap: wrap;
   margin-left: auto;
 }
-.inv-page-v2 .inv-create {
-  position: relative;
-}
 .inv-page-v2 .inv-create-btn {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-}
-.inv-page-v2 .inv-create-btn .icon:last-child {
-  width: 14px;
-  height: 14px;
-  transform: rotate(90deg);
-  opacity: 0.85;
-}
-.inv-page-v2 .inv-create-menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  min-width: 180px;
-  background: var(--slate-0);
-  border: 1px solid var(--slate-200);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 10px 28px color-mix(in srgb, var(--slate-950) 9%, transparent);
-  padding: 6px;
-  z-index: 20;
-}
-.inv-page-v2 .inv-create-menu button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  border: 0;
-  background: transparent;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-md);
-  color: var(--slate-900);
-}
-.inv-page-v2 .inv-create-menu button:hover {
-  background: var(--slate-75);
 }
 
 .inv-page-v2 .inv-expiry-banner {
@@ -1833,8 +1798,7 @@
   .inv-page-v2 .inv-top-actions {
     width: 100%;
   }
-  .inv-page-v2 .inv-top-actions .btn,
-  .inv-page-v2 .inv-create {
+  .inv-page-v2 .inv-top-actions .btn {
     flex: 1;
   }
   .inv-page-v2 .inv-create-btn {

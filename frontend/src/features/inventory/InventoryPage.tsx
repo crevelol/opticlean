@@ -7,7 +7,8 @@ import { activeWarehouseId, num } from '../../shared/lib/inventory';
 import { childrenStatus, componentsOf, isRaw } from '../../shared/lib/bom';
 import { downloadCSV } from '../../shared/lib/csv';
 import { expiryAlerts } from '../../shared/lib/wholesale';
-import { Badge, Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
+import { Badge, Btn, Kpi, KpiGrid, PageHead, Button } from '../../shared/components/ui';
+import { Menu } from '../../shared/components/Menu';
 import { Icon } from '../../shared/components/Icon';
 import { SegmentedControl } from '../../shared/components/Tabs';
 import type { AppState, Metrics } from '../../shared/types';
@@ -75,13 +76,11 @@ export function InventoryWorkspace({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [filtersOpen, setFiltersOpen] = useState(() => Boolean(params.get('proveedor')));
-  const [createOpen, setCreateOpen] = useState(false);
   const [view, setView] = useState<'table' | 'lines'>('table');
   const [visibleCount, setVisibleCount] = useState(PAGE_CHUNK);
   const [whBusy, setWhBusy] = useState(false);
   const inspector = useRef<HTMLElement>(null);
   const catalogRef = useRef<HTMLElement>(null);
-  const createRef = useRef<HTMLDivElement>(null);
 
   const query = params.get('q') ?? '';
   const category = params.get('linea') ?? '';
@@ -180,14 +179,6 @@ export function InventoryWorkspace({
     setVisibleCount(PAGE_CHUNK);
   }, [query, category, supplier, status, kind, sort]);
 
-  useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (!createRef.current?.contains(e.target as Node)) setCreateOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, []);
-
   const exportRows = () => {
     downloadCSV('OPTICLEAN_Inventario_filtrado.csv', [
       [
@@ -280,42 +271,29 @@ export function InventoryWorkspace({
             <Btn icon="download" disabled={!rows.length} onClick={exportRows}>
               Exportar vista
             </Btn>
-            <div className="inv-create" ref={createRef}>
-              <button
-                type="button"
-                className="btn primary inv-create-btn"
-                onClick={() => setCreateOpen((o) => !o)}
-                aria-expanded={createOpen}
-              >
-                <Icon name="plus" />
-                Crear
-                <Icon name="chevron" />
-              </button>
-              {createOpen ? (
-                <div className="inv-create-menu" role="menu">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setCreateOpen(false);
-                      setEditProduct('');
-                    }}
-                  >
-                    Nuevo producto
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setCreateOpen(false);
-                      navigate('/recepcion/nueva');
-                    }}
-                  >
-                    Registrar entrada
-                  </button>
-                </div>
-              ) : null}
-            </div>
+            <Menu
+              label="Crear"
+              trigger={
+                <Button variant="primary" icon="plus" className="inv-create-btn">
+                  Crear
+                  <Icon name="chevron" className="ui-menu-chevron" />
+                </Button>
+              }
+              items={[
+                {
+                  label: 'Nuevo producto',
+                  icon: 'box',
+                  hint: 'Ficha de producto o insumo',
+                  onSelect: () => setEditProduct(''),
+                },
+                {
+                  label: 'Registrar entrada',
+                  icon: 'receive',
+                  hint: 'Recepción de mercadería',
+                  onSelect: () => navigate('/recepcion/nueva'),
+                },
+              ]}
+            />
           </div>
         }
       >

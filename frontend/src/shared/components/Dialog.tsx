@@ -3,7 +3,7 @@ import { Dialog as RD } from 'radix-ui';
 import { motion } from 'motion/react';
 import { Icon } from './Icon';
 import { cx } from './ui';
-import { fade, pop, transition } from '../motion/presets';
+import { layer } from '../motion/presets';
 import { ExitGhost } from '../motion/ExitGhost';
 import { exitParts } from '../motion/exitAnimation';
 
@@ -36,7 +36,14 @@ export function DialogRoot({ open = true, onClose, onOpenChange, children }: Roo
   // y en ese caso Radix no llega a devolver el foco: lo restauramos aquí al
   // elemento que lo tenía al abrir (si el foco quedó en <body>).
   useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    let previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // Abierto desde un item de menú: el item desaparece al cerrarse el menú,
+    // así que recordamos el botón que abrió ese menú (Radix lo enlaza con aria-controls).
+    const menu = previous?.closest<HTMLElement>('[role="menu"]');
+    if (menu?.id) {
+      previous =
+        document.querySelector<HTMLElement>(`[aria-controls="${CSS.escape(menu.id)}"]`) ?? previous;
+    }
     return () => {
       requestAnimationFrame(() => {
         const lost = !document.activeElement || document.activeElement === document.body;
@@ -76,23 +83,28 @@ export function DialogContent({
   children,
   ...rest
 }: ContentProps) {
+  // Entrada = espejo de la salida (exitParts.dialog / exitParts.drawer).
   const panelMotion =
     motionPreset === 'slide'
       ? {
-          initial: { x: 48, opacity: 0 },
+          initial: { x: layer.drawerOffset, opacity: 0 },
           animate: { x: 0, opacity: 1 },
-          transition: transition.slow,
+          transition: layer.transition,
         }
-      : { variants: pop, initial: 'hidden', animate: 'show' };
+      : {
+          initial: { scale: layer.dialogScale, opacity: 0 },
+          animate: { scale: 1, opacity: 1 },
+          transition: layer.transition,
+        };
   return (
     <RD.Portal>
       <RD.Overlay asChild>
         <motion.div
           className={overlayClassName}
           data-dialog-overlay=""
-          variants={fade}
-          initial="hidden"
-          animate="show"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={layer.transition}
         >
           <RD.Content
             asChild

@@ -12,6 +12,7 @@ import {
   statusColor,
 } from '../../shared/lib/inventory';
 import { Badge, Btn, PageHead } from '../../shared/components/ui';
+import { Menu, MoreButton } from '../../shared/components/Menu';
 import { TabPanel, Tabs, SegmentedControl } from '../../shared/components/Tabs';
 import { resolveBusinessRules } from '../../shared/lib/businessRules';
 import { Icon } from '../../shared/components/Icon';
@@ -57,7 +58,6 @@ export function ClientsPage() {
   const [sort, setSort] = useState<SortMode>('name');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<DetailTab>('resumen');
-  const [menuId, setMenuId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
   const sectors = useMemo(
@@ -180,7 +180,6 @@ export function ClientsPage() {
     setEditId(c.id);
     setCreditDraft(String(c.creditLimit ?? 0));
     setError('');
-    setMenuId(null);
   };
 
   return (
@@ -311,42 +310,25 @@ export function ClientsPage() {
                             >
                               Pedido
                             </Btn>
-                            <div className="cli-more-wrap">
-                              <button
-                                type="button"
-                                className="cli-more-btn"
-                                aria-label={`Más acciones de ${c.name}`}
-                                onClick={() => setMenuId(menuId === c.id ? null : c.id)}
-                              >
-                                <span />
-                                <span />
-                                <span />
-                              </button>
-                              {menuId === c.id ? (
-                                <div className="cli-more-menu" role="menu">
-                                  <button
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={() => {
-                                      setSelectedId(c.id);
-                                      setTab('resumen');
-                                      setMenuId(null);
-                                    }}
-                                  >
-                                    Ver ficha
-                                  </button>
-                                  {isAdmin ? (
-                                    <button
-                                      type="button"
-                                      role="menuitem"
-                                      onClick={() => openCredit(c)}
-                                    >
-                                      Editar crédito
-                                    </button>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                            </div>
+                            <Menu
+                              label={`Acciones de ${c.name}`}
+                              trigger={<MoreButton label={`Más acciones de ${c.name}`} />}
+                              items={[
+                                {
+                                  label: 'Ver ficha',
+                                  icon: 'eye',
+                                  onSelect: () => {
+                                    setSelectedId(c.id);
+                                    setTab('resumen');
+                                  },
+                                },
+                                isAdmin && {
+                                  label: 'Editar crédito',
+                                  icon: 'edit',
+                                  onSelect: () => openCredit(c),
+                                },
+                              ]}
+                            />
                           </div>
                         </td>
                       </tr>

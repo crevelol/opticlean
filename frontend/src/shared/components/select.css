@@ -139,7 +139,8 @@
   /* Posicionado por Radix Popover; su wrapper copia este z-index (sobre modales: 100). */
   z-index: 240;
   transform-origin: var(--radix-popover-content-transform-origin);
-  animation: ui-popover-in var(--duration-base) var(--ease-out);
+  /* Espejo de la salida (exitParts.popover): misma duración y curva. */
+  animation: ui-popover-in var(--duration-base) var(--ease-in-out);
   display: flex;
   flex-direction: column;
   width: max-content;
@@ -243,19 +244,6 @@
   font-size: var(--text-sm);
 }
 
-/* Entrada de desplegables (la salida la hace <ExitGhost>). */
-@keyframes ui-popover-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px) scale(0.98);
-  }
-}
-@keyframes ui-popover-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(4px) scale(0.98);
-  }
-}
 .ui-select-menu[data-side='top'] {
   animation-name: ui-popover-in-up;
 }
