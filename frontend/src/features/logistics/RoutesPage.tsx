@@ -5,6 +5,7 @@ import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
 import { client, orderWeight, product } from '../../shared/lib/inventory';
 import { Badge, Btn, PageHead } from '../../shared/components/ui';
+import { SegmentedControl } from '../../shared/components/Tabs';
 import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import { RouteMap } from './RouteMap';
@@ -67,10 +68,7 @@ export function RoutesPage() {
 
   const stops = [...pendingStops, ...doneStops];
   const allActive = activeOrders(state);
-  const current =
-    pendingStops.find((o) => o.id === stopId) ??
-    pendingStops[0] ??
-    null;
+  const current = pendingStops.find((o) => o.id === stopId) ?? pendingStops[0] ?? null;
   const load = truckLoad(state, truck, allActive);
   const done = doneStops.length;
   const pending = pendingStops.length;
@@ -140,31 +138,25 @@ export function RoutesPage() {
         }
       />
 
-      <div className="log-route-tabs" role="tablist" aria-label="Vehículos">
-        {fleet.map((t) => {
+      <SegmentedControl
+        label="Vehículos"
+        value={truck.id}
+        onValueChange={(id) => {
+          setTruckId(id);
+          setStopId(null);
+          setChecked({});
+        }}
+        items={fleet.map((t) => {
           const n = routeOrders(state, t.plate).length;
           const d = deliveredToday(state, t.plate, today).length;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={truck.id === t.id}
-              className={truck.id === t.id ? 'is-active' : ''}
-              onClick={() => {
-                setTruckId(t.id);
-                setStopId(null);
-                setChecked({});
-              }}
-            >
-              {t.label} · {t.city}
-              {n ? <span className="log-tab-pill">{n}</span> : null}
-              {!n && d ? <span className="log-tab-badge">Hecho</span> : null}
-              {!n && !d ? <span className="log-tab-badge">Libre</span> : null}
-            </button>
-          );
+          return {
+            value: t.id,
+            label: `${t.label} · ${t.city}`,
+            count: n ? n : d ? 'Hecho' : 'Libre',
+          };
         })}
-      </div>
+        className="log-route-filter"
+      />
 
       <div className="log-route-statusbar">
         <Badge
@@ -311,9 +303,7 @@ export function RoutesPage() {
                       <input
                         type="checkbox"
                         checked={!!checked[key]}
-                        onChange={() =>
-                          setChecked((prev) => ({ ...prev, [key]: !prev[key] }))
-                        }
+                        onChange={() => setChecked((prev) => ({ ...prev, [key]: !prev[key] }))}
                       />
                       <span>
                         {p?.name ?? l.productId} × {l.qty}

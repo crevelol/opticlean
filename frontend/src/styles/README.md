@@ -41,6 +41,8 @@ igual, todo valor visual sale de [`tokens.css`](./tokens.css).
    | `KpiGrid` + `Kpi` | `.kpis` / `.kpi` | **Único diseño de indicadores.** `label`, `icon`, `value`, `unit`, `caption`; `tone` (primary/success/warning/danger), `progress` (0–100), `onClick`+`active` para usarlo como filtro |
    | `Dialog` / `Modal` | `.modal` | **Radix Dialog.** Foco atrapado y restaurado, Escape, clic fuera y ARIA ya resueltos. `size`: default · wide · fill; `busy` bloquea el cierre. Para cabeceras propias o drawers usa las piezas `DialogRoot` + `DialogContent` (`motionPreset="slide"`) + `DialogTitle` |
    | `Select`     | `.ui-select` | **Radix Popover** + lista propia: búsqueda automática con >8 opciones, `<option>`/`<optgroup>` como hijos, `<select>` oculto para formularios. Funciona dentro de diálogos |
+   | `Tabs` + `TabPanel` | `.ui-tabs` | **Radix Tabs.** Cambian de PANEL. Línea inferior deslizante, flechas/Home/End, ARIA pestaña↔panel. Items: `value`, `label`, `icon`, `count` |
+   | `SegmentedControl` | `.ui-segmented` | **Radix Toggle Group.** Filtran o cambian la VISTA del mismo contenido (estado, Lista/Tarjetas, periodo). Pastilla glass deslizante; `size="small"`, `full`, `tone` por segmento |
    | `Empty`      | `.empty-state` | Estado vacío                                                          |
 
    **No redefinas** altura, padding ni tamaño de letra de `.btn`, `.badge` o `.panel` dentro
@@ -104,3 +106,5 @@ con los presets de [shared/motion/presets.ts](../shared/motion/presets.ts):
 
 `MotionConfig reducedMotion="user"` (en `main.tsx`) respeta la preferencia de
 "reducir movimiento" del sistema. En CSS usa `--duration-*` y `--ease-*`.
+
+   **Capas animadas:** todo diálogo, drawer o desplegable entra **y sale** animado. La salida la hace `<ExitGhost>` (`shared/motion/ExitGhost.tsx`): al desmontarse la capa deja una copia inerte que se desvanece, así funciona aunque la pantalla la cierre de golpe (`{open ? <Modal/> : null}`). Si creas una capa nueva, coloca un `<ExitGhost>` dentro. No implementes a mano trampas de foco, listeners de Escape ni bloqueo de scroll: usa estos componentes.

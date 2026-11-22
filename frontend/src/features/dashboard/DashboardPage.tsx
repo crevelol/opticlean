@@ -4,10 +4,21 @@ import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import { api } from '../../shared/api/client';
-import { activeWarehouseId, available, client, money, num, orderValue, statusColor, stock, sellableStock } from '../../shared/lib/inventory';
+import {
+  activeWarehouseId,
+  available,
+  client,
+  money,
+  num,
+  orderValue,
+  statusColor,
+  stock,
+  sellableStock,
+} from '../../shared/lib/inventory';
 import { buildForecast } from '../../shared/lib/forecast';
 import { expiryAlerts } from '../../shared/lib/wholesale';
 import { Badge, Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
+import { SegmentedControl } from '../../shared/components/Tabs';
 import { Icon } from '../../shared/components/Icon';
 import { AssignPicker } from '../orders/AssignPicker';
 import '../../styles/dashboard.css';
@@ -60,8 +71,13 @@ export function DashboardPage() {
   // A costo promedio: es el valor que cuadra con contabilidad.
   const stockValue = state.products.reduce((n, p) => n + stock(state, p.id) * (p.avgCost ?? 0), 0);
   const saleValue = state.products.reduce((n, p) => n + stock(state, p.id) * p.price, 0);
-  const missingCost = state.products.filter((p) => stock(state, p.id) > 0 && !(p.avgCost && p.avgCost > 0)).length;
-  const unsellable = state.products.reduce((n, p) => n + Math.max(0, stock(state, p.id) - sellableStock(state, p.id)), 0);
+  const missingCost = state.products.filter(
+    (p) => stock(state, p.id) > 0 && !(p.avgCost && p.avgCost > 0),
+  ).length;
+  const unsellable = state.products.reduce(
+    (n, p) => n + Math.max(0, stock(state, p.id) - sellableStock(state, p.id)),
+    0,
+  );
   const waiting = state.orders.filter((o) => o.status === 'Esperando stock').length;
   const listed = tab === 'pending' ? pending : activeOrders;
   const pageCount = Math.max(1, Math.ceil(listed.length / ORDERS_PAGE_SIZE));
@@ -180,26 +196,16 @@ export function DashboardPage() {
           <section className="panel dash-orders">
             <div className="panel-head dash-orders-head">
               <span className="panel-title">Pedidos por preparar</span>
-              <div className="dash-tabs" role="tablist">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === 'pending'}
-                  className={tab === 'pending' ? 'active' : ''}
-                  onClick={() => setTab('pending')}
-                >
-                  Por preparar ({pending.length})
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === 'all'}
-                  className={tab === 'all' ? 'active' : ''}
-                  onClick={() => setTab('all')}
-                >
-                  Todos ({activeOrders.length})
-                </button>
-              </div>
+              <SegmentedControl
+                label="Pedidos a mostrar"
+                size="small"
+                value={tab}
+                onValueChange={setTab}
+                items={[
+                  { value: 'pending', label: 'Por preparar', count: pending.length },
+                  { value: 'all', label: 'Todos', count: activeOrders.length },
+                ]}
+              />
             </div>
             <div className="table-scroll">
               <table>
@@ -329,7 +335,8 @@ export function DashboardPage() {
                 </div>
                 <div className="dash-prio-body">
                   <strong>
-                    {expired.length} vencido{expired.length === 1 ? '' : 's'} · {soon.length} por vencer
+                    {expired.length} vencido{expired.length === 1 ? '' : 's'} · {soon.length} por
+                    vencer
                   </strong>
                   <small>
                     {expiry[0]
@@ -397,8 +404,17 @@ export function DashboardPage() {
             <div className="dash-value-body">
               <div className="dash-value-amount">{money(stockValue)}</div>
               <p>Valorado a costo promedio · a precio de venta {money(saleValue)}</p>
-              {missingCost ? <p className="fx-muted">{missingCost} producto(s) con stock aún sin costo registrado.</p> : null}
-              {unsellable ? <p><span className="fx-chip red">{unsellable} u. no vendibles</span> vencidas, retenidas o con poca vida útil</p> : null}
+              {missingCost ? (
+                <p className="fx-muted">
+                  {missingCost} producto(s) con stock aún sin costo registrado.
+                </p>
+              ) : null}
+              {unsellable ? (
+                <p>
+                  <span className="fx-chip red">{unsellable} u. no vendibles</span> vencidas,
+                  retenidas o con poca vida útil
+                </p>
+              ) : null}
               {waiting ? (
                 <p>
                   <button type="button" className="fx-link" onClick={() => navigate('/pedidos')}>

@@ -5,6 +5,7 @@ import { product, dateShort, time } from '../../shared/lib/inventory';
 import { exportEvents } from '../../shared/lib/csv';
 import { Badge, Btn, Empty, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
+import { SegmentedControl } from '../../shared/components/Tabs';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import '../../styles/traceability.css';
 
@@ -81,14 +82,16 @@ export function TraceabilityPage() {
       />
 
       {user?.role === 'admin' ? (
-        <div className="segmented" role="group" aria-label="Historial" style={{ marginBottom: 12 }}>
-          <button type="button" className={view === 'moves' ? 'active' : ''} aria-pressed={view === 'moves'} onClick={() => setView('moves')}>
-            Movimientos
-          </button>
-          <button type="button" className={view === 'changes' ? 'active' : ''} aria-pressed={view === 'changes'} onClick={() => setView('changes')}>
-            Cambios de precio y crédito
-          </button>
-        </div>
+        <SegmentedControl
+          label="Historial"
+          value={view}
+          onValueChange={setView}
+          className="trz-view-switch"
+          items={[
+            { value: 'moves', label: 'Movimientos' },
+            { value: 'changes', label: 'Cambios de precio y crédito' },
+          ]}
+        />
       ) : null}
 
       {view === 'changes' ? (

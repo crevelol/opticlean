@@ -12,6 +12,7 @@ import {
   statusColor,
 } from '../../shared/lib/inventory';
 import { Badge, Btn, PageHead } from '../../shared/components/ui';
+import { TabPanel, Tabs, SegmentedControl } from '../../shared/components/Tabs';
 import { resolveBusinessRules } from '../../shared/lib/businessRules';
 import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
@@ -229,22 +230,15 @@ export function ClientsPage() {
             <option value="full">Cupo alto</option>
           </Select>
         </label>
-        <div className="cli-view-toggle" role="group" aria-label="Vista">
-          <button
-            type="button"
-            className={view === 'list' ? 'active' : ''}
-            onClick={() => setView('list')}
-          >
-            Lista
-          </button>
-          <button
-            type="button"
-            className={view === 'cards' ? 'active' : ''}
-            onClick={() => setView('cards')}
-          >
-            Tarjetas
-          </button>
-        </div>
+        <SegmentedControl
+          label="Vista"
+          value={view}
+          onValueChange={setView}
+          items={[
+            { value: 'list', label: 'Lista', icon: 'menu' },
+            { value: 'cards', label: 'Tarjetas', icon: 'grid' },
+          ]}
+        />
       </div>
 
       <div className="cli-workspace">
@@ -457,150 +451,150 @@ export function ClientsPage() {
               </button>
             </header>
 
-            <div className="cli-tabs" role="tablist">
-              {(
-                [
-                  ['resumen', 'Resumen'],
-                  ['pedidos', 'Pedidos'],
-                  ['credito', 'Crédito'],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  className={tab === id ? 'active' : ''}
-                  onClick={() => setTab(id)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              label="Detalle del cliente"
+              value={tab}
+              onValueChange={setTab}
+              className="cli-detail-tabs"
+              items={[
+                { value: 'resumen', label: 'Resumen' },
+                { value: 'pedidos', label: 'Pedidos', count: selected.orders.length },
+                { value: 'credito', label: 'Crédito' },
+              ]}
+            >
+              <TabPanel value="resumen">
+                <div className="cli-detail-body">
+                  <dl className="cli-info">
+                    <div>
+                      <dt>Contacto</dt>
+                      <dd>{selected.client.contact}</dd>
+                    </div>
+                    <div>
+                      <dt>Correo</dt>
+                      <dd>{selected.client.email}</dd>
+                    </div>
+                    <div>
+                      <dt>Dirección</dt>
+                      <dd>{selected.client.address}</dd>
+                    </div>
+                  </dl>
 
-            {tab === 'resumen' ? (
-              <div className="cli-detail-body">
-                <dl className="cli-info">
-                  <div>
-                    <dt>Contacto</dt>
-                    <dd>{selected.client.contact}</dd>
-                  </div>
-                  <div>
-                    <dt>Correo</dt>
-                    <dd>{selected.client.email}</dd>
-                  </div>
-                  <div>
-                    <dt>Dirección</dt>
-                    <dd>{selected.client.address}</dd>
-                  </div>
-                </dl>
-
-                <div className="cli-credit-box">
-                  <div className="cli-credit-box-head">
-                    <strong>Cupo de crédito</strong>
-                    {isAdmin ? (
-<button type="button" onClick={() => openCredit(selected.client)}>
-                      Editar
+                  <div className="cli-credit-box">
+                    <div className="cli-credit-box-head">
+                      <strong>Cupo de crédito</strong>
+                      {isAdmin ? (
+                        <button type="button" onClick={() => openCredit(selected.client)}>
+                          Editar
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="cli-credit-stats">
+                      <div>
+                        <span>Límite</span>
+                        <strong>{money(selected.limit)}</strong>
+                      </div>
+                      <div>
+                        <span>Comprometido</span>
+                        <strong>{money(selected.used)}</strong>
+                      </div>
+                      <div>
+                        <span>Disponible</span>
+                        <strong className="is-ok">{money(selected.available)}</strong>
+                      </div>
+                    </div>
+                    <div className="cli-credit-bar">
+                      <span style={{ width: `${selected.pct}%` }} />
+                    </div>
+                    <button
+                      type="button"
+                      className="cli-text-link"
+                      onClick={() => setTab('pedidos')}
+                    >
+                      Ver pedidos que usan el cupo
                     </button>
-) : null}
                   </div>
-                  <div className="cli-credit-stats">
-                    <div>
-                      <span>Límite</span>
-                      <strong>{money(selected.limit)}</strong>
-                    </div>
-                    <div>
-                      <span>Comprometido</span>
-                      <strong>{money(selected.used)}</strong>
-                    </div>
-                    <div>
-                      <span>Disponible</span>
-                      <strong className="is-ok">{money(selected.available)}</strong>
-                    </div>
-                  </div>
-                  <div className="cli-credit-bar">
-                    <span style={{ width: `${selected.pct}%` }} />
-                  </div>
-                  <button type="button" className="cli-text-link" onClick={() => setTab('pedidos')}>
-                    Ver pedidos que usan el cupo
-                  </button>
-                </div>
 
-                <div className="cli-orders-summary">
-                  <strong>{selected.orders.length} pedidos</strong>
-                  <span>
-                    {money(selected.orders.reduce((n, o) => n + orderValue(state, o), 0))}
-                  </span>
-                </div>
-              </div>
-            ) : null}
-
-            {tab === 'pedidos' ? (
-              <div className="cli-detail-body">
-                {selected.orders.length ? (
-                  <ul className="cli-order-list">
-                    {selected.orders
-                      .slice()
-                      .sort((a, b) => b.date.localeCompare(a.date))
-                      .map((o) => (
-                        <li key={o.id}>
-                          <div>
-                            <strong>{o.id}</strong>
-                            <small>
-                              {o.date} · {o.status}
-                            </small>
-                          </div>
-                          <div className="cli-order-meta">
-                            <Badge text={o.status} color={statusColor(o.status)} />
-                            <em>{money(orderValue(state, o))}</em>
-                          </div>
-                        </li>
-                      ))}
-                  </ul>
-                ) : (
-                  <p className="cli-empty">Sin pedidos registrados.</p>
-                )}
-              </div>
-            ) : null}
-
-            {tab === 'credito' ? (
-              <div className="cli-detail-body">
-                <div className="cli-credit-box">
-                  <div className="cli-credit-stats">
-                    <div>
-                      <span>Límite</span>
-                      <strong>{money(selected.limit)}</strong>
-                    </div>
-                    <div>
-                      <span>Comprometido</span>
-                      <strong>{money(selected.used)}</strong>
-                    </div>
-                    <div>
-                      <span>Disponible</span>
-                      <strong className="is-ok">{money(selected.available)}</strong>
-                    </div>
+                  <div className="cli-orders-summary">
+                    <strong>{selected.orders.length} pedidos</strong>
+                    <span>
+                      {money(selected.orders.reduce((n, o) => n + orderValue(state, o), 0))}
+                    </span>
                   </div>
-                  <div className="cli-credit-bar">
-                    <span
-                      style={{ width: `${selected.pct}%` }}
-                      className={
-                        selected.pct >= rules.creditTightMaxPct
-                          ? 'is-red'
-                          : selected.pct >= rules.creditOkMaxPct
-                            ? 'is-amber'
-                            : ''
-                      }
-                    />
-                  </div>
-                  <p className="cli-credit-note">
-                    El cupo comprometido corresponde a pedidos abiertos (por preparar, en ruta,
-                    etc.).
-                  </p>
-                  <Btn variant="primary" disabled={!isAdmin} onClick={() => openCredit(selected.client)}>
-                    Ajustar límite
-                  </Btn>
                 </div>
-              </div>
-            ) : null}
+              </TabPanel>
+
+              <TabPanel value="pedidos">
+                <div className="cli-detail-body">
+                  {selected.orders.length ? (
+                    <ul className="cli-order-list">
+                      {selected.orders
+                        .slice()
+                        .sort((a, b) => b.date.localeCompare(a.date))
+                        .map((o) => (
+                          <li key={o.id}>
+                            <div>
+                              <strong>{o.id}</strong>
+                              <small>
+                                {o.date} · {o.status}
+                              </small>
+                            </div>
+                            <div className="cli-order-meta">
+                              <Badge text={o.status} color={statusColor(o.status)} />
+                              <em>{money(orderValue(state, o))}</em>
+                            </div>
+                          </li>
+                        ))}
+                    </ul>
+                  ) : (
+                    <p className="cli-empty">Sin pedidos registrados.</p>
+                  )}
+                </div>
+              </TabPanel>
+
+              <TabPanel value="credito">
+                <div className="cli-detail-body">
+                  <div className="cli-credit-box">
+                    <div className="cli-credit-stats">
+                      <div>
+                        <span>Límite</span>
+                        <strong>{money(selected.limit)}</strong>
+                      </div>
+                      <div>
+                        <span>Comprometido</span>
+                        <strong>{money(selected.used)}</strong>
+                      </div>
+                      <div>
+                        <span>Disponible</span>
+                        <strong className="is-ok">{money(selected.available)}</strong>
+                      </div>
+                    </div>
+                    <div className="cli-credit-bar">
+                      <span
+                        style={{ width: `${selected.pct}%` }}
+                        className={
+                          selected.pct >= rules.creditTightMaxPct
+                            ? 'is-red'
+                            : selected.pct >= rules.creditOkMaxPct
+                              ? 'is-amber'
+                              : ''
+                        }
+                      />
+                    </div>
+                    <p className="cli-credit-note">
+                      El cupo comprometido corresponde a pedidos abiertos (por preparar, en ruta,
+                      etc.).
+                    </p>
+                    <Btn
+                      variant="primary"
+                      disabled={!isAdmin}
+                      onClick={() => openCredit(selected.client)}
+                    >
+                      Ajustar límite
+                    </Btn>
+                  </div>
+                </div>
+              </TabPanel>
+            </Tabs>
 
             <footer className="cli-detail-foot">
               <Btn
@@ -678,7 +672,11 @@ export function ClientsPage() {
                   readOnly={!isAdmin}
                   required
                 />
-                {!isAdmin ? <small>Se asigna el cupo por defecto. Administración puede ajustarlo después.</small> : null}
+                {!isAdmin ? (
+                  <small>
+                    Se asigna el cupo por defecto. Administración puede ajustarlo después.
+                  </small>
+                ) : null}
               </div>
             </div>
             {error ? <div className="form-error visible">{error}</div> : null}

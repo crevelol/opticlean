@@ -12,6 +12,7 @@ import {
   statusColor,
 } from '../../shared/lib/inventory';
 import { Badge, Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
+import { SegmentedControl } from '../../shared/components/Tabs';
 import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import type { Order } from '../../shared/types';
@@ -416,35 +417,18 @@ export function LogisticsPage() {
             </p>
           </header>
 
-          <div className="log-list-tabs" role="tablist" aria-label="Estado de pedidos">
-            <button
-              type="button"
-              role="tab"
-              className={listTab === 'pendientes' ? 'is-active' : ''}
-              aria-selected={listTab === 'pendientes'}
-              onClick={() => setListTab('pendientes')}
-            >
-              Pendientes <span>{tabCounts.pendientes}</span>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              className={listTab === 'listos' ? 'is-active' : ''}
-              aria-selected={listTab === 'listos'}
-              onClick={() => setListTab('listos')}
-            >
-              Listos <span>{tabCounts.listos}</span>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              className={listTab === 'en_ruta' ? 'is-active' : ''}
-              aria-selected={listTab === 'en_ruta'}
-              onClick={() => setListTab('en_ruta')}
-            >
-              En ruta <span>{tabCounts.enRuta}</span>
-            </button>
-          </div>
+          <SegmentedControl
+            label="Estado de pedidos"
+            full
+            value={listTab}
+            onValueChange={setListTab}
+            items={[
+              { value: 'pendientes', label: 'Pendientes', count: tabCounts.pendientes },
+              { value: 'listos', label: 'Listos', count: tabCounts.listos },
+              { value: 'en_ruta', label: 'En ruta', count: tabCounts.enRuta },
+            ]}
+            className="log-list-filter"
+          />
 
           <label className="log-search">
             <Icon name="search" />
@@ -836,8 +820,7 @@ export function LogisticsPage() {
                               <li>
                                 <Icon name="spark" />
                                 <span>
-                                  Costo estimado:{' '}
-                                  <strong>{moneyFmt(truckRouteCost(t))}</strong>
+                                  Costo estimado: <strong>{moneyFmt(truckRouteCost(t))}</strong>
                                 </span>
                               </li>
                               <li>
@@ -1202,8 +1185,8 @@ export function LogisticsPage() {
                   </h4>
                   <small>
                     Cap. {t?.maxKg.toLocaleString('es-EC')} kg / {t?.maxM3} m³ · ${t?.costPerKm}/km
-                    {t?.costPerTrip ? ` + ${moneyFmt(t.costPerTrip)}/viaje` : ''}
-                    · {ids.length} pedido(s)
+                    {t?.costPerTrip ? ` + ${moneyFmt(t.costPerTrip)}/viaje` : ''}· {ids.length}{' '}
+                    pedido(s)
                   </small>
                   <ul>
                     {items.map((a) => (

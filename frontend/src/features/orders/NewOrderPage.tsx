@@ -17,6 +17,7 @@ import {
 } from '../../shared/lib/inventory';
 import { Btn, Empty, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
+import { SegmentedControl } from '../../shared/components/Tabs';
 import { ImportDialog } from '../imports/ImportDialog';
 import '../../styles/new-order.css';
 
@@ -397,22 +398,16 @@ export function NewOrderPage() {
 
                 <div className="field">
                   <span>Prioridad</span>
-                  <div className="no-priority" role="group" aria-label="Prioridad">
-                    <button
-                      type="button"
-                      className={priority === 'Normal' ? 'is-active' : ''}
-                      onClick={() => setPriority('Normal')}
-                    >
-                      Normal
-                    </button>
-                    <button
-                      type="button"
-                      className={`is-high ${priority === 'Alta' ? 'is-active' : ''}`}
-                      onClick={() => setPriority('Alta')}
-                    >
-                      Alta
-                    </button>
-                  </div>
+                  <SegmentedControl
+                    label="Prioridad"
+                    full
+                    value={priority}
+                    onValueChange={setPriority}
+                    items={[
+                      { value: 'Normal', label: 'Normal' },
+                      { value: 'Alta', label: 'Alta', tone: 'danger' },
+                    ]}
+                  />
                 </div>
 
                 <label className="field">
@@ -452,22 +447,16 @@ export function NewOrderPage() {
                     aria-label="Buscar productos"
                   />
                 </label>
-                <div className="segmented">
-                  <button
-                    type="button"
-                    className={catalogMode === 'products' ? 'active' : ''}
-                    onClick={() => setCatalogMode('products')}
-                  >
-                    Productos
-                  </button>
-                  <button
-                    type="button"
-                    className={catalogMode === 'bundles' ? 'active' : ''}
-                    onClick={() => setCatalogMode('bundles')}
-                  >
-                    Paquetes
-                  </button>
-                </div>
+                <SegmentedControl
+                  label="Catálogo"
+                  size="small"
+                  value={catalogMode}
+                  onValueChange={setCatalogMode}
+                  items={[
+                    { value: 'products', label: 'Productos' },
+                    { value: 'bundles', label: 'Paquetes' },
+                  ]}
+                />
               </div>
 
               {catalogMode === 'products' ? (

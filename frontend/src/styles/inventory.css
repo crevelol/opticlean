@@ -1603,27 +1603,6 @@
   gap: 12px;
   grid-template-columns: none;
 }
-.inv-page-v2 .inv-view-toggle {
-  display: inline-flex;
-  gap: 3px;
-  padding: 3px;
-  border-radius: var(--radius-md);
-  background: var(--slate-75);
-}
-.inv-page-v2 .inv-view-toggle button {
-  border: 0;
-  background: transparent;
-  color: var(--slate-600);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-  padding: 7px 12px;
-  border-radius: var(--radius-sm);
-}
-.inv-page-v2 .inv-view-toggle button.active {
-  background: var(--slate-0);
-  color: var(--slate-900);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--slate-950) 8%, transparent);
-}
 
 .inv-page-v2 .inv-toolbar {
   display: flex;

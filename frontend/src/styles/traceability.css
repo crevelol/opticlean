@@ -81,3 +81,7 @@
 .trz-link:hover {
   text-decoration: underline;
 }
+
+.trz-view-switch {
+  margin-bottom: 12px;
+}

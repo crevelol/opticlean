@@ -9,6 +9,7 @@ import { downloadCSV } from '../../shared/lib/csv';
 import { expiryAlerts } from '../../shared/lib/wholesale';
 import { Badge, Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
+import { SegmentedControl } from '../../shared/components/Tabs';
 import type { AppState, Metrics } from '../../shared/types';
 import { InventoryDetailPanel } from './InventoryDetailPanel';
 import { InventoryOverview } from './InventoryOverview';
@@ -464,22 +465,15 @@ export function InventoryWorkspace({
             <h2 id="inv-products-heading">
               Catálogo <span>{allRows.length}</span>
             </h2>
-            <div className="inv-view-toggle" role="group" aria-label="Vista">
-              <button
-                type="button"
-                className={view === 'table' ? 'active' : ''}
-                onClick={() => setView('table')}
-              >
-                Tabla
-              </button>
-              <button
-                type="button"
-                className={view === 'lines' ? 'active' : ''}
-                onClick={() => setView('lines')}
-              >
-                Por líneas
-              </button>
-            </div>
+            <SegmentedControl
+              label="Vista"
+              value={view}
+              onValueChange={setView}
+              items={[
+                { value: 'table', label: 'Tabla' },
+                { value: 'lines', label: 'Por líneas' },
+              ]}
+            />
           </div>
 
           <div className="inv-toolbar">

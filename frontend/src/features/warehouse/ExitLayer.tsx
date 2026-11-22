@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { AppState } from '../../shared/types';
 import { daysUntil, exitOrder, expiryTone, isLotSellable, product, scopedLots } from '../../shared/lib/inventory';
 import { Icon } from '../../shared/components/Icon';
+import { SegmentedControl } from '../../shared/components/Tabs';
 
 type Cell = {
   loc: string;
@@ -69,13 +70,13 @@ export function ExitLayer({ state, onLocate }: { state: AppState; onLocate: (loc
         <span className="panel-title" id="exit-layer-title">
           <Icon name="calendar" /> Próximo a salir
         </span>
-        <div className="segmented" role="group" aria-label="Horizonte de vencimiento">
-          {LIMITS.map((item) => (
-            <button key={item.id} type="button" aria-pressed={limit === item.id} className={limit === item.id ? 'active' : ''} onClick={() => setLimit(item.id)}>
-              {item.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          label="Horizonte de vencimiento"
+          size="small"
+          value={String(limit)}
+          onValueChange={(v) => setLimit(LIMITS.find((item) => String(item.id) === v)?.id ?? limit)}
+          items={LIMITS.map((item) => ({ value: String(item.id), label: item.label }))}
+        />
       </div>
       <p className="fx-muted" style={{ margin: 0 }}>
         Casillas ordenadas por vencimiento. «Sale 1º» marca el lote que el picking toma primero de cada producto. Toca una casilla para verla en el mapa.

@@ -4,6 +4,7 @@ import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { money, num } from '../../shared/lib/inventory';
 import { exportEvents, exportInventory, exportLocations, exportReport } from '../../shared/lib/csv';
 import { Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
+import { TabPanel, Tabs, SegmentedControl } from '../../shared/components/Tabs';
 import { Icon } from '../../shared/components/Icon';
 import { buildReportsSnapshot, type ReportPeriod, type ReportTab } from './reportsModel';
 import { buildManagement } from './managementModel';
@@ -43,12 +44,12 @@ export function ReportsPage() {
     tab === 'management'
       ? management.insight
       : tab === 'capital'
-      ? capital.insight
-      : tab === 'service'
-        ? service.insight
-        : tab === 'supply'
-          ? supply.insight
-          : warehouse.insight;
+        ? capital.insight
+        : tab === 'service'
+          ? service.insight
+          : tab === 'supply'
+            ? supply.insight
+            : warehouse.insight;
 
   const exportActive = () => {
     if (tab === 'capital') {
@@ -104,7 +105,19 @@ export function ReportsPage() {
     } else if (tab === 'management') {
       exportReport(
         'OPTICLEAN_Reporte_Gestion',
-        ['Código', 'Producto', 'ABC', 'Unidades vendidas', 'Venta', 'Costo', 'Margen', 'Margen %', 'Stock', 'Días de inventario', 'Rotación anual'],
+        [
+          'Código',
+          'Producto',
+          'ABC',
+          'Unidades vendidas',
+          'Venta',
+          'Costo',
+          'Margen',
+          'Margen %',
+          'Stock',
+          'Días de inventario',
+          'Rotación anual',
+        ],
         management.products.map((r) => [
           r.productId,
           r.name,
@@ -156,18 +169,12 @@ export function ReportsPage() {
       />
 
       <div className="rpt-toolbar">
-        <div className="rpt-period" role="group" aria-label="Periodo del reporte">
-          {periods.map((p) => (
-            <button
-              key={String(p.value)}
-              type="button"
-              aria-pressed={period === p.value}
-              onClick={() => setPeriod(p.value)}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          label="Periodo del reporte"
+          value={String(period)}
+          onValueChange={(v) => setPeriod(v === 'all' ? 'all' : (Number(v) as ReportPeriod))}
+          items={periods.map((p) => ({ value: String(p.value), label: p.label }))}
+        />
         <div className="rpt-classic">
           <Btn
             icon="download"
@@ -231,729 +238,735 @@ export function ReportsPage() {
         />
       </KpiGrid>
 
-      <div className="rpt-tabs" role="tablist" aria-label="Tipo de reporte">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => setTab(t.id)}
-          >
-            <Icon name={t.icon} />
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        label="Tipo de reporte"
+        value={tab}
+        onValueChange={setTab}
+        items={tabs.map((t) => ({ value: t.id, label: t.label, icon: t.icon }))}
+      >
+        <div className="rpt-insight" role="status">
+          <Icon name="spark" />
+          <span>
+            <strong>Insight:</strong> {insight}
+          </span>
+        </div>
 
-      <div className="rpt-insight" role="status">
-        <Icon name="spark" />
-        <span>
-          <strong>Insight:</strong> {insight}
-        </span>
-      </div>
+        <TabPanel value="capital">
+          <>
+            <div className="rpt-grid-2">
+              <section className="rpt-panel">
+                <div className="rpt-panel-head">
+                  <div>
+                    <h3>Valor por línea</h3>
+                    <p>
+                      Inventario a PVP · PT {money(capital.finishedValue)} · MP{' '}
+                      {money(capital.rawValue)}
+                    </p>
+                  </div>
+                  <div className="rpt-panel-actions">
+                    <Btn size="small" icon="arrow" onClick={() => navigate('/inventario')}>
+                      Inventario
+                    </Btn>
+                  </div>
+                </div>
+                {capital.byLine.length ? (
+                  <div className="rpt-table-scroll">
+                    <table className="rpt-table">
+                      <thead>
+                        <tr>
+                          <th>Línea</th>
+                          <th className="num">Unidades</th>
+                          <th className="num">Valor</th>
+                          <th className="num">En riesgo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {capital.byLine.map((row) => (
+                          <tr key={row.category}>
+                            <td>
+                              <strong>{row.category}</strong>
+                              <small>
+                                {row.kind === 'raw'
+                                  ? 'Insumos'
+                                  : row.kind === 'finished'
+                                    ? 'Productos'
+                                    : 'Mixto'}
+                              </small>
+                            </td>
+                            <td className="num">{num(row.units)}</td>
+                            <td className="num">{money(row.value)}</td>
+                            <td className="num">
+                              {money(row.atRiskValue)}
+                              <div
+                                className={`rpt-meter ${row.atRiskValue > 0 ? 'is-risk' : ''}`}
+                                aria-hidden="true"
+                              >
+                                <span
+                                  style={{
+                                    width: `${Math.min(100, capital.atRiskValue ? (row.atRiskValue / capital.atRiskValue) * 100 : 0)}%`,
+                                  }}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rpt-empty">Sin datos de capital.</div>
+                )}
+              </section>
 
-      {tab === 'capital' && (
-        <>
-          <div className="rpt-grid-2">
+              <section className="rpt-panel">
+                <div className="rpt-panel-head">
+                  <div>
+                    <h3>Ítems bajo mínimo</h3>
+                    <p>
+                      Capital en riesgo {money(capital.atRiskValue)} · Exceso{' '}
+                      {money(capital.excessValue)}
+                    </p>
+                  </div>
+                  <div className="rpt-panel-actions">
+                    <Btn size="small" icon="cart" onClick={() => navigate('/compras')}>
+                      Abastecer
+                    </Btn>
+                  </div>
+                </div>
+                {capital.atRisk.length ? (
+                  <div className="rpt-table-scroll">
+                    <table className="rpt-table">
+                      <thead>
+                        <tr>
+                          <th>Ítem</th>
+                          <th className="num">Disp. / mín.</th>
+                          <th className="num">Riesgo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {capital.atRisk.slice(0, 10).map((row) => (
+                          <tr key={row.productId}>
+                            <td>
+                              <strong>{row.name}</strong>
+                              <small>
+                                {row.productId} · {row.kind === 'raw' ? 'Insumo' : 'Producto'}
+                              </small>
+                            </td>
+                            <td className="num">
+                              {num(row.available)} / {num(row.min)}
+                            </td>
+                            <td className="num">
+                              <span className="rpt-pill rpt-pill-risk">Gap {num(row.gap)}</span>
+                              <small>{money(row.riskValue)}</small>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rpt-empty">Ningún ítem bajo mínimo.</div>
+                )}
+              </section>
+            </div>
+
             <section className="rpt-panel">
               <div className="rpt-panel-head">
                 <div>
-                  <h3>Valor por línea</h3>
-                  <p>
-                    Inventario a PVP · PT {money(capital.finishedValue)} · MP{' '}
-                    {money(capital.rawValue)}
-                  </p>
-                </div>
-                <div className="rpt-panel-actions">
-                  <Btn size="small" icon="arrow" onClick={() => navigate('/inventario')}>
-                    Inventario
-                  </Btn>
+                  <h3>Lotes por vencer (≤90 días)</h3>
+                  <p>Valor expuesto {money(capital.expiringValue90)}</p>
                 </div>
               </div>
-              {capital.byLine.length ? (
+              {capital.expiring.length ? (
                 <div className="rpt-table-scroll">
                   <table className="rpt-table">
                     <thead>
                       <tr>
-                        <th>Línea</th>
-                        <th className="num">Unidades</th>
+                        <th>Producto / lote</th>
+                        <th>Ubicación</th>
+                        <th className="num">Cantidad</th>
+                        <th>Vence</th>
                         <th className="num">Valor</th>
-                        <th className="num">En riesgo</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {capital.byLine.map((row) => (
-                        <tr key={row.category}>
+                      {capital.expiring.map((row) => (
+                        <tr key={row.lotId}>
                           <td>
-                            <strong>{row.category}</strong>
-                            <small>
-                              {row.kind === 'raw'
-                                ? 'Insumos'
-                                : row.kind === 'finished'
-                                  ? 'Productos'
-                                  : 'Mixto'}
-                            </small>
+                            <strong>{row.name}</strong>
+                            <small>{row.batch || 'Sin lote'}</small>
                           </td>
-                          <td className="num">{num(row.units)}</td>
-                          <td className="num">{money(row.value)}</td>
-                          <td className="num">
-                            {money(row.atRiskValue)}
-                            <div
-                              className={`rpt-meter ${row.atRiskValue > 0 ? 'is-risk' : ''}`}
-                              aria-hidden="true"
+                          <td>{row.loc}</td>
+                          <td className="num">{num(row.qty)}</td>
+                          <td>
+                            <span
+                              className={`rpt-pill ${row.bucket === '30' ? 'rpt-pill-risk' : 'rpt-pill-warn'}`}
                             >
+                              {row.daysLeft}d
+                            </span>
+                            <small>{row.expiry}</small>
+                          </td>
+                          <td className="num">{money(row.value)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="rpt-empty">No hay lotes venciendo en los próximos 90 días.</div>
+              )}
+            </section>
+          </>
+        </TabPanel>
+
+        <TabPanel value="service">
+          <>
+            <div className="rpt-grid-2">
+              <section className="rpt-panel">
+                <div className="rpt-panel-head">
+                  <div>
+                    <h3>Pipeline de pedidos</h3>
+                    <p>
+                      {service.orderCount} pedidos · {money(service.pipelineValue)}
+                    </p>
+                  </div>
+                  <div className="rpt-panel-actions">
+                    <Btn size="small" icon="orders" onClick={() => navigate('/pedidos')}>
+                      Pedidos
+                    </Btn>
+                  </div>
+                </div>
+                {service.byStatus.length ? (
+                  <div className="rpt-table-scroll">
+                    <table className="rpt-table">
+                      <thead>
+                        <tr>
+                          <th>Estado</th>
+                          <th className="num">Pedidos</th>
+                          <th className="num">Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {service.byStatus.map((row) => (
+                          <tr key={row.status}>
+                            <td>
+                              <strong>{row.status}</strong>
+                            </td>
+                            <td className="num">{row.count}</td>
+                            <td className="num">{money(row.value)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rpt-empty">Sin pedidos en el periodo.</div>
+                )}
+              </section>
+
+              <section className="rpt-panel">
+                <div className="rpt-panel-head">
+                  <div>
+                    <h3>Top clientes</h3>
+                    <p>Por valor de pedidos en el periodo</p>
+                  </div>
+                  <div className="rpt-panel-actions">
+                    <Btn size="small" icon="users" onClick={() => navigate('/clientes')}>
+                      Clientes
+                    </Btn>
+                  </div>
+                </div>
+                {service.topClients.length ? (
+                  <div className="rpt-table-scroll">
+                    <table className="rpt-table">
+                      <thead>
+                        <tr>
+                          <th>Cliente</th>
+                          <th className="num">Pedidos</th>
+                          <th className="num">Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {service.topClients.map((row) => (
+                          <tr key={row.clientId}>
+                            <td>
+                              <strong>{row.name}</strong>
+                              <small>{row.type}</small>
+                            </td>
+                            <td className="num">{row.orders}</td>
+                            <td className="num">{money(row.value)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rpt-empty">Sin clientes con pedidos en el periodo.</div>
+                )}
+              </section>
+            </div>
+
+            <section className="rpt-panel">
+              <div className="rpt-panel-head">
+                <div>
+                  <h3>Velocidad de producto</h3>
+                  <p>Demanda del periodo vs stock disponible</p>
+                </div>
+                <div className="rpt-panel-actions">
+                  <Btn size="small" icon="box" onClick={() => navigate('/inventario')}>
+                    Ver stock
+                  </Btn>
+                </div>
+              </div>
+              {service.velocity.length ? (
+                <div className="rpt-table-scroll">
+                  <table className="rpt-table">
+                    <thead>
+                      <tr>
+                        <th>Producto</th>
+                        <th className="num">Demanda</th>
+                        <th className="num">Disponible</th>
+                        <th className="num">Cobertura</th>
+                        <th className="num">Faltante</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {service.velocity.map((row) => (
+                        <tr key={row.productId}>
+                          <td>
+                            <strong>{row.name}</strong>
+                            <small>{row.category}</small>
+                          </td>
+                          <td className="num">{num(row.qtyOrdered)}</td>
+                          <td className="num">{num(row.available)}</td>
+                          <td className="num">
+                            {row.coverDays === null ? '—' : `${row.coverDays}d`}
+                          </td>
+                          <td className="num">
+                            {row.shortfall > 0 ? (
+                              <span className="rpt-pill rpt-pill-risk">{num(row.shortfall)}</span>
+                            ) : (
+                              <span className="rpt-pill rpt-pill-ok">OK</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="rpt-empty">Sin demanda registrada en el periodo.</div>
+              )}
+            </section>
+          </>
+        </TabPanel>
+
+        <TabPanel value="supply">
+          <>
+            <section className="rpt-panel">
+              <div className="rpt-panel-head">
+                <div>
+                  <h3>Prioridad de compra (BOM)</h3>
+                  <p>Costo estimado para llevar insumos al mínimo: {money(supply.restockCost)}</p>
+                </div>
+                <div className="rpt-panel-actions">
+                  <Btn
+                    size="small"
+                    variant="primary"
+                    icon="plus"
+                    onClick={() => navigate('/compras')}
+                  >
+                    Ir a compras
+                  </Btn>
+                </div>
+              </div>
+              {supply.items.length ? (
+                <div className="rpt-table-scroll">
+                  <table className="rpt-table">
+                    <thead>
+                      <tr>
+                        <th>Insumo</th>
+                        <th className="num">Disp. / mín.</th>
+                        <th className="num">Costo rep.</th>
+                        <th>Desbloquea</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {supply.items.map((row) => (
+                        <tr key={row.childId}>
+                          <td>
+                            <strong>{row.childName}</strong>
+                            <small>{row.childId}</small>
+                          </td>
+                          <td className="num">
+                            {num(row.available)} / {num(row.min)}
+                            <div className="rpt-meter is-warn" aria-hidden="true">
                               <span
                                 style={{
-                                  width: `${Math.min(100, capital.atRiskValue ? (row.atRiskValue / capital.atRiskValue) * 100 : 0)}%`,
+                                  width: `${Math.max(4, Math.min(100, row.min ? (row.available / row.min) * 100 : 0))}%`,
                                 }}
                               />
                             </div>
                           </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="rpt-empty">Sin datos de capital.</div>
-              )}
-            </section>
-
-            <section className="rpt-panel">
-              <div className="rpt-panel-head">
-                <div>
-                  <h3>Ítems bajo mínimo</h3>
-                  <p>
-                    Capital en riesgo {money(capital.atRiskValue)} · Exceso{' '}
-                    {money(capital.excessValue)}
-                  </p>
-                </div>
-                <div className="rpt-panel-actions">
-                  <Btn size="small" icon="cart" onClick={() => navigate('/compras')}>
-                    Abastecer
-                  </Btn>
-                </div>
-              </div>
-              {capital.atRisk.length ? (
-                <div className="rpt-table-scroll">
-                  <table className="rpt-table">
-                    <thead>
-                      <tr>
-                        <th>Ítem</th>
-                        <th className="num">Disp. / mín.</th>
-                        <th className="num">Riesgo</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {capital.atRisk.slice(0, 10).map((row) => (
-                        <tr key={row.productId}>
+                          <td className="num">{money(row.restockCost)}</td>
                           <td>
-                            <strong>{row.name}</strong>
+                            <span className="rpt-pill rpt-pill-info">
+                              {row.parentsBlocked} padres
+                            </span>
                             <small>
-                              {row.productId} · {row.kind === 'raw' ? 'Insumo' : 'Producto'}
+                              {row.parentNames.slice(0, 2).join(', ')}
+                              {row.parentNames.length > 2 ? '…' : ''}
                             </small>
                           </td>
-                          <td className="num">
-                            {num(row.available)} / {num(row.min)}
-                          </td>
-                          <td className="num">
-                            <span className="rpt-pill rpt-pill-risk">Gap {num(row.gap)}</span>
-                            <small>{money(row.riskValue)}</small>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="rpt-empty">Ningún ítem bajo mínimo.</div>
-              )}
-            </section>
-          </div>
-
-          <section className="rpt-panel">
-            <div className="rpt-panel-head">
-              <div>
-                <h3>Lotes por vencer (≤90 días)</h3>
-                <p>Valor expuesto {money(capital.expiringValue90)}</p>
-              </div>
-            </div>
-            {capital.expiring.length ? (
-              <div className="rpt-table-scroll">
-                <table className="rpt-table">
-                  <thead>
-                    <tr>
-                      <th>Producto / lote</th>
-                      <th>Ubicación</th>
-                      <th className="num">Cantidad</th>
-                      <th>Vence</th>
-                      <th className="num">Valor</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {capital.expiring.map((row) => (
-                      <tr key={row.lotId}>
-                        <td>
-                          <strong>{row.name}</strong>
-                          <small>{row.batch || 'Sin lote'}</small>
-                        </td>
-                        <td>{row.loc}</td>
-                        <td className="num">{num(row.qty)}</td>
-                        <td>
-                          <span
-                            className={`rpt-pill ${row.bucket === '30' ? 'rpt-pill-risk' : 'rpt-pill-warn'}`}
-                          >
-                            {row.daysLeft}d
-                          </span>
-                          <small>{row.expiry}</small>
-                        </td>
-                        <td className="num">{money(row.value)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="rpt-empty">No hay lotes venciendo en los próximos 90 días.</div>
-            )}
-          </section>
-        </>
-      )}
-
-      {tab === 'service' && (
-        <>
-          <div className="rpt-grid-2">
-            <section className="rpt-panel">
-              <div className="rpt-panel-head">
-                <div>
-                  <h3>Pipeline de pedidos</h3>
-                  <p>
-                    {service.orderCount} pedidos · {money(service.pipelineValue)}
-                  </p>
-                </div>
-                <div className="rpt-panel-actions">
-                  <Btn size="small" icon="orders" onClick={() => navigate('/pedidos')}>
-                    Pedidos
-                  </Btn>
-                </div>
-              </div>
-              {service.byStatus.length ? (
-                <div className="rpt-table-scroll">
-                  <table className="rpt-table">
-                    <thead>
-                      <tr>
-                        <th>Estado</th>
-                        <th className="num">Pedidos</th>
-                        <th className="num">Valor</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {service.byStatus.map((row) => (
-                        <tr key={row.status}>
                           <td>
-                            <strong>{row.status}</strong>
+                            <Btn variant="small" icon="plus" onClick={() => navigate('/compras')}>
+                              Solicitar
+                            </Btn>
                           </td>
-                          <td className="num">{row.count}</td>
-                          <td className="num">{money(row.value)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <div className="rpt-empty">Sin pedidos en el periodo.</div>
+                <div className="rpt-empty">Sin bloqueos de materia prima.</div>
               )}
             </section>
 
             <section className="rpt-panel">
               <div className="rpt-panel-head">
                 <div>
-                  <h3>Top clientes</h3>
-                  <p>Por valor de pedidos en el periodo</p>
+                  <h3>Productos padre afectados</h3>
+                  <p>Alcance de fabricación limitado por insumos bajos</p>
                 </div>
                 <div className="rpt-panel-actions">
-                  <Btn size="small" icon="users" onClick={() => navigate('/clientes')}>
-                    Clientes
+                  <Btn
+                    size="small"
+                    icon="layers"
+                    onClick={() => navigate('/inventario?tipo=finished&estado=attention')}
+                  >
+                    Ver productos
                   </Btn>
                 </div>
               </div>
-              {service.topClients.length ? (
+              {supply.parentGaps.length ? (
                 <div className="rpt-table-scroll">
                   <table className="rpt-table">
                     <thead>
                       <tr>
-                        <th>Cliente</th>
-                        <th className="num">Pedidos</th>
-                        <th className="num">Valor</th>
+                        <th>Producto padre</th>
+                        <th>Insumo bloqueante</th>
+                        <th className="num">Stock padre</th>
+                        <th className="num">Fabricables</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {service.topClients.map((row) => (
-                        <tr key={row.clientId}>
+                      {supply.parentGaps.map((row) => (
+                        <tr key={`${row.parentId}-${row.blockingChildId}`}>
                           <td>
-                            <strong>{row.name}</strong>
-                            <small>{row.type}</small>
+                            <strong>{row.parentName}</strong>
+                            <small>{row.parentId}</small>
                           </td>
-                          <td className="num">{row.orders}</td>
-                          <td className="num">{money(row.value)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="rpt-empty">Sin clientes con pedidos en el periodo.</div>
-              )}
-            </section>
-          </div>
-
-          <section className="rpt-panel">
-            <div className="rpt-panel-head">
-              <div>
-                <h3>Velocidad de producto</h3>
-                <p>Demanda del periodo vs stock disponible</p>
-              </div>
-              <div className="rpt-panel-actions">
-                <Btn size="small" icon="box" onClick={() => navigate('/inventario')}>
-                  Ver stock
-                </Btn>
-              </div>
-            </div>
-            {service.velocity.length ? (
-              <div className="rpt-table-scroll">
-                <table className="rpt-table">
-                  <thead>
-                    <tr>
-                      <th>Producto</th>
-                      <th className="num">Demanda</th>
-                      <th className="num">Disponible</th>
-                      <th className="num">Cobertura</th>
-                      <th className="num">Faltante</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {service.velocity.map((row) => (
-                      <tr key={row.productId}>
-                        <td>
-                          <strong>{row.name}</strong>
-                          <small>{row.category}</small>
-                        </td>
-                        <td className="num">{num(row.qtyOrdered)}</td>
-                        <td className="num">{num(row.available)}</td>
-                        <td className="num">
-                          {row.coverDays === null ? '—' : `${row.coverDays}d`}
-                        </td>
-                        <td className="num">
-                          {row.shortfall > 0 ? (
-                            <span className="rpt-pill rpt-pill-risk">{num(row.shortfall)}</span>
-                          ) : (
-                            <span className="rpt-pill rpt-pill-ok">OK</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="rpt-empty">Sin demanda registrada en el periodo.</div>
-            )}
-          </section>
-        </>
-      )}
-
-      {tab === 'supply' && (
-        <>
-          <section className="rpt-panel">
-            <div className="rpt-panel-head">
-              <div>
-                <h3>Prioridad de compra (BOM)</h3>
-                <p>Costo estimado para llevar insumos al mínimo: {money(supply.restockCost)}</p>
-              </div>
-              <div className="rpt-panel-actions">
-                <Btn
-                  size="small"
-                  variant="primary"
-                  icon="plus"
-                  onClick={() => navigate('/compras')}
-                >
-                  Ir a compras
-                </Btn>
-              </div>
-            </div>
-            {supply.items.length ? (
-              <div className="rpt-table-scroll">
-                <table className="rpt-table">
-                  <thead>
-                    <tr>
-                      <th>Insumo</th>
-                      <th className="num">Disp. / mín.</th>
-                      <th className="num">Costo rep.</th>
-                      <th>Desbloquea</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {supply.items.map((row) => (
-                      <tr key={row.childId}>
-                        <td>
-                          <strong>{row.childName}</strong>
-                          <small>{row.childId}</small>
-                        </td>
-                        <td className="num">
-                          {num(row.available)} / {num(row.min)}
-                          <div className="rpt-meter is-warn" aria-hidden="true">
+                          <td>{row.blockingChildName}</td>
+                          <td className="num">
+                            {num(row.parentAvailable)} / mín. {num(row.parentMin)}
+                          </td>
+                          <td className="num">
                             <span
-                              style={{
-                                width: `${Math.max(4, Math.min(100, row.min ? (row.available / row.min) * 100 : 0))}%`,
-                              }}
-                            />
-                          </div>
-                        </td>
-                        <td className="num">{money(row.restockCost)}</td>
-                        <td>
-                          <span className="rpt-pill rpt-pill-info">
-                            {row.parentsBlocked} padres
-                          </span>
-                          <small>
-                            {row.parentNames.slice(0, 2).join(', ')}
-                            {row.parentNames.length > 2 ? '…' : ''}
-                          </small>
-                        </td>
-                        <td>
-                          <Btn variant="small" icon="plus" onClick={() => navigate('/compras')}>
-                            Solicitar
-                          </Btn>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="rpt-empty">Sin bloqueos de materia prima.</div>
-            )}
-          </section>
-
-          <section className="rpt-panel">
-            <div className="rpt-panel-head">
-              <div>
-                <h3>Productos padre afectados</h3>
-                <p>Alcance de fabricación limitado por insumos bajos</p>
-              </div>
-              <div className="rpt-panel-actions">
-                <Btn
-                  size="small"
-                  icon="layers"
-                  onClick={() => navigate('/inventario?tipo=finished&estado=attention')}
-                >
-                  Ver productos
-                </Btn>
-              </div>
-            </div>
-            {supply.parentGaps.length ? (
-              <div className="rpt-table-scroll">
-                <table className="rpt-table">
-                  <thead>
-                    <tr>
-                      <th>Producto padre</th>
-                      <th>Insumo bloqueante</th>
-                      <th className="num">Stock padre</th>
-                      <th className="num">Fabricables</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {supply.parentGaps.map((row) => (
-                      <tr key={`${row.parentId}-${row.blockingChildId}`}>
-                        <td>
-                          <strong>{row.parentName}</strong>
-                          <small>{row.parentId}</small>
-                        </td>
-                        <td>{row.blockingChildName}</td>
-                        <td className="num">
-                          {num(row.parentAvailable)} / mín. {num(row.parentMin)}
-                        </td>
-                        <td className="num">
-                          <span
-                            className={`rpt-pill ${row.buildable < row.parentMin ? 'rpt-pill-warn' : 'rpt-pill-ok'}`}
-                          >
-                            {num(row.buildable)}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="rpt-empty">Todos los padres tienen insumos en nivel.</div>
-            )}
-          </section>
-        </>
-      )}
-
-      {tab === 'warehouse' && (
-        <>
-          <div className="rpt-grid-2">
-            <section className="rpt-panel">
-              <div className="rpt-panel-head">
-                <div>
-                  <h3>Densidad por rack</h3>
-                  <p>
-                    {warehouse.occupied}/{warehouse.totalPositions} posiciones ·{' '}
-                    {money(warehouse.totalValue)}
-                  </p>
-                </div>
-                <div className="rpt-panel-actions">
-                  <Btn size="small" icon="map" onClick={() => navigate('/bodega')}>
-                    Mapa
-                  </Btn>
-                </div>
-              </div>
-              {warehouse.byRack.length ? (
-                <div className="rpt-table-scroll">
-                  <table className="rpt-table">
-                    <thead>
-                      <tr>
-                        <th>Rack</th>
-                        <th className="num">Ocupación</th>
-                        <th className="num">Unidades</th>
-                        <th className="num">Valor</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {warehouse.byRack.slice(0, 12).map((row) => (
-                        <tr key={row.rack}>
-                          <td>
-                            <strong>{row.rack}</strong>
-                            <small>{row.category}</small>
+                              className={`rpt-pill ${row.buildable < row.parentMin ? 'rpt-pill-warn' : 'rpt-pill-ok'}`}
+                            >
+                              {num(row.buildable)}
+                            </span>
                           </td>
-                          <td className="num">
-                            {row.occupancyPct}%
-                            <div className="rpt-meter" aria-hidden="true">
-                              <span style={{ width: `${row.occupancyPct}%` }} />
-                            </div>
-                          </td>
-                          <td className="num">{num(row.units)}</td>
-                          <td className="num">{money(row.value)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <div className="rpt-empty">Sin geometría de bodega.</div>
+                <div className="rpt-empty">Todos los padres tienen insumos en nivel.</div>
               )}
             </section>
+          </>
+        </TabPanel>
+
+        <TabPanel value="warehouse">
+          <>
+            <div className="rpt-grid-2">
+              <section className="rpt-panel">
+                <div className="rpt-panel-head">
+                  <div>
+                    <h3>Densidad por rack</h3>
+                    <p>
+                      {warehouse.occupied}/{warehouse.totalPositions} posiciones ·{' '}
+                      {money(warehouse.totalValue)}
+                    </p>
+                  </div>
+                  <div className="rpt-panel-actions">
+                    <Btn size="small" icon="map" onClick={() => navigate('/bodega')}>
+                      Mapa
+                    </Btn>
+                  </div>
+                </div>
+                {warehouse.byRack.length ? (
+                  <div className="rpt-table-scroll">
+                    <table className="rpt-table">
+                      <thead>
+                        <tr>
+                          <th>Rack</th>
+                          <th className="num">Ocupación</th>
+                          <th className="num">Unidades</th>
+                          <th className="num">Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {warehouse.byRack.slice(0, 12).map((row) => (
+                          <tr key={row.rack}>
+                            <td>
+                              <strong>{row.rack}</strong>
+                              <small>{row.category}</small>
+                            </td>
+                            <td className="num">
+                              {row.occupancyPct}%
+                              <div className="rpt-meter" aria-hidden="true">
+                                <span style={{ width: `${row.occupancyPct}%` }} />
+                              </div>
+                            </td>
+                            <td className="num">{num(row.units)}</td>
+                            <td className="num">{money(row.value)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rpt-empty">Sin geometría de bodega.</div>
+                )}
+              </section>
+
+              <section className="rpt-panel">
+                <div className="rpt-panel-head">
+                  <div>
+                    <h3>Mayor valor por ubicación</h3>
+                    <p>Concentración de capital en posiciones</p>
+                  </div>
+                </div>
+                {warehouse.topValue.length ? (
+                  <div className="rpt-table-scroll">
+                    <table className="rpt-table">
+                      <thead>
+                        <tr>
+                          <th>Ubicación</th>
+                          <th className="num">Uds.</th>
+                          <th className="num">SKUs</th>
+                          <th className="num">Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {warehouse.topValue.map((row) => (
+                          <tr key={row.loc}>
+                            <td>
+                              <strong>{row.loc}</strong>
+                              <small>Rack {row.rack}</small>
+                            </td>
+                            <td className="num">{num(row.units)}</td>
+                            <td className="num">{row.products}</td>
+                            <td className="num">{money(row.value)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rpt-empty">Sin stock ubicado.</div>
+                )}
+              </section>
+            </div>
 
             <section className="rpt-panel">
               <div className="rpt-panel-head">
                 <div>
-                  <h3>Mayor valor por ubicación</h3>
-                  <p>Concentración de capital en posiciones</p>
+                  <h3>Ubicaciones con poco movimiento</h3>
+                  <p>Proxy: sin eventos recientes (≥14 días) o sin historial</p>
+                </div>
+                <div className="rpt-panel-actions">
+                  <Btn size="small" icon="history" onClick={() => navigate('/trazabilidad')}>
+                    Trazabilidad
+                  </Btn>
                 </div>
               </div>
-              {warehouse.topValue.length ? (
+              {warehouse.idle.length ? (
                 <div className="rpt-table-scroll">
                   <table className="rpt-table">
                     <thead>
                       <tr>
                         <th>Ubicación</th>
-                        <th className="num">Uds.</th>
-                        <th className="num">SKUs</th>
+                        <th className="num">Unidades</th>
                         <th className="num">Valor</th>
+                        <th>Último movimiento</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {warehouse.topValue.map((row) => (
+                      {warehouse.idle.map((row) => (
                         <tr key={row.loc}>
                           <td>
                             <strong>{row.loc}</strong>
                             <small>Rack {row.rack}</small>
                           </td>
                           <td className="num">{num(row.units)}</td>
-                          <td className="num">{row.products}</td>
                           <td className="num">{money(row.value)}</td>
+                          <td>
+                            {row.daysIdle === null ? (
+                              <span className="rpt-pill rpt-pill-warn">Sin historial</span>
+                            ) : (
+                              <span className="rpt-pill rpt-pill-info">{row.daysIdle}d idle</span>
+                            )}
+                            {row.lastMoveAt && (
+                              <small>{row.lastMoveAt.slice(0, 16).replace('T', ' ')}</small>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <div className="rpt-empty">Sin stock ubicado.</div>
+                <div className="rpt-empty">
+                  Todas las ubicaciones con stock han tenido movimiento reciente.
+                </div>
               )}
             </section>
-          </div>
-
-          <section className="rpt-panel">
-            <div className="rpt-panel-head">
+          </>
+        </TabPanel>
+        <TabPanel value="management">
+          <>
+            <div className="fx-abc">
               <div>
-                <h3>Ubicaciones con poco movimiento</h3>
-                <p>Proxy: sin eventos recientes (≥14 días) o sin historial</p>
+                <span className="fx-muted">Margen bruto del periodo</span>
+                <b>{money(management.margin)}</b>
+                <span className="fx-muted">
+                  {management.marginPct != null
+                    ? `${management.marginPct} % sobre ${money(management.revenue)}`
+                    : 'Sin ventas facturadas'}{' '}
+                  · {management.invoices} factura(s)
+                </span>
               </div>
-              <div className="rpt-panel-actions">
-                <Btn size="small" icon="history" onClick={() => navigate('/trazabilidad')}>
-                  Trazabilidad
-                </Btn>
+              <div>
+                <span className="fx-muted">Clasificación ABC (por venta)</span>
+                <b>
+                  {management.abcCount.A} · {management.abcCount.B} · {management.abcCount.C}
+                </b>
+                <span className="fx-muted">
+                  A = 80 % de la venta · B = siguiente 15 % · C = resto
+                </span>
+              </div>
+              <div>
+                <span className="fx-muted">Sin venta en el periodo</span>
+                <b>{management.slow}</b>
+                <span className="fx-muted">productos con stock inmovilizado</span>
               </div>
             </div>
-            {warehouse.idle.length ? (
+            {management.missingCostLines ? (
+              <p className="fx-muted">
+                {management.missingCostLines} línea(s) facturadas sin costo registrado: su margen se
+                muestra sin porcentaje.
+              </p>
+            ) : null}
+
+            <section className="rpt-panel">
+              <div className="rpt-panel-head">
+                <div>
+                  <h3>Rotación y margen por producto</h3>
+                  <p>
+                    Desde facturas emitidas desde el {management.from} ({management.days} días)
+                  </p>
+                </div>
+              </div>
               <div className="rpt-table-scroll">
                 <table className="rpt-table">
                   <thead>
                     <tr>
-                      <th>Ubicación</th>
-                      <th className="num">Unidades</th>
-                      <th className="num">Valor</th>
-                      <th>Último movimiento</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {warehouse.idle.map((row) => (
-                      <tr key={row.loc}>
-                        <td>
-                          <strong>{row.loc}</strong>
-                          <small>Rack {row.rack}</small>
-                        </td>
-                        <td className="num">{num(row.units)}</td>
-                        <td className="num">{money(row.value)}</td>
-                        <td>
-                          {row.daysIdle === null ? (
-                            <span className="rpt-pill rpt-pill-warn">Sin historial</span>
-                          ) : (
-                            <span className="rpt-pill rpt-pill-info">{row.daysIdle}d idle</span>
-                          )}
-                          {row.lastMoveAt && (
-                            <small>{row.lastMoveAt.slice(0, 16).replace('T', ' ')}</small>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="rpt-empty">
-                Todas las ubicaciones con stock han tenido movimiento reciente.
-              </div>
-            )}
-          </section>
-        </>
-      )}
-      {tab === 'management' && (
-        <>
-          <div className="fx-abc">
-            <div>
-              <span className="fx-muted">Margen bruto del periodo</span>
-              <b>{money(management.margin)}</b>
-              <span className="fx-muted">
-                {management.marginPct != null ? `${management.marginPct} % sobre ${money(management.revenue)}` : 'Sin ventas facturadas'} · {management.invoices} factura(s)
-              </span>
-            </div>
-            <div>
-              <span className="fx-muted">Clasificación ABC (por venta)</span>
-              <b>
-                {management.abcCount.A} · {management.abcCount.B} · {management.abcCount.C}
-              </b>
-              <span className="fx-muted">A = 80 % de la venta · B = siguiente 15 % · C = resto</span>
-            </div>
-            <div>
-              <span className="fx-muted">Sin venta en el periodo</span>
-              <b>{management.slow}</b>
-              <span className="fx-muted">productos con stock inmovilizado</span>
-            </div>
-          </div>
-          {management.missingCostLines ? (
-            <p className="fx-muted">{management.missingCostLines} línea(s) facturadas sin costo registrado: su margen se muestra sin porcentaje.</p>
-          ) : null}
-
-          <section className="rpt-panel">
-            <div className="rpt-panel-head">
-              <div>
-                <h3>Rotación y margen por producto</h3>
-                <p>Desde facturas emitidas desde el {management.from} ({management.days} días)</p>
-              </div>
-            </div>
-            <div className="rpt-table-scroll">
-              <table className="rpt-table">
-                <thead>
-                  <tr>
-                    <th>Producto</th>
-                    <th>ABC</th>
-                    <th className="num">Vendidas</th>
-                    <th className="num">Venta</th>
-                    <th className="num">Margen</th>
-                    <th className="num">Margen %</th>
-                    <th className="num">Stock</th>
-                    <th className="num">Días inv.</th>
-                    <th className="num">Rotación/año</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {management.products.slice(0, 40).map((r) => (
-                    <tr key={r.productId}>
-                      <td>
-                        <strong>{r.name}</strong>
-                        <small>{r.productId}</small>
-                      </td>
-                      <td>
-                        <span className={`fx-chip ${r.abc === 'A' ? 'green' : r.abc === 'B' ? 'amber' : ''}`}>{r.abc}</span>
-                      </td>
-                      <td className="num">{num(r.unitsSold)}</td>
-                      <td className="num">{money(r.revenue)}</td>
-                      <td className="num">{money(r.margin)}</td>
-                      <td className="num">{r.marginPct != null ? `${r.marginPct} %` : '—'}</td>
-                      <td className="num">{num(r.stock)}</td>
-                      <td className="num">{r.daysOfInventory ?? '—'}</td>
-                      <td className="num">{r.turnover ?? '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section className="rpt-panel">
-            <div className="rpt-panel-head">
-              <div>
-                <h3>Margen por cliente</h3>
-                <p>Venta facturada menos costo al facturar</p>
-              </div>
-            </div>
-            {management.clients.length ? (
-              <div className="rpt-table-scroll">
-                <table className="rpt-table">
-                  <thead>
-                    <tr>
-                      <th>Cliente</th>
-                      <th className="num">Facturas</th>
+                      <th>Producto</th>
+                      <th>ABC</th>
+                      <th className="num">Vendidas</th>
                       <th className="num">Venta</th>
                       <th className="num">Margen</th>
                       <th className="num">Margen %</th>
+                      <th className="num">Stock</th>
+                      <th className="num">Días inv.</th>
+                      <th className="num">Rotación/año</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {management.clients.map((r) => (
-                      <tr key={r.clientId}>
+                    {management.products.slice(0, 40).map((r) => (
+                      <tr key={r.productId}>
                         <td>
                           <strong>{r.name}</strong>
+                          <small>{r.productId}</small>
                         </td>
-                        <td className="num">{r.invoices}</td>
+                        <td>
+                          <span
+                            className={`fx-chip ${r.abc === 'A' ? 'green' : r.abc === 'B' ? 'amber' : ''}`}
+                          >
+                            {r.abc}
+                          </span>
+                        </td>
+                        <td className="num">{num(r.unitsSold)}</td>
                         <td className="num">{money(r.revenue)}</td>
                         <td className="num">{money(r.margin)}</td>
                         <td className="num">{r.marginPct != null ? `${r.marginPct} %` : '—'}</td>
+                        <td className="num">{num(r.stock)}</td>
+                        <td className="num">{r.daysOfInventory ?? '—'}</td>
+                        <td className="num">{r.turnover ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            ) : (
-              <div className="rpt-empty">Sin facturas en el periodo.</div>
-            )}
-          </section>
-        </>
-      )}
+            </section>
+
+            <section className="rpt-panel">
+              <div className="rpt-panel-head">
+                <div>
+                  <h3>Margen por cliente</h3>
+                  <p>Venta facturada menos costo al facturar</p>
+                </div>
+              </div>
+              {management.clients.length ? (
+                <div className="rpt-table-scroll">
+                  <table className="rpt-table">
+                    <thead>
+                      <tr>
+                        <th>Cliente</th>
+                        <th className="num">Facturas</th>
+                        <th className="num">Venta</th>
+                        <th className="num">Margen</th>
+                        <th className="num">Margen %</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {management.clients.map((r) => (
+                        <tr key={r.clientId}>
+                          <td>
+                            <strong>{r.name}</strong>
+                          </td>
+                          <td className="num">{r.invoices}</td>
+                          <td className="num">{money(r.revenue)}</td>
+                          <td className="num">{money(r.margin)}</td>
+                          <td className="num">{r.marginPct != null ? `${r.marginPct} %` : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="rpt-empty">Sin facturas en el periodo.</div>
+              )}
+            </section>
+          </>
+        </TabPanel>
+      </Tabs>
     </div>
   );
 }

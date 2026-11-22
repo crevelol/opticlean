@@ -83,10 +83,6 @@
   cursor: default;
 }
 
-.ord-page .tabs {
-  margin-bottom: 12px;
-}
-
 .ord-table td small {
   display: block;
   margin-top: 3px;
@@ -223,4 +219,8 @@
   .ord-meta {
     grid-template-columns: 1fr;
   }
+}
+
+.ord-status-filter {
+  margin-bottom: 16px;
 }

@@ -10,6 +10,7 @@ import { activeWarehouseId, available, product, qtyAt, scopedLots, time } from '
 import { buildWarehouseGeometry, normalizeLayout } from '../../shared/lib/warehouseLayout';
 import { Btn, Kpi, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
+import { SegmentedControl } from '../../shared/components/Tabs';
 import { WarehouseMap, type MapMode } from './WarehouseMap';
 import { WarehousePositioning } from './WarehousePositioning';
 import { WarehouseTransferDialog } from './WarehouseTransferDialog';
@@ -289,13 +290,12 @@ export function WarehousePage() {
         </header>
 
         <div className="wh-toolbar">
-          <div className="segmented" role="group" aria-label="Vista de la bodega">
-            {views.map((view) => (
-              <button key={view.id} type="button" aria-pressed={mapMode === view.id} className={mapMode === view.id ? 'active' : ''} onClick={() => setMapMode(view.id)}>
-                <Icon name={view.icon} />{view.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            label="Vista de la bodega"
+            value={mapMode}
+            onValueChange={setMapMode}
+            items={views.map((view) => ({ value: view.id, label: view.label, icon: view.icon }))}
+          />
           <div className="wh-toolbar-search search-input">
             <Icon name="search" />
             <input
