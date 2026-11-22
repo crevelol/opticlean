@@ -223,7 +223,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  previewImport: (body: { kind: 'purchase' | 'sale'; format: string; text?: string; base64?: string }) =>
+  previewImport: (body: {
+    kind: 'purchase' | 'sale';
+    format: string;
+    text?: string;
+    base64?: string;
+    fileName?: string;
+    mimeType?: string;
+  }) =>
     request<{
       kind: 'purchase' | 'sale';
       source: string;
@@ -247,7 +254,17 @@ export const api = {
       }>;
     }>('/api/imports/preview', { method: 'POST', body: JSON.stringify(body) }),
   commitImport: (body: Record<string, unknown>) =>
-    request<StateResponse & { import: { kind: string; purchaseId: string; orderId: string } }>(
+    request<
+      StateResponse & {
+        import: {
+          kind: string;
+          purchaseId: string;
+          orderId: string;
+          status?: string;
+          shortages?: Array<{ productId: string; qty: number }>;
+        };
+      }
+    >(
       '/api/imports/commit',
       { method: 'POST', body: JSON.stringify(body) },
     ),
@@ -425,6 +442,80 @@ export const api = {
         baseOccupancy: number;
       }>;
     }>(`/api/fleet/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  vehicleCostRules: (vehicleId: string) =>
+    request<{
+      vehicle: {
+        id: string;
+        plate: string;
+        label: string;
+        vehicleType: string;
+        costPerKmFallback: number;
+      };
+      rules: import('../lib/transportCost').TransportCostRule[];
+      summary: import('../lib/transportCost').VehicleCostSummary;
+      siblings: Array<{ id: string; plate: string; label: string }>;
+    }>(`/api/fleet/${encodeURIComponent(vehicleId)}/cost-rules`),
+  createVehicleCostRule: (
+    vehicleId: string,
+    body: {
+      name: string;
+      category?: string;
+      basis: 'per_km' | 'per_trip';
+      calc: 'fixed' | 'amortized';
+      amount: number;
+      lifeUnits?: number;
+      active?: boolean;
+    },
+  ) =>
+    request<{
+      rule: import('../lib/transportCost').TransportCostRule;
+      rules: import('../lib/transportCost').TransportCostRule[];
+      summary: import('../lib/transportCost').VehicleCostSummary;
+      trucks: Array<Record<string, unknown>>;
+    }>(`/api/fleet/${encodeURIComponent(vehicleId)}/cost-rules`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateVehicleCostRule: (
+    ruleId: string,
+    body: Partial<{
+      name: string;
+      category: string;
+      basis: 'per_km' | 'per_trip';
+      calc: 'fixed' | 'amortized';
+      amount: number;
+      lifeUnits: number;
+      active: boolean;
+    }>,
+  ) =>
+    request<{
+      rule: import('../lib/transportCost').TransportCostRule;
+      rules?: import('../lib/transportCost').TransportCostRule[];
+      summary?: import('../lib/transportCost').VehicleCostSummary;
+      trucks: Array<Record<string, unknown>>;
+    }>(`/api/fleet/cost-rules/${encodeURIComponent(ruleId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteVehicleCostRule: (ruleId: string) =>
+    request<{ ok: boolean; trucks: Array<Record<string, unknown>> }>(
+      `/api/fleet/cost-rules/${encodeURIComponent(ruleId)}`,
+      { method: 'DELETE' },
+    ),
+  duplicateVehicleCostRules: (vehicleId: string, targetVehicleIds: string[]) =>
+    request<{ copied: number; targets: number; trucks: Array<Record<string, unknown>> }>(
+      `/api/fleet/${encodeURIComponent(vehicleId)}/cost-rules/duplicate`,
+      { method: 'POST', body: JSON.stringify({ targetVehicleIds }) },
+    ),
+  applyDefaultVehicleCostRules: (vehicleId: string, replace = false) =>
+    request<{
+      rules: import('../lib/transportCost').TransportCostRule[];
+      summary: import('../lib/transportCost').VehicleCostSummary;
+      trucks: Array<Record<string, unknown>>;
+    }>(`/api/fleet/${encodeURIComponent(vehicleId)}/cost-rules/defaults`, {
+      method: 'POST',
+      body: JSON.stringify({ replace }),
+    }),
   logisticsAutoAssign: (body: {
     orderIds?: string[];
     stagedByTruck?: Record<string, string[]>;

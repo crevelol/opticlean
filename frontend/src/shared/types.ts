@@ -108,8 +108,10 @@ export type Client = {
   address: string;
   email: string;
   type: string;
+  province?: string;
   city?: string;
   sector?: string;
+  neighborhood?: string;
   /** Límite de crédito autorizado (USD) */
   creditLimit?: number;
   paymentTermsDays?: number;

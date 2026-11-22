@@ -1,7 +1,11 @@
 import type { AppState } from './types.js';
 import { available, createOrder, product, upsertProduct } from './inventory.service.js';
-import { createPurchase } from './commerce.service.js';
-import { parseFacturaXmlHeuristic, type ParsedInvoiceLine } from './invoice-xml.service.js';
+import { createBackorderPurchases, createPurchase } from './commerce.service.js';
+import {
+  parseFacturaXmlHeuristic,
+  type ParsedInvoice,
+  type ParsedInvoiceLine,
+} from './invoice-xml.service.js';
 import { packsOf } from './packs.js';
 import { createSupplier, findSupplier } from './suppliers.service.js';
 
@@ -228,9 +232,15 @@ export function previewTabular(s: AppState, table: string[][], kind: ImportKind,
       expiry: normalizeDate(line.expiry),
     }),
   );
-  const warnings = rows
-    .filter((row) => !row.expiry)
-    .map((row) => `${row.code}: el archivo no trae caducidad. No se inventó una fecha.`);
+  const warnings = [
+    ...rows
+      .filter((row) => !row.expiry)
+      .map(
+        (row) =>
+          `${row.code}: sin caducidad en el archivo (opcional; no es necesario). No se inventó una fecha.`,
+      ),
+    ...stockWarnings(s, kind, rows),
+  ];
   return { ...parsed, source, rows, warnings };
 }
 
@@ -252,9 +262,15 @@ export async function previewXlsx(s: AppState, base64: string, kind: ImportKind)
   );
 }
 
-export function previewXml(s: AppState, xml: string, kind: ImportKind): ImportPreview {
-  const invoice = parseFacturaXmlHeuristic(xml);
-  const partyName = kind === 'purchase' ? invoice.sellerName || invoice.buyerName : invoice.buyerName;
+/** Vista previa a partir de una factura ya parseada (XML/IA). No crea pedido. */
+export function previewFromInvoice(
+  s: AppState,
+  invoice: ParsedInvoice,
+  kind: ImportKind,
+  source: string,
+): ImportPreview {
+  const partyName =
+    kind === 'purchase' ? invoice.sellerName || invoice.buyerName : invoice.buyerName;
   const partyTaxId = kind === 'purchase' ? invoice.sellerTaxId || '' : invoice.buyerId;
   const rows = invoice.lines.map((line) =>
     matchRow(s, {
@@ -268,19 +284,17 @@ export function previewXml(s: AppState, xml: string, kind: ImportKind): ImportPr
     }),
   );
   const warnings = [
-    ...rows.filter((row) => !row.expiry).map((row) => `${row.code}: sin caducidad en el XML. No se inventó una fecha.`),
+    ...rows
+      .filter((row) => !row.expiry)
+      .map(
+        (row) =>
+          `${row.code}: sin caducidad en el archivo (opcional; no es necesario). No se inventó una fecha.`,
+      ),
+    ...stockWarnings(s, kind, rows),
   ];
-  if (kind === 'sale') {
-    for (const row of rows) {
-      const id = row.productId;
-      if (!id || available(s, id) < row.qty) {
-        warnings.push(`${row.code}: no hay stock suficiente. El pedido no se creará hasta que exista mercadería real.`);
-      }
-    }
-  }
   return {
     kind,
-    source: 'xml',
+    source,
     partyName,
     partyTaxId,
     partyAddress: kind === 'sale' ? invoice.buyerAddress : '',
@@ -289,6 +303,28 @@ export function previewXml(s: AppState, xml: string, kind: ImportKind): ImportPr
     rows,
     warnings,
   };
+}
+
+function stockWarnings(s: AppState, kind: ImportKind, rows: ImportRow[]) {
+  if (kind !== 'sale') return [];
+  const out: string[] = [];
+  for (const row of rows) {
+    if (row.status === 'invalid' || row.qty <= 0) continue;
+    const have = row.productId ? available(s, row.productId) : 0;
+    if (have < row.qty) {
+      const missing = row.qty - Math.max(have, 0);
+      out.push(
+        row.productId
+          ? `${row.code}: faltan ${missing} u. en stock. El pedido se crea igual y queda «Esperando stock».`
+          : `${row.code}: producto nuevo sin stock. Se crea en inventario al confirmar; el pedido queda «Esperando stock».`,
+      );
+    }
+  }
+  return out;
+}
+
+export function previewXml(s: AppState, xml: string, kind: ImportKind): ImportPreview {
+  return previewFromInvoice(s, parseFacturaXmlHeuristic(xml), kind, 'xml');
 }
 
 function ensureImportedProduct(s: AppState, row: ImportCommitRow, supplierName: string) {
@@ -382,24 +418,22 @@ export function commitImport(
     const item = ensureImportedProduct(s, row, 'Importado');
     return { productId: item.id, qty: row.qty };
   });
-  const shortages: string[] = [];
-  for (const line of lines) {
-    const have = available(s, line.productId);
-    if (have < line.qty) {
-      shortages.push(
-        `${product(s, line.productId)?.name ?? line.productId}: faltan ${line.qty - Math.max(have, 0)} unidades. No se inventó stock ni caducidad.`,
-      );
-    }
-  }
-  if (shortages.length) {
-    throw new Error(shortages.join(' '));
-  }
   const order = createOrder(s, {
     clientId: client.id,
     lines,
     notes: body.docNumber ? `Importado ${body.docNumber}` : 'Importado desde archivo',
+    backorder: true,
   });
-  return { kind: 'sale' as const, purchaseId: '', orderId: order.id };
+  if (order.status === 'Esperando stock') {
+    createBackorderPurchases(s, order);
+  }
+  return {
+    kind: 'sale' as const,
+    purchaseId: order.purchaseIds?.[0] ?? '',
+    orderId: order.id,
+    status: order.status,
+    shortages: order.shortages ?? [],
+  };
 }
 
 export function lineLooksDated(line: ParsedInvoiceLine) {

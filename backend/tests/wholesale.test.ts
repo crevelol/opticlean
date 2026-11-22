@@ -100,7 +100,7 @@ test('CSV purchase import previews rows and does not invent an expiry', () => {
   assert.equal(preview.rows[0].status, 'matched');
   assert.equal(preview.rows[0].packCode, 'caja');
   assert.equal(preview.rows[0].expiry, '');
-  assert.match(preview.warnings[0], /No se inventó/);
+  assert.match(preview.warnings[0], /opcional|no es necesario|No se inventó/i);
   const committed = commitImport(s, {
     kind: 'purchase',
     partyName: 'Química Andina',
@@ -111,4 +111,30 @@ test('CSV purchase import previews rows and does not invent an expiry', () => {
   const po = s.purchases.find((p) => p.id === committed.purchaseId)!;
   assert.equal(po.lines?.[0].expiry, undefined);
   assert.equal(po.qty, 24);
+});
+
+test('Sale import creates the order even without stock and keeps shortage alert', () => {
+  const s = seed();
+  const before = available(s, 'P015');
+  const qty = before + 5;
+  const csv = `codigo,descripcion,cantidad,precio\nP015,Cloro gel,${qty},1.5\nNUEVO99,Producto nuevo importado,2,3\n`;
+  const preview = previewCsv(s, csv, 'sale');
+  assert.ok(preview.warnings.some((w) => /Esperando stock|stock/i.test(w)));
+  assert.equal(preview.rows.find((r) => r.code === 'NUEVO99')?.status, 'new');
+  const client = s.clients[0];
+  assert.ok(client);
+  const committed = commitImport(s, {
+    kind: 'sale',
+    partyName: client.name,
+    partyTaxId: client.contact,
+    docNumber: 'FAC-BACK-1',
+    rows: preview.rows,
+  });
+  assert.ok(committed.orderId.startsWith('PED-'));
+  assert.equal(committed.status, 'Esperando stock');
+  assert.ok((committed.shortages?.length ?? 0) >= 1);
+  const order = s.orders.find((o) => o.id === committed.orderId)!;
+  assert.equal(order.status, 'Esperando stock');
+  assert.ok(s.products.some((p) => p.sku === 'NUEVO99' || p.id === 'NUEVO99'));
+  assert.ok((order.purchaseIds?.length ?? 0) >= 1);
 });

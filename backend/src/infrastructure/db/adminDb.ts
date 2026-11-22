@@ -629,6 +629,25 @@ export function getAdminDb() {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_vehicles_company_plate
       ON vehicles(company_id, plate);
+    CREATE TABLE IF NOT EXISTS vehicle_cost_rules (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      vehicle_id TEXT,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'otro',
+      basis TEXT NOT NULL DEFAULT 'per_km',
+      calc TEXT NOT NULL DEFAULT 'fixed',
+      amount REAL NOT NULL DEFAULT 0,
+      life_units REAL NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (company_id) REFERENCES companies(id),
+      FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_vehicle_cost_rules_vehicle
+      ON vehicle_cost_rules(vehicle_id);
+    CREATE INDEX IF NOT EXISTS idx_vehicle_cost_rules_company
+      ON vehicle_cost_rules(company_id);
   `);
   // Migraciones suaves
   try {
@@ -645,3 +664,17 @@ export function getAdminDb() {
   seed(db);
   return db;
 }
+
+export type VehicleCostRuleRow = {
+  id: string;
+  company_id: string;
+  vehicle_id: string | null;
+  name: string;
+  category: string;
+  basis: 'per_km' | 'per_trip';
+  calc: 'fixed' | 'amortized';
+  amount: number;
+  life_units: number;
+  active: number;
+  sort_order: number;
+};

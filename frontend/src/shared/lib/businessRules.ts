@@ -29,8 +29,8 @@ export function estimateRouteKm(
   return Math.max(rules.shippingMinKm, Math.round(baseRouteKm * (n / Math.max(divisor, n))));
 }
 
-export function estimateRouteCost(km: number, costPerKm: number) {
-  return Math.round(km * costPerKm * 100) / 100;
+export function estimateRouteCost(km: number, costPerKm: number, costPerTrip = 0) {
+  return Math.round((Math.max(0, km) * costPerKm + Math.max(0, costPerTrip)) * 100) / 100;
 }
 
 export function estimateRouteEtaHours(

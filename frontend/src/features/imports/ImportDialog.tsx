@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { Btn } from '../../shared/components/ui';
 import { Modal } from '../../shared/components/Modal';
@@ -27,7 +27,19 @@ type Preview = {
   issueDate: string;
   warnings: string[];
   rows: Row[];
+  source?: string;
 };
+
+function detectFormat(fileName: string) {
+  const name = fileName.toLowerCase();
+  if (name.endsWith('.xml')) return 'xml';
+  if (name.endsWith('.pdf')) return 'pdf';
+  if (name.endsWith('.docx')) return 'docx';
+  if (name.endsWith('.doc')) return 'doc';
+  if (name.endsWith('.csv') || name.endsWith('.txt')) return 'csv';
+  if (name.endsWith('.xlsx') || name.endsWith('.xls')) return 'xlsx';
+  return '';
+}
 
 export function ImportDialog({
   kind,
@@ -40,66 +52,49 @@ export function ImportDialog({
 }) {
   const { applyResponse } = useAppState();
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [fileLabel, setFileLabel] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const readFile = async (file: File) => {
-    const name = file.name.toLowerCase();
-    const isAiDoc =
-      name.endsWith('.pdf') ||
-      name.endsWith('.docx') ||
-      (name.endsWith('.doc') && !name.endsWith('.docx'));
-    if (isAiDoc) {
-      if (name.endsWith('.doc') && !name.endsWith('.docx')) {
-        setError('El .doc antiguo no está soportado. Usa .docx, PDF, XML, CSV o Excel.');
-        return;
-      }
-      setBusy(true);
-      setError('');
-      setPreview(null);
-      try {
-        const res = await api.importOrderFile({
-          fileName: file.name,
-          mimeType: file.type,
-          contentBase64: await fileToBase64(file),
-        });
-        applyResponse(res);
-        const created = res.import.productsCreated.length;
-        const updated = res.import.productsUpdated.length;
-        const clientMsg = res.import.clientCreated ? 'cliente creado' : 'cliente relacionado';
-        const prodMsg = [
-          created ? `${created} producto(s) creado(s)` : '',
-          updated ? `${updated} relacionado(s)` : '',
-        ]
-          .filter(Boolean)
-          .join(' · ');
-        onDone(
-          `${res.import.orderId} · IA · ${clientMsg}${prodMsg ? ` · ${prodMsg}` : ''} · ${res.import.invoice.docNumber}`,
-        );
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'No se pudo leer el documento con IA.');
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
+  const summary = useMemo(() => {
+    if (!preview) return null;
+    const rows = preview.rows.filter((row) => row.status !== 'invalid' && row.qty > 0);
+    const units = rows.reduce((n, row) => n + row.qty, 0);
+    const total = rows.reduce((n, row) => n + row.qty * (row.unitPrice || 0), 0);
+    const neu = rows.filter((row) => row.status === 'new').length;
+    const matched = rows.filter((row) => row.status === 'matched').length;
+    const stockAlerts = preview.warnings.filter((w) => /stock|Esperando stock/i.test(w)).length;
+    return { rows: rows.length, units, total, neu, matched, stockAlerts };
+  }, [preview]);
 
-    const format = name.endsWith('.xml')
-      ? 'xml'
-      : name.endsWith('.csv') || name.endsWith('.txt')
-        ? 'csv'
-        : 'xlsx';
-    if (!/\.(xml|csv|txt|xlsx|xls)$/.test(name)) {
+  const readFile = async (file: File) => {
+    const format = detectFormat(file.name);
+    if (!format) {
       setError('Usa un archivo XML, PDF, Word (.docx), CSV o Excel.');
       return;
     }
+    if (format === 'doc') {
+      setError('El .doc antiguo no está soportado. Usa .docx, PDF, XML, CSV o Excel.');
+      return;
+    }
+
     setBusy(true);
     setError('');
+    setPreview(null);
+    setFileLabel(file.name);
     try {
       const body =
-        format === 'xlsx'
-          ? { kind, format, base64: await fileToBase64(file) }
-          : { kind, format, text: await file.text() };
+        format === 'csv'
+          ? { kind, format, text: await file.text() }
+          : format === 'xml'
+            ? { kind, format, text: await file.text(), fileName: file.name, mimeType: file.type }
+            : {
+                kind,
+                format,
+                base64: await fileToBase64(file),
+                fileName: file.name,
+                mimeType: file.type,
+              };
       const next = await api.previewImport(body);
       setPreview(next);
     } catch (err) {
@@ -134,28 +129,49 @@ export function ImportDialog({
         rows,
       });
       applyResponse(res);
+      if (kind === 'purchase') {
+        onDone(`Compra ${res.import.purchaseId} creada. La caducidad se confirma al recibir.`);
+        return;
+      }
+      const waiting = res.import.status === 'Esperando stock' || (res.import.shortages?.length ?? 0) > 0;
       onDone(
-        kind === 'purchase'
-          ? `Compra ${res.import.purchaseId} importada. La caducidad se confirma al recibir.`
-          : `Pedido ${res.import.orderId} importado.`,
+        waiting
+          ? `Pedido ${res.import.orderId} creado en «Esperando stock». Falta mercadería; el pedido queda con alerta hasta que haya stock.`
+          : `Pedido ${res.import.orderId} creado.`,
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo confirmar la importación.');
+      setError(err instanceof Error ? err.message : 'No se pudo crear el documento.');
     } finally {
       setBusy(false);
     }
   };
 
+  const confirmLabel =
+    kind === 'purchase'
+      ? busy
+        ? 'Creando compra…'
+        : 'Crear orden de compra'
+      : busy
+        ? 'Creando pedido…'
+        : 'Crear pedido';
+
   return (
     <Modal
       title={kind === 'purchase' ? 'Importar compra' : 'Importar pedido'}
-      subtitle="PDF, Word, XML, CSV o Excel. La IA lee PDF/Word; CSV/Excel pasan por vista previa."
+      subtitle="Sube el archivo, revisa el resumen y confirma para crear."
+      wide
+      fill
       onClose={onClose}
       footer={
         <>
           <Btn onClick={onClose}>Cancelar</Btn>
-          <Btn variant="primary" icon="save" disabled={!preview || busy} onClick={() => void commit()}>
-            {busy ? 'Importando…' : 'Confirmar'}
+          <Btn
+            variant="primary"
+            icon="save"
+            disabled={!preview || busy || !summary?.rows}
+            onClick={() => void commit()}
+          >
+            {confirmLabel}
           </Btn>
         </>
       }
@@ -170,8 +186,10 @@ export function ImportDialog({
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) void readFile(file);
+              event.currentTarget.value = '';
             }}
           />
+          {fileLabel ? <small className="import-optional-hint">Archivo: {fileLabel}</small> : null}
         </div>
         {preview ? (
           <>
@@ -194,63 +212,107 @@ export function ImportDialog({
           </>
         ) : null}
       </div>
-      {preview?.warnings.length ? (
-        <div className="form-error visible" style={{ marginTop: 12 }}>
-          {preview.warnings.slice(0, 4).map((warning) => (
-            <p key={warning}>{warning}</p>
-          ))}
+
+      {preview && summary ? (
+        <div className="import-summary" role="status">
+          <strong>Resumen antes de crear</strong>
+          <ul>
+            <li>
+              {kind === 'purchase' ? 'Proveedor' : 'Cliente'}: {preview.partyName || '—'}
+            </li>
+            <li>Documento: {preview.docNumber || '—'}</li>
+            <li>
+              {summary.rows} línea(s) · {summary.units} u. · total {summary.total.toFixed(2)}
+            </li>
+            <li>
+              {summary.matched} producto(s) existentes
+              {summary.neu ? ` · ${summary.neu} nuevo(s) se crearán en inventario` : ''}
+            </li>
+            {kind === 'sale' && summary.stockAlerts ? (
+              <li>
+                {summary.stockAlerts} aviso(s) de stock: el pedido se crea igual y queda «Esperando stock»
+              </li>
+            ) : null}
+          </ul>
+          <p>Revisa la tabla. Nada se guarda hasta pulsar «{kind === 'purchase' ? 'Crear orden de compra' : 'Crear pedido'}».</p>
         </div>
       ) : null}
+
       {preview ? (
-        <div className="table-scroll" style={{ marginTop: 12 }}>
-          <table>
+        <div className="table-scroll">
+          <table className="import-preview-table">
             <thead>
               <tr>
                 <th>Producto</th>
                 <th>Cantidad</th>
                 <th>Empaque</th>
-                <th>Caducidad</th>
+                <th>
+                  Caducidad
+                  <small className="import-optional">opcional</small>
+                </th>
                 <th>Estado</th>
               </tr>
             </thead>
             <tbody>
-              {preview.rows.map((row, index) => (
-                <tr key={`${row.code}-${index}`}>
-                  <td>
-                    <strong>{row.name}</strong>
-                    <span className="sub">{row.code}</span>
-                  </td>
-                  <td>{row.qty}</td>
-                  <td>{row.packCode}</td>
-                  <td>
-                    <input
-                      aria-label={`Caducidad de ${row.code}`}
-                      type="date"
-                      value={row.expiry}
-                      onChange={(event) => {
-                        const rows = preview.rows.map((item, i) =>
-                          i === index ? { ...item, expiry: event.target.value } : item,
-                        );
-                        setPreview({ ...preview, rows });
-                      }}
-                    />
-                  </td>
-                  <td>{row.status === 'matched' ? 'Existe' : row.status === 'new' ? 'Nuevo' : 'Inválido'}</td>
-                </tr>
-              ))}
+              {preview.rows.map((row, index) => {
+                const notes = warningsForRow(preview.warnings, row.code);
+                return (
+                  <tr key={`${row.code}-${index}`} className={notes.length ? 'has-row-note' : undefined}>
+                    <td>
+                      <strong>{row.name}</strong>
+                      <span className="sub">{row.code}</span>
+                      {notes.length ? (
+                        <ul className="import-row-notes">
+                          {notes.map((note) => (
+                            <li key={note}>{stripCodePrefix(note, row.code)}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </td>
+                    <td>{row.qty}</td>
+                    <td>{row.packCode}</td>
+                    <td>
+                      <input
+                        aria-label={`Caducidad de ${row.code} (opcional)`}
+                        type="date"
+                        value={row.expiry}
+                        onChange={(event) => {
+                          const rows = preview.rows.map((item, i) =>
+                            i === index ? { ...item, expiry: event.target.value } : item,
+                          );
+                          setPreview({ ...preview, rows });
+                        }}
+                      />
+                      {!row.expiry ? (
+                        <small className="import-optional-hint">No es necesaria</small>
+                      ) : null}
+                    </td>
+                    <td>{row.status === 'matched' ? 'Existe' : row.status === 'new' ? 'Nuevo' : 'Inválido'}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       ) : (
         <p className="subtle" style={{ marginTop: 12 }}>
           {busy
-            ? 'Leyendo archivo…'
-            : 'Elige PDF/Word (IA), XML, CSV o Excel del proveedor o cliente.'}
+            ? 'Leyendo archivo y armando el resumen…'
+            : 'Elige PDF, Word, XML, CSV o Excel. Primero verás el resumen; el pedido se crea solo al confirmar.'}
         </p>
       )}
       {error ? <div className="form-error visible">{error}</div> : null}
     </Modal>
   );
+}
+
+function warningsForRow(warnings: string[], code: string) {
+  const key = `${code}:`;
+  return warnings.filter((warning) => warning.startsWith(key) || warning.startsWith(`${code} `));
+}
+
+function stripCodePrefix(warning: string, code: string) {
+  return warning.replace(new RegExp(`^${code}\\s*:\\s*`, 'i'), '').trim();
 }
 
 function fileToBase64(file: File) {

@@ -5,6 +5,7 @@ import {
   estimateRouteKm,
   resolveBusinessRules,
 } from '../../shared/lib/businessRules';
+import { vehicleAllowsZone, zonePathOf } from '../../shared/lib/zones';
 import type { AppState, BusinessRules, Order } from '../../shared/types';
 
 export type VehicleKind = 'carro' | 'camion' | 'motocicleta';
@@ -20,6 +21,10 @@ export type Truck = {
   maxKg: number;
   maxM3: number;
   costPerKm: number;
+  /** Costo fijo por viaje (peaje, extras) derivado de reglas. */
+  costPerTrip?: number;
+  /** true si el $/km viene de reglas (llantas, combustible, etc.). */
+  costFromRules?: boolean;
   etaHours: number;
   routeKm: number;
   /** Vacío = sin restricción de sectores */
@@ -27,16 +32,13 @@ export type Truck = {
   baseOccupancy: number;
 };
 
-/** Sin sectores configurados = sin reglas. */
+export function truckRouteCost(t: Pick<Truck, 'routeKm' | 'costPerKm' | 'costPerTrip'>, km = t.routeKm) {
+  return estimateRouteCost(km, t.costPerKm, t.costPerTrip ?? 0);
+}
+
+/** Sin zonas configuradas = sin restricción. Soporta jerarquía Provincia / Ciudad / Sector. */
 export function vehicleAllowsSector(t: Pick<Truck, 'allowedSectors'>, sector: string) {
-  const allowed = t.allowedSectors ?? [];
-  if (!allowed.length) return true;
-  const target = sector.trim().toLowerCase();
-  if (!target) return true;
-  return allowed.some((s) => {
-    const a = s.toLowerCase();
-    return a === target || a.includes(target) || target.includes(a);
-  });
+  return vehicleAllowsZone(t.allowedSectors, sector);
 }
 
 export function vehicleKindLabel(t: Truck) {
@@ -135,7 +137,8 @@ export const cityOf = (s: AppState, o: Order) => {
 
 export const sectorOf = (s: AppState, o: Order) => {
   const c = client(s, o.clientId);
-  return c?.sector || c?.address || 'Sin sector';
+  if (!c) return 'Sin zona';
+  return zonePathOf(c);
 };
 
 export const fmtHours = (h: number) => {
