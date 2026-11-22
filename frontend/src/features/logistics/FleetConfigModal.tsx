@@ -54,7 +54,7 @@ const emptyForm = {
   allowedSectors: [] as string[],
 };
 
-function sectorsOf(v: VehicleRow) {
+function vehicleSectors(v: VehicleRow) {
   if (v.allowed_sectors_list?.length) return v.allowed_sectors_list;
   if (!v.allowed_sectors) return [];
   try {
@@ -460,7 +460,7 @@ export function FleetConfigModal({
               </thead>
               <tbody>
                 {vehicles.map((v) => {
-                  const sectors = sectorsOf(v);
+                  const sectors = vehicleSectors(v);
                   return (
                     <tr key={v.id} className={v.active ? '' : 'is-off'}>
                       <td>
