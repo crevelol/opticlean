@@ -28,6 +28,15 @@ export function playExitGhost(source: HTMLElement | null, parts: GhostPart[], ms
   ghost.setAttribute('inert', '');
   ghost.removeAttribute('id');
   ghost.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+  // La copia no debe aparecer en búsquedas por rol (menuitem, dialog, option…)
+  // ni ser recogida por las colecciones de Radix.
+  [ghost, ...ghost.querySelectorAll<HTMLElement>('[role], [data-radix-collection-item], [aria-controls], [aria-labelledby], [aria-describedby]')].forEach((el) => {
+    el.removeAttribute('role');
+    el.removeAttribute('data-radix-collection-item');
+    el.removeAttribute('aria-controls');
+    el.removeAttribute('aria-labelledby');
+    el.removeAttribute('aria-describedby');
+  });
   ghost.style.pointerEvents = 'none';
 
   // Un <iframe> clonado volvería a cargarse: se sustituye por un bloque vacío del mismo tamaño.

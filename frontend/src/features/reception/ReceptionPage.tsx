@@ -15,6 +15,7 @@ import { packsOf, pendingUnits, purchaseIncludes } from '../../shared/lib/wholes
 import '../../styles/warehouse-positioning.css';
 import '../../styles/reception.css';
 import { Checkbox } from '../../shared/components/Checkbox';
+import { Input } from '../../shared/components/Input';
 
 const steps = [
   { title: 'Producto', subtitle: 'Qué llega y de quién' },
@@ -331,7 +332,7 @@ export function ReceptionNewPage() {
                     ) : null}
                     <div className="field">
                       <label htmlFor="rec-supplier">Proveedor</label>
-                      <input
+                      <Input
                         id="rec-supplier"
                         value={supplier}
                         onChange={(e) => setSupplier(e.target.value)}
@@ -362,7 +363,7 @@ export function ReceptionNewPage() {
                     </div>
                     <div className="field">
                       <label htmlFor="rec-qty">Cantidad de empaques</label>
-                      <input
+                      <Input
                         id="rec-qty"
                         type="number"
                         min={1}
@@ -396,7 +397,7 @@ export function ReceptionNewPage() {
                     </div>
                     <div className="field">
                       <label htmlFor="rec-batch">Lote</label>
-                      <input
+                      <Input
                         id="rec-batch"
                         value={batch}
                         onChange={(e) => setBatch(e.target.value)}
@@ -407,7 +408,7 @@ export function ReceptionNewPage() {
                     </div>
                     <div className="field">
                       <label htmlFor="rec-expiry">Vencimiento</label>
-                      <input
+                      <Input
                         id="rec-expiry"
                         type="date"
                         value={expiry}

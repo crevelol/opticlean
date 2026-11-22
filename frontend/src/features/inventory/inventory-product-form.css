@@ -88,16 +88,11 @@
   font-size: var(--text-md);
   font-weight: var(--weight-medium);
 }
-.inv-product-form .field input,
 .inv-product-form .field select {
   min-height: 42px;
   padding: 10px 12px;
   font-size: var(--text-base);
   border-radius: var(--radius-md);
-}
-.inv-product-form .field input[readonly] {
-  background: var(--slate-75);
-  color: var(--slate-600);
 }
 .inv-product-form .field small {
   color: var(--slate-600);
@@ -343,13 +338,9 @@
 .inv-product-form .inv-input-affix input {
   flex: 1;
   min-width: 0;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
 }
 .inv-product-form .inv-input-affix input:focus {
   outline: none;
-  box-shadow: none;
 }
 .inv-input-affix > span {
   display: grid;
@@ -406,10 +397,7 @@
   font-weight: var(--weight-medium);
 }
 .inv-product-form .inv-pack-row input {
-  min-height: 36px;
-  padding: 6px 10px;
   text-align: right;
-  border-radius: var(--radius-md);
 }
 .inv-pack-derived {
   color: var(--slate-600);

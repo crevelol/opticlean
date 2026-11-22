@@ -40,6 +40,8 @@ import {
 } from './fleet';
 import '../../styles/logistics.css';
 import { Checkbox } from '../../shared/components/Checkbox';
+import { Input, Textarea } from '../../shared/components/Input';
+import { SearchInput } from '../../shared/components/SearchInput';
 
 export function LogisticsPage() {
   const { state, applyResponse, toast } = useAppState();
@@ -431,15 +433,7 @@ export function LogisticsPage() {
             className="log-list-filter"
           />
 
-          <label className="log-search">
-            <Icon name="search" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar ciudad o sector..."
-              aria-label="Buscar ciudad o sector"
-            />
-          </label>
+          <SearchInput className="log-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar ciudad o sector..." aria-label="Buscar ciudad o sector" />
 
           {grouped.length ? (
             <ul className="log-cities">
@@ -1096,11 +1090,11 @@ export function LogisticsPage() {
             <input type="hidden" name="orderId" value={deliveryOrder} />
             <div className="field">
               <label htmlFor="delivery-person">Quien recibe</label>
-              <input id="delivery-person" name="person" required />
+              <Input id="delivery-person" name="person" required />
             </div>
             <div className="field">
               <label htmlFor="delivery-notes">Observaciones</label>
-              <textarea id="delivery-notes" name="notes" />
+              <Textarea id="delivery-notes" name="notes" />
             </div>
             {error ? <div className="form-error visible">{error}</div> : null}
           </form>
@@ -1133,7 +1127,7 @@ export function LogisticsPage() {
             </div>
             <div className="field">
               <label htmlFor="incident-notes">Detalle</label>
-              <textarea id="incident-notes" name="notes" />
+              <Textarea id="incident-notes" name="notes" />
             </div>
             {error ? <div className="form-error visible">{error}</div> : null}
           </form>

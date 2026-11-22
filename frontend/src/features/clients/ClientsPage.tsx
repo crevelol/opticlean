@@ -15,12 +15,13 @@ import { Badge, Btn, PageHead, Button } from '../../shared/components/ui';
 import { Menu, MoreButton } from '../../shared/components/Menu';
 import { TabPanel, Tabs, SegmentedControl } from '../../shared/components/Tabs';
 import { resolveBusinessRules } from '../../shared/lib/businessRules';
-import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import type { Client, Order } from '../../shared/types';
 import '../../styles/clients.css';
 import { Pagination } from '../../shared/components/Pagination';
 import { IconButton } from '../../shared/components/IconButton';
+import { Input } from '../../shared/components/Input';
+import { SearchInput } from '../../shared/components/SearchInput';
 
 type CreditFilter = 'all' | 'ok' | 'tight' | 'full';
 type ViewMode = 'list' | 'cards';
@@ -196,16 +197,7 @@ export function ClientsPage() {
       />
 
       <div className="cli-toolbar">
-        <div className="cli-search">
-          <Icon name="search" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar por nombre, RUC o contacto…"
-            aria-label="Buscar clientes"
-          />
-        </div>
+        <SearchInput className="cli-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por nombre, RUC o contacto…" aria-label="Buscar clientes" />
         <label className="cli-select">
           <span>Sector</span>
           <Select value={sector} onChange={(e) => setSector(e.target.value)}>
@@ -578,11 +570,11 @@ export function ClientsPage() {
             <div className="form-grid">
               <div className="field full">
                 <label htmlFor="cl-name">Nombre</label>
-                <input id="cl-name" name="name" required />
+                <Input id="cl-name" name="name" required />
               </div>
               <div className="field">
                 <label htmlFor="cl-person">Contacto</label>
-                <input id="cl-person" name="contact" required />
+                <Input id="cl-person" name="contact" required />
               </div>
               <div className="field">
                 <label htmlFor="cl-type">Sector</label>
@@ -596,15 +588,15 @@ export function ClientsPage() {
               </div>
               <div className="field full">
                 <label htmlFor="cl-address">Dirección</label>
-                <input id="cl-address" name="address" required />
+                <Input id="cl-address" name="address" required />
               </div>
               <div className="field">
                 <label htmlFor="cl-email">Correo</label>
-                <input id="cl-email" name="email" type="email" required />
+                <Input id="cl-email" name="email" type="email" required />
               </div>
               <div className="field">
                 <label htmlFor="cl-credit">Límite de crédito (USD)</label>
-                <input
+                <Input
                   id="cl-credit"
                   name="creditLimit"
                   type="number"
@@ -643,7 +635,7 @@ export function ClientsPage() {
           <div className="form-grid">
             <div className="field full">
               <label htmlFor="edit-credit">Límite de crédito (USD)</label>
-              <input
+              <Input
                 id="edit-credit"
                 type="number"
                 min={0}

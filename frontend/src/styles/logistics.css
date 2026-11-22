@@ -127,28 +127,6 @@
   align-items: center;
   gap: 8px;
   margin: 14px 0 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--slate-50);
-}
-.log-search .icon {
-  width: 16px;
-  height: 16px;
-  color: var(--slate-550);
-  flex-shrink: 0;
-}
-.log-search input {
-  border: 0;
-  outline: 0;
-  background: transparent;
-  width: 100%;
-  font: inherit;
-  font-size: var(--text-base);
-  color: var(--color-text);
-}
-.log-search input::placeholder {
-  color: var(--slate-500);
 }
 
 .log-cities {
@@ -1303,7 +1281,6 @@
   font-weight: var(--weight-semibold);
   color: var(--slate-650);
 }
-.fleet-config-grid input,
 .fleet-config-grid select,
 .fleet-config-list select {
   border: 1px solid var(--slate-200);
@@ -1394,9 +1371,6 @@
 }
 .fleet-sector-add input {
   flex: 1;
-  border: 1px solid var(--slate-200);
-  border-radius: var(--radius-md);
-  padding: 8px 10px;
 }
 .log-truck-zones {
   margin-top: 8px;
@@ -1556,9 +1530,6 @@
 }
 .cost-rules-preview input {
   width: 72px;
-  border: 1px solid var(--slate-200);
-  border-radius: var(--radius-sm);
-  padding: 4px 6px;
 }
 .cost-rules-toolbar {
   display: flex;
@@ -1592,7 +1563,6 @@
   font-size: var(--text-sm);
   color: var(--slate-650);
 }
-.cost-rules-grid input,
 .cost-rules-grid select {
   border: 1px solid var(--slate-200);
   border-radius: var(--radius-md);

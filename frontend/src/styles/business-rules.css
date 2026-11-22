@@ -86,10 +86,6 @@
 
 .br-card .field input {
   width: 100%;
-  border: 1px solid var(--br-line);
-  border-radius: 10px;
-  padding: 10px 12px;
-  font: inherit;
 }
 
 .br-note {

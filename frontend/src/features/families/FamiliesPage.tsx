@@ -8,6 +8,7 @@ import type { WarehouseFamily } from '../../shared/types';
 import '../../styles/families.css';
 import { Switch } from '../../shared/components/Checkbox';
 import { ChipGroup } from '../../shared/components/Chip';
+import { Input, Textarea } from '../../shared/components/Input';
 
 const emptyFamily = (): WarehouseFamily => ({
   id: '',
@@ -156,7 +157,7 @@ export function FamiliesPage() {
             <div className="form-grid">
               <div className="field">
                 <label htmlFor="fam-code">Código</label>
-                <input
+                <Input
                   id="fam-code"
                   required
                   value={edit.code}
@@ -175,7 +176,7 @@ export function FamiliesPage() {
               </div>
               <div className="field full">
                 <label htmlFor="fam-name">Nombre</label>
-                <input
+                <Input
                   id="fam-name"
                   required
                   value={edit.name}
@@ -211,7 +212,7 @@ export function FamiliesPage() {
               </div>
               <div className="field full">
                 <label htmlFor="fam-notes">Notas</label>
-                <textarea
+                <Textarea
                   id="fam-notes"
                   value={edit.notes ?? ''}
                   onChange={(e) => setEdit({ ...edit, notes: e.target.value })}

@@ -9,6 +9,7 @@ import { Select } from '../../shared/components/Select';
 import type { AppState, CycleCount, Metrics } from '../../shared/types';
 import '../../styles/commercial.css';
 import { Checkbox } from '../../shared/components/Checkbox';
+import { Input } from '../../shared/components/Input';
 
 type Tab = 'docs' | 'ledger' | 'prices' | 'stock' | 'supply' | 'recall';
 
@@ -236,7 +237,7 @@ export function CommercialPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="com-return-qty">Cantidad de la primera línea</label>
-                  <input
+                  <Input
                     id="com-return-qty"
                     type="number"
                     min={1}
@@ -246,7 +247,7 @@ export function CommercialPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="com-return-reason">Motivo</label>
-                  <input
+                  <Input
                     id="com-return-reason"
                     value={returnReason}
                     onChange={(event) => setReturnReason(event.target.value)}
@@ -318,7 +319,7 @@ export function CommercialPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="com-pay-amount">Monto</label>
-                  <input
+                  <Input
                     id="com-pay-amount"
                     type="number"
                     min="0.01"
@@ -343,7 +344,7 @@ export function CommercialPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="com-pay-ref">Referencia</label>
-                  <input
+                  <Input
                     id="com-pay-ref"
                     value={payRef}
                     onChange={(event) => setPayRef(event.target.value)}
@@ -398,7 +399,7 @@ export function CommercialPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="com-bill-no">Número</label>
-                  <input
+                  <Input
                     id="com-bill-no"
                     value={billNumber}
                     onChange={(event) => setBillNumber(event.target.value)}
@@ -407,7 +408,7 @@ export function CommercialPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="com-bill-total">Total</label>
-                  <input
+                  <Input
                     id="com-bill-total"
                     type="number"
                     min="0.01"
@@ -455,7 +456,7 @@ export function CommercialPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="com-supplier-pay">Monto</label>
-                  <input
+                  <Input
                     id="com-supplier-pay"
                     type="number"
                     min="0.01"
@@ -467,7 +468,7 @@ export function CommercialPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="com-supplier-ref">Referencia</label>
-                  <input
+                  <Input
                     id="com-supplier-ref"
                     value={supplierRef}
                     onChange={(event) => setSupplierRef(event.target.value)}
@@ -508,7 +509,7 @@ export function CommercialPage() {
               >
                 <div className="field">
                   <label htmlFor="com-list-name">Nombre</label>
-                  <input
+                  <Input
                     id="com-list-name"
                     value={listName}
                     onChange={(event) => setListName(event.target.value)}
@@ -547,7 +548,7 @@ export function CommercialPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="com-list-price">Precio</label>
-                  <input
+                  <Input
                     id="com-list-price"
                     type="number"
                     min="0"
@@ -559,7 +560,7 @@ export function CommercialPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="com-list-min">Desde cantidad</label>
-                  <input
+                  <Input
                     id="com-list-min"
                     type="number"
                     min="1"
@@ -629,7 +630,7 @@ export function CommercialPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="com-special-price">Precio</label>
-                  <input
+                  <Input
                     id="com-special-price"
                     type="number"
                     min="0"
@@ -687,7 +688,7 @@ export function CommercialPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="com-adjust-qty">Cantidad</label>
-                  <input
+                  <Input
                     id="com-adjust-qty"
                     type="number"
                     min={1}
@@ -710,7 +711,7 @@ export function CommercialPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="com-adjust-reason">Motivo</label>
-                  <input
+                  <Input
                     id="com-adjust-reason"
                     value={adjustReason}
                     onChange={(event) => setAdjustReason(event.target.value)}
@@ -798,7 +799,7 @@ export function CommercialPage() {
                           {product(state, line.productId)?.name} · {line.loc} · sistema{' '}
                           {line.systemQty}
                         </label>
-                        <input
+                        <Input
                           id={`cnt-${line.lotId}`}
                           type="number"
                           min={0}
@@ -866,7 +867,7 @@ export function CommercialPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="com-transfer-qty">Cantidad</label>
-                  <input
+                  <Input
                     id="com-transfer-qty"
                     type="number"
                     min={1}
@@ -927,7 +928,7 @@ export function CommercialPage() {
                       <label htmlFor={`loc-${line.lotId}`}>
                         {product(state, line.productId)?.name} · {line.qty} u.
                       </label>
-                      <input
+                      <Input
                         id={`loc-${line.lotId}`}
                         placeholder="Ubicación destino, ej. A-01-01-D"
                         value={receiveLocs[line.lotId] ?? ''}
@@ -1009,7 +1010,7 @@ export function CommercialPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="com-dpr-qty">Cantidad</label>
-                  <input
+                  <Input
                     id="com-dpr-qty"
                     type="number"
                     min={1}
@@ -1019,7 +1020,7 @@ export function CommercialPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="com-dpr-reason">Motivo</label>
-                  <input
+                  <Input
                     id="com-dpr-reason"
                     value={supplierReturnReason}
                     onChange={(event) => setSupplierReturnReason(event.target.value)}
@@ -1101,7 +1102,7 @@ export function CommercialPage() {
             >
               <div className="field">
                 <label htmlFor="com-recall">Lote</label>
-                <input
+                <Input
                   id="com-recall"
                   value={recallBatch}
                   onChange={(event) => setRecallBatch(event.target.value)}

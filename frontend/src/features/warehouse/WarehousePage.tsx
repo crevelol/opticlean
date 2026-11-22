@@ -20,6 +20,7 @@ import { ExitLayer } from './ExitLayer';
 import '../../styles/warehouse-positioning.css';
 import '../../styles/warehouse-page.css';
 import { IconButton } from '../../shared/components/IconButton';
+import { SearchInput } from '../../shared/components/SearchInput';
 
 const MOVES_PER_PAGE = 6;
 const moveTone = (type: string) => {
@@ -295,17 +296,7 @@ export function WarehousePage() {
             onValueChange={setMapMode}
             items={views.map((view) => ({ value: view.id, label: view.label, icon: view.icon }))}
           />
-          <div className="wh-toolbar-search search-input">
-            <Icon name="search" />
-            <input
-              type="search"
-              aria-label="Buscar producto o código de ubicación en esta bodega"
-              aria-describedby={query ? 'warehouse-search-status' : undefined}
-              value={warehouseSearch}
-              onChange={(e) => setWarehouseSearch(e.target.value)}
-              placeholder="Producto o código de ubicación…"
-            />
-          </div>
+          <SearchInput className="wh-toolbar-search search-input" aria-label="Buscar producto o código de ubicación en esta bodega" aria-describedby={query ? 'warehouse-search-status' : undefined} value={warehouseSearch} onChange={(e) => setWarehouseSearch(e.target.value)} placeholder="Producto o código de ubicación…" />
           <Select value={level} onChange={(e) => {
             const nextLevel = e.target.value;
             setLevel(nextLevel);

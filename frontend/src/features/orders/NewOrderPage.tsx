@@ -21,6 +21,8 @@ import { SegmentedControl } from '../../shared/components/Tabs';
 import { ImportDialog } from '../imports/ImportDialog';
 import '../../styles/new-order.css';
 import { Checkbox } from '../../shared/components/Checkbox';
+import { Input, Textarea, NumberStepper } from '../../shared/components/Input';
+import { SearchInput } from '../../shared/components/SearchInput';
 
 type Line = { productId: string; qty: number };
 type KitLine = { bundleId: string; qty: number };
@@ -293,21 +295,12 @@ export function NewOrderPage() {
                   </Button>
                 </header>
 
-                <label className="no-search-field">
-                  <Icon name="search" />
-                  <input
-                    value={clientQuery || selected?.name || ''}
-                    onChange={(e) => {
+                <SearchInput className="no-search-field" value={clientQuery || selected?.name || ''} onChange={(e) => {
                       setClientQuery(e.target.value);
                       if (clientId) setClientId('');
-                    }}
-                    onFocus={() => {
+                    }} onFocus={() => {
                       if (selected) setClientQuery(selected.name);
-                    }}
-                    placeholder="Buscar cliente por nombre o contacto…"
-                    aria-label="Buscar cliente"
-                  />
-                </label>
+                    }} placeholder="Buscar cliente por nombre o contacto…" aria-label="Buscar cliente" />
 
                 {!clientId && clientQuery ? (
                   <ul className="no-client-results">
@@ -413,7 +406,7 @@ export function NewOrderPage() {
 
                 <label className="field">
                   <span>Fecha solicitada (opcional)</span>
-                  <input
+                  <Input
                     type="date"
                     value={requestedDate}
                     onChange={(e) => setRequestedDate(e.target.value)}
@@ -422,7 +415,7 @@ export function NewOrderPage() {
 
                 <label className="field">
                   <span>Notas de entrega (opcional)</span>
-                  <textarea
+                  <Textarea
                     rows={3}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
@@ -439,15 +432,7 @@ export function NewOrderPage() {
                 <h2>Productos</h2>
               </header>
               <div className="no-toolbar">
-                <label className="no-search-field grow">
-                  <Icon name="search" />
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Buscar producto, código o categoría…"
-                    aria-label="Buscar productos"
-                  />
-                </label>
+                <SearchInput className="no-search-field grow" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar producto, código o categoría…" aria-label="Buscar productos" />
                 <SegmentedControl
                   label="Catálogo"
                   size="small"
@@ -533,15 +518,15 @@ export function NewOrderPage() {
                 >
                   <div className="field">
                     <label htmlFor="arm-qty">Cantidad a armar</label>
-                    <input id="arm-qty" type="number" min={1} value={arming.qty} onChange={(event) => setArming({ ...arming, qty: Number(event.target.value) })} />
+                    <Input id="arm-qty" type="number" min={1} value={arming.qty} onChange={(event) => setArming({ ...arming, qty: Number(event.target.value) })} />
                   </div>
                   <div className="field">
                     <label htmlFor="arm-batch">Lote del paquete</label>
-                    <input id="arm-batch" value={arming.batch} onChange={(event) => setArming({ ...arming, batch: event.target.value })} required />
+                    <Input id="arm-batch" value={arming.batch} onChange={(event) => setArming({ ...arming, batch: event.target.value })} required />
                   </div>
                   <div className="field">
                     <label htmlFor="arm-expiry">Caducidad</label>
-                    <input id="arm-expiry" type="date" value={arming.expiry} onChange={(event) => setArming({ ...arming, expiry: event.target.value })} required />
+                    <Input id="arm-expiry" type="date" value={arming.expiry} onChange={(event) => setArming({ ...arming, expiry: event.target.value })} required />
                   </div>
                   <div className="field">
                     <Button variant="primary" type="submit" disabled={busy}>Armar</Button>
@@ -702,29 +687,14 @@ export function NewOrderPage() {
                           </small>
                         </div>
                         {step === 2 ? (
-                          <div className="no-qty">
-                            <button
-                              type="button"
-                              aria-label="Menos"
-                              onClick={() => setQty(l.productId, l.qty - 1)}
-                            >
-                              −
-                            </button>
-                            <input
-                              type="number"
-                              min={1}
-                              max={backorder ? undefined : max}
-                              value={l.qty}
-                              onChange={(e) => setQty(l.productId, Number(e.target.value))}
-                            />
-                            <button
-                              type="button"
-                              aria-label="Más"
-                              onClick={() => setQty(l.productId, l.qty + 1)}
-                            >
-                              +
-                            </button>
-                          </div>
+                          <NumberStepper
+                            className="no-qty"
+                            label={`Cantidad de ${p?.name ?? l.productId}`}
+                            value={l.qty}
+                            min={0}
+                            max={backorder ? undefined : max}
+                            onChange={(qty) => setQty(l.productId, qty)}
+                          />
                         ) : (
                           <strong>× {l.qty}</strong>
                         )}

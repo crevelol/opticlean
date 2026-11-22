@@ -6,6 +6,7 @@ import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import type { Vehicle } from '../../shared/types';
 import { Switch } from '../../shared/components/Checkbox';
+import { Input } from '../../shared/components/Input';
 
 export function FleetPanel() {
   const { state, applyResponse, toast } = useAppState();
@@ -118,31 +119,31 @@ export function FleetPanel() {
             <div className="form-grid">
               <div className="field">
                 <label htmlFor="veh-label">Nombre</label>
-                <input id="veh-label" name="label" defaultValue={current?.label ?? `Camión ${String(vehicles.length + 1).padStart(2, '0')}`} required />
+                <Input id="veh-label" name="label" defaultValue={current?.label ?? `Camión ${String(vehicles.length + 1).padStart(2, '0')}`} required />
               </div>
               <div className="field">
                 <label htmlFor="veh-plate">Placa</label>
-                <input id="veh-plate" name="plate" defaultValue={current?.plate} placeholder="ABC-1234" required />
+                <Input id="veh-plate" name="plate" defaultValue={current?.plate} placeholder="ABC-1234" required />
               </div>
               <div className="field">
                 <label htmlFor="veh-city">Ciudad base</label>
-                <input id="veh-city" name="city" defaultValue={current?.city ?? 'Quito'} required />
+                <Input id="veh-city" name="city" defaultValue={current?.city ?? 'Quito'} required />
               </div>
               <div className="field">
                 <label htmlFor="veh-driver">Conductor</label>
-                <input id="veh-driver" name="driver" defaultValue={current?.driver} required />
+                <Input id="veh-driver" name="driver" defaultValue={current?.driver} required />
               </div>
               <div className="field">
                 <label htmlFor="veh-kg">Capacidad (kg)</label>
-                <input id="veh-kg" name="maxKg" type="number" min={1} step="1" defaultValue={current?.maxKg ?? 3000} required />
+                <Input id="veh-kg" name="maxKg" type="number" min={1} step="1" defaultValue={current?.maxKg ?? 3000} required />
               </div>
               <div className="field">
                 <label htmlFor="veh-m3">Capacidad (m³)</label>
-                <input id="veh-m3" name="maxM3" type="number" min={0.1} step="0.1" defaultValue={current?.maxM3 ?? 12} required />
+                <Input id="veh-m3" name="maxM3" type="number" min={0.1} step="0.1" defaultValue={current?.maxM3 ?? 12} required />
               </div>
               <div className="field">
                 <label htmlFor="veh-cost">Costo por km (USD)</label>
-                <input id="veh-cost" name="costPerKm" type="number" min={0.01} step="0.01" defaultValue={current?.costPerKm ?? 0.8} required />
+                <Input id="veh-cost" name="costPerKm" type="number" min={0.01} step="0.01" defaultValue={current?.costPerKm ?? 0.8} required />
               </div>
               <div className="field">
                 <label htmlFor="veh-active">

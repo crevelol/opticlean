@@ -28,6 +28,7 @@ import '../../styles/inventory.css';
 import { Checkbox } from '../../shared/components/Checkbox';
 import { ChipGroup } from '../../shared/components/Chip';
 import { IconButton } from '../../shared/components/IconButton';
+import { SearchInput } from '../../shared/components/SearchInput';
 
 const PAGE_CHUNK = 10;
 const statusOptions: { value: InventoryFilter; label: string }[] = [
@@ -454,25 +455,7 @@ export function InventoryWorkspace({
           </div>
 
           <div className="inv-toolbar">
-            <div className="inv-search">
-              <Icon name="search" />
-              <input
-                type="search"
-                aria-label="Buscar en inventario"
-                placeholder="Buscar producto, insumo, código o ubicación…"
-                value={query}
-                onChange={(event) => updateParams({ q: event.target.value })}
-              />
-              {query ? (
-                <button
-                  type="button"
-                  aria-label="Borrar búsqueda"
-                  onClick={() => updateParams({ q: '' })}
-                >
-                  <Icon name="close" />
-                </button>
-              ) : null}
-            </div>
+            <SearchInput className="inv-search" aria-label="Buscar en inventario" placeholder="Buscar producto, insumo, código o ubicación…" value={query} onChange={(event) => updateParams({ q: event.target.value })} />
             <label className="inv-select">
               <span>Tipo</span>
               <Select

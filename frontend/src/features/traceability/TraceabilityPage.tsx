@@ -9,6 +9,7 @@ import { SegmentedControl } from '../../shared/components/Tabs';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import '../../styles/traceability.css';
 import { ChipGroup } from '../../shared/components/Chip';
+import { SearchInput } from '../../shared/components/SearchInput';
 
 const TYPE_FILTERS = [
   { id: 'all', label: 'Todos' },
@@ -98,10 +99,7 @@ export function TraceabilityPage() {
       {view === 'changes' ? (
         <section className="panel trz-panel">
           <div className="trz-toolbar">
-            <div className="search-input trz-search">
-              <Icon name="search" />
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar producto, cliente, campo o usuario…" />
-            </div>
+            <SearchInput className="search-input trz-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar producto, cliente, campo o usuario…" aria-label="Buscar producto, cliente, campo o usuario" />
           </div>
           {(() => {
             const q = query.trim().toLowerCase();
@@ -137,14 +135,7 @@ export function TraceabilityPage() {
 
       <section className="panel trz-panel" style={view !== 'moves' ? { display: 'none' } : undefined}>
         <div className="trz-toolbar">
-          <div className="search-input trz-search">
-            <Icon name="search" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar producto, pedido, lote, placa…"
-            />
-          </div>
+          <SearchInput className="search-input trz-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar producto, pedido, lote, placa…" aria-label="Buscar producto, pedido, lote, placa" />
           <Badge text={`${events.length} movimientos`} color="blue" />
         </div>
 

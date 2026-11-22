@@ -10,6 +10,7 @@ import { YAW_MAX, YAW_MIN } from '../warehouse/iso';
 import { WarehouseFloorPlan } from '../warehouse/WarehouseFloorPlan';
 import '../../styles/warehouse-designer-controls.css';
 import { Switch } from '../../shared/components/Checkbox';
+import { Input } from '../../shared/components/Input';
 
 type Props = {
   draft: Partial<WarehouseSite> & { layout: WarehouseLayout };
@@ -62,7 +63,7 @@ function LayoutControl({ field, value, onChange }: {
     <div className="designer-dimension">
       <div className="designer-dimension-head">
         <label htmlFor={id}>{field.label}</label>
-        <input
+        <Input
           id={id}
           type="number"
           min={field.min}

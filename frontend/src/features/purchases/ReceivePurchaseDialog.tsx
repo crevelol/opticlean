@@ -8,6 +8,7 @@ import { Btn } from '../../shared/components/ui';
 import type { AppState, Purchase } from '../../shared/types';
 import { Checkbox } from '../../shared/components/Checkbox';
 import { Select } from '../../shared/components/Select';
+import { Input } from '../../shared/components/Input';
 
 type Row = {
   productId: string;
@@ -150,7 +151,7 @@ export function ReceivePurchaseDialog({ state, purchase, onClose }: { state: App
                       </td>
                       <td className="num">{row.pending}</td>
                       <td className="num">
-                        <input
+                        <Input
                           id={`rp-qty-${i}`}
                           className="fx-qty"
                           type="number"
@@ -162,7 +163,7 @@ export function ReceivePurchaseDialog({ state, purchase, onClose }: { state: App
                         />
                       </td>
                       <td>
-                        <input
+                        <Input
                           id={`rp-batch-${i}`}
                           className="fx-batch"
                           value={row.batch}
@@ -172,7 +173,7 @@ export function ReceivePurchaseDialog({ state, purchase, onClose }: { state: App
                         />
                       </td>
                       <td>
-                        <input
+                        <Input
                           id={`rp-exp-${i}`}
                           type="date"
                           min={today}

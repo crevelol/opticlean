@@ -3,6 +3,7 @@ import { api } from '../../shared/api/client';
 import { Btn } from '../../shared/components/ui';
 import { Modal } from '../../shared/components/Modal';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
+import { Input } from '../../shared/components/Input';
 
 type ImportKind = 'purchase' | 'sale';
 
@@ -195,7 +196,7 @@ export function ImportDialog({
           <>
             <div className="field">
               <label htmlFor="import-party">{kind === 'purchase' ? 'Proveedor' : 'Cliente'}</label>
-              <input
+              <Input
                 id="import-party"
                 value={preview.partyName}
                 onChange={(event) => setPreview({ ...preview, partyName: event.target.value })}
@@ -203,7 +204,7 @@ export function ImportDialog({
             </div>
             <div className="field">
               <label htmlFor="import-doc">Documento</label>
-              <input
+              <Input
                 id="import-doc"
                 value={preview.docNumber}
                 onChange={(event) => setPreview({ ...preview, docNumber: event.target.value })}
@@ -272,7 +273,7 @@ export function ImportDialog({
                     <td>{row.qty}</td>
                     <td>{row.packCode}</td>
                     <td>
-                      <input
+                      <Input
                         aria-label={`Caducidad de ${row.code} (opcional)`}
                         type="date"
                         value={row.expiry}

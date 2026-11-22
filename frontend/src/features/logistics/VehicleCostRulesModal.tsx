@@ -18,6 +18,7 @@ import { estimateRouteCost } from '../../shared/lib/businessRules';
 import { money } from '../../shared/lib/inventory';
 import type { Truck } from './fleet';
 import { ChipGroup } from '../../shared/components/Chip';
+import { Input } from '../../shared/components/Input';
 
 type Sibling = { id: string; plate: string; label: string };
 
@@ -216,7 +217,7 @@ export function VehicleCostRulesModal({
             <div>
               <span>Simular ruta</span>
               <label className="cost-rules-preview">
-                <input
+                <Input
                   type="number"
                   min={1}
                   value={previewKm}
@@ -243,7 +244,7 @@ export function VehicleCostRulesModal({
           <div className="cost-rules-grid">
             <label>
               Nombre
-              <input
+              <Input
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="Llantas (juego)"
@@ -285,7 +286,7 @@ export function VehicleCostRulesModal({
             </label>
             <label>
               {form.calc === 'amortized' ? 'Costo total (USD)' : form.basis === 'per_trip' ? '$ / viaje' : '$ / km'}
-              <input
+              <Input
                 type="number"
                 min={0}
                 step="0.01"
@@ -297,7 +298,7 @@ export function VehicleCostRulesModal({
             {form.calc === 'amortized' ? (
               <label>
                 Vida útil ({form.basis === 'per_trip' ? 'viajes' : 'km'})
-                <input
+                <Input
                   type="number"
                   min={1}
                   step="1"

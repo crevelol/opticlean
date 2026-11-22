@@ -23,6 +23,7 @@ import {
 } from './fleet';
 import '../../styles/logistics.css';
 import { Checkbox } from '../../shared/components/Checkbox';
+import { Input, Textarea } from '../../shared/components/Input';
 
 export function RoutesPage() {
   const { state, applyResponse, toast } = useAppState();
@@ -374,7 +375,7 @@ export function RoutesPage() {
           <form id="route-delivery-form" onSubmit={submitDelivery}>
             <div className="field">
               <label htmlFor="route-person">Quien recibe</label>
-              <input
+              <Input
                 id="route-person"
                 name="person"
                 required
@@ -383,7 +384,7 @@ export function RoutesPage() {
             </div>
             <div className="field">
               <label htmlFor="route-notes">Observaciones</label>
-              <textarea id="route-notes" name="notes" />
+              <Textarea id="route-notes" name="notes" />
             </div>
             {error ? <div className="form-error visible">{error}</div> : null}
           </form>
@@ -420,7 +421,7 @@ export function RoutesPage() {
             </div>
             <div className="field">
               <label htmlFor="route-inc-notes">Detalle</label>
-              <textarea id="route-inc-notes" name="notes" />
+              <Textarea id="route-inc-notes" name="notes" />
             </div>
             {error ? <div className="form-error visible">{error}</div> : null}
           </form>

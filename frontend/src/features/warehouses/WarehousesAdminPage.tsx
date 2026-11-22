@@ -18,6 +18,8 @@ import { useWarehouseRows } from './warehouseRows';
 import '../../styles/warehouses-admin.css';
 import '../../styles/warehouses-list.css';
 import { ChipGroup } from '../../shared/components/Chip';
+import { Input, Textarea } from '../../shared/components/Input';
+import { SearchInput } from '../../shared/components/SearchInput';
 
 type Draft = Omit<WarehouseSite, 'id' | 'racks'> & { id?: string; notes: string };
 type FieldErrors = Partial<Record<'code' | 'name', string>>;
@@ -125,7 +127,7 @@ function WarehouseAdmin({ state }: { state: AppState }) {
               : []),
           ]}
         />
-        <div className="search-input whx-search"><Icon name="search" /><input aria-label="Buscar bodegas" type="search" placeholder="Nombre, código o ciudad" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+        <SearchInput className="search-input whx-search" aria-label="Buscar bodegas" placeholder="Nombre, código o ciudad" value={query} onChange={(e) => setQuery(e.target.value)} />
         <span className="wh-result-count" role="status">{filtered.length} de {rows.length}</span>
       </div>
       {filtered.length
@@ -238,12 +240,12 @@ function WarehouseEditor({ state, warehouse, initialStep = 0, onCancel, onSaved 
       <fieldset className="wh-editor-fields" disabled={saving}>
         <div className="wh-step-heading"><div><h2 tabIndex={-1} ref={heading}>{['Empecemos por lo esencial', 'Diseña tu espacio', 'Todo listo para guardar'][step]}</h2><p>{['Solo el código y el nombre son obligatorios. Puedes completar el resto después.', 'Elige una distribución inicial y ajusta sus dimensiones. La vista previa se actualiza al instante.', 'Comprueba los datos y la capacidad de tu bodega antes de confirmar.'][step]}</p></div><span>Paso {step + 1} de 3</span></div>
         {step === 0 ? <section className="panel wh-details"><div className="form-grid panel-body">
-          <div className="field"><label htmlFor="wh-code">Código <span aria-hidden="true">*</span></label><input id="wh-code" required value={draft.code} placeholder="Ej. BOD-QTO-02" autoComplete="off" spellCheck={false} aria-invalid={!!showError('code')} aria-describedby="wh-code-help" onBlur={() => setTouched((v) => ({ ...v, code: 'true' }))} onChange={(e) => update('code', e.target.value.toUpperCase())} /><small id="wh-code-help" className={showError('code') ? 'wh-field-error' : ''}>{showError('code') || 'Un código único y fácil de reconocer.'}</small></div>
-          <div className="field"><label htmlFor="wh-name">Nombre <span aria-hidden="true">*</span></label><input id="wh-name" required value={draft.name} placeholder="Ej. Bodega norte" autoComplete="off" aria-invalid={!!showError('name')} aria-describedby="wh-name-help" onBlur={() => setTouched((v) => ({ ...v, name: 'true' }))} onChange={(e) => update('name', e.target.value)} /><small id="wh-name-help" className={showError('name') ? 'wh-field-error' : ''}>{showError('name') || 'Así aparecerá en el listado y en la operación.'}</small></div>
-          <div className="field"><label htmlFor="wh-city">Ciudad <span>(opcional)</span></label><input id="wh-city" value={draft.city} placeholder="Ej. Quito" autoComplete="address-level2" onChange={(e) => update('city', e.target.value)} /></div>
-          <div className="field"><label htmlFor="wh-address">Dirección <span>(opcional)</span></label><input id="wh-address" value={draft.address} placeholder="Calle, número o referencia" autoComplete="street-address" onChange={(e) => update('address', e.target.value)} /></div>
+          <div className="field"><label htmlFor="wh-code">Código <span aria-hidden="true">*</span></label><Input id="wh-code" required value={draft.code} placeholder="Ej. BOD-QTO-02" autoComplete="off" spellCheck={false} aria-invalid={!!showError('code')} aria-describedby="wh-code-help" onBlur={() => setTouched((v) => ({ ...v, code: 'true' }))} onChange={(e) => update('code', e.target.value.toUpperCase())} /><small id="wh-code-help" className={showError('code') ? 'wh-field-error' : ''}>{showError('code') || 'Un código único y fácil de reconocer.'}</small></div>
+          <div className="field"><label htmlFor="wh-name">Nombre <span aria-hidden="true">*</span></label><Input id="wh-name" required value={draft.name} placeholder="Ej. Bodega norte" autoComplete="off" aria-invalid={!!showError('name')} aria-describedby="wh-name-help" onBlur={() => setTouched((v) => ({ ...v, name: 'true' }))} onChange={(e) => update('name', e.target.value)} /><small id="wh-name-help" className={showError('name') ? 'wh-field-error' : ''}>{showError('name') || 'Así aparecerá en el listado y en la operación.'}</small></div>
+          <div className="field"><label htmlFor="wh-city">Ciudad <span>(opcional)</span></label><Input id="wh-city" value={draft.city} placeholder="Ej. Quito" autoComplete="address-level2" onChange={(e) => update('city', e.target.value)} /></div>
+          <div className="field"><label htmlFor="wh-address">Dirección <span>(opcional)</span></label><Input id="wh-address" value={draft.address} placeholder="Calle, número o referencia" autoComplete="street-address" onChange={(e) => update('address', e.target.value)} /></div>
           <div className="field full"><label htmlFor="wh-status">Estado</label><Select id="wh-status" value={draft.status} aria-describedby="wh-status-help" onChange={(e) => update('status', e.target.value as WarehouseSite['status'])}><option>Operativa</option><option disabled={isActive}>Inactiva</option></Select><small id="wh-status-help">{isActive ? 'Esta bodega está en uso. Selecciona otra para operar antes de inactivarla.' : draft.status === 'Operativa' ? 'Disponible para seleccionarla y trabajar con su inventario.' : 'Se guarda en el catálogo, pero no se puede seleccionar para operar.'}</small></div>
-          <div className="field full"><label htmlFor="wh-notes">Notas <span>(opcional)</span></label><textarea id="wh-notes" value={draft.notes} placeholder="Indicaciones de acceso o información útil para el equipo" maxLength={300} onChange={(e) => update('notes', e.target.value)} /><small className="wh-counter">{draft.notes.length}/300 caracteres</small></div>
+          <div className="field full"><label htmlFor="wh-notes">Notas <span>(opcional)</span></label><Textarea id="wh-notes" value={draft.notes} placeholder="Indicaciones de acceso o información útil para el equipo" maxLength={300} onChange={(e) => update('notes', e.target.value)} /><small className="wh-counter">{draft.notes.length}/300 caracteres</small></div>
         </div></section> : null}
         {step === 1 ? <>{lots.length ? <div className="wh-notice"><Icon name="info" /><span>Esta bodega tiene {num(lots.reduce((n, lot) => n + lot.qty, 0))} unidades. El diseño debe conservar sus ubicaciones y capacidad.</span></div> : null}{layoutError ? <div className="wh-error" role="alert">{layoutError}</div> : null}<WarehouseDesigner draft={draft} onChange={(layout) => update('layout', layout)} /></> : null}
         {step === 2 ? <div className="wh-review">

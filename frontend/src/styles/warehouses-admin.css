@@ -281,18 +281,13 @@
   font-weight: var(--weight-regular);
   color: var(--wh-muted);
 }
-.wh-details .field input,
-.wh-details .field select,
-.wh-details .field textarea {
+.wh-details .field select {
   font-size: var(--text-base);
   padding: 12px;
 }
 .wh-details .field small {
   font-size: var(--text-sm);
   color: var(--wh-muted);
-}
-.wh-details .field input[aria-invalid='true'] {
-  border-color: var(--red-400);
 }
 .wh-details .field .wh-field-error {
   color: var(--red-600);

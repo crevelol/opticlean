@@ -7,6 +7,7 @@ import { fadeUp, stagger, swap } from '../../shared/motion/presets';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import '../../styles/login.css';
 import { Tooltip } from '../../shared/components/Tooltip';
+import { Input } from '../../shared/components/Input';
 
 export function LoginPage() {
   const { user, loading, login } = useAuth();
@@ -75,7 +76,7 @@ export function LoginPage() {
 
           <label className="field">
             <span>Correo electrónico</span>
-            <input
+            <Input
               name="email"
               type="email"
               autoComplete="username"
@@ -87,7 +88,7 @@ export function LoginPage() {
           <label className="field">
             <span>Contraseña</span>
             <span className="login-password">
-              <input
+              <Input
                 name="password"
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"

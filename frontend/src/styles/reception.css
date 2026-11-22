@@ -64,7 +64,6 @@
   font-weight: var(--weight-semibold);
 }
 
-.reception-form .field input,
 .reception-form .field select {
   min-height: 42px;
   border-color: var(--slate-250);

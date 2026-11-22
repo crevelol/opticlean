@@ -14,6 +14,7 @@ import {
   zonePathOf,
 } from '../../shared/lib/zones';
 import { ChipGroup, RemovableChip } from '../../shared/components/Chip';
+import { Input } from '../../shared/components/Input';
 
 type VehicleRow = {
   id: string;
@@ -250,7 +251,7 @@ export function FleetConfigModal({
             </label>
             <label>
               Placa
-              <input
+              <Input
                 value={form.plate}
                 onChange={(e) => setForm({ ...form, plate: e.target.value })}
                 placeholder="GBA-2041"
@@ -259,7 +260,7 @@ export function FleetConfigModal({
             </label>
             <label>
               Nombre
-              <input
+              <Input
                 value={form.label}
                 onChange={(e) => setForm({ ...form, label: e.target.value })}
                 placeholder="Camión 01"
@@ -268,7 +269,7 @@ export function FleetConfigModal({
             </label>
             <label>
               Ciudad
-              <input
+              <Input
                 value={form.city}
                 onChange={(e) => setForm({ ...form, city: e.target.value })}
                 placeholder="Quito"
@@ -276,14 +277,14 @@ export function FleetConfigModal({
             </label>
             <label>
               Conductor
-              <input
+              <Input
                 value={form.driver}
                 onChange={(e) => setForm({ ...form, driver: e.target.value })}
               />
             </label>
             <label>
               Capacidad kg
-              <input
+              <Input
                 type="number"
                 value={form.maxKg}
                 onChange={(e) => setForm({ ...form, maxKg: Number(e.target.value) })}
@@ -291,7 +292,7 @@ export function FleetConfigModal({
             </label>
             <label>
               Capacidad m³
-              <input
+              <Input
                 type="number"
                 step="0.1"
                 value={form.maxM3}
@@ -300,7 +301,7 @@ export function FleetConfigModal({
             </label>
             <label>
               Costo / km
-              <input
+              <Input
                 type="number"
                 step="0.01"
                 value={form.costPerKm}
@@ -381,7 +382,7 @@ export function FleetConfigModal({
               <p className="muted">Se agregará: <strong>{zonePreview}</strong></p>
             ) : null}
             <div className="fleet-sector-add">
-              <input
+              <Input
                 value={sectorDraft}
                 onChange={(e) => setSectorDraft(e.target.value)}
                 placeholder="O escribe libre: Pichincha / Quito / Carcelén"

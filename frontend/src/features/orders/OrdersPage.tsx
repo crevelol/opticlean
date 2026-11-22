@@ -18,6 +18,7 @@ import { Icon } from '../../shared/components/Icon';
 import { AssignPicker } from './AssignPicker';
 import '../../styles/orders.css';
 import { Pagination } from '../../shared/components/Pagination';
+import { Input } from '../../shared/components/Input';
 
 const tabs = [
   'Todos',
@@ -476,7 +477,7 @@ export function OrdersPage() {
         >
           <div className="field full">
             <label htmlFor="ord-cancel-reason">Motivo</label>
-            <input
+            <Input
               id="ord-cancel-reason"
               value={cancelling.reason}
               placeholder="Ej.: el cliente ya no lo necesita"

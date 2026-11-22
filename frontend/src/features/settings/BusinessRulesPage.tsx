@@ -14,6 +14,7 @@ import { Icon } from '../../shared/components/Icon';
 import type { BusinessRules } from '../../shared/types';
 import '../../styles/business-rules.css';
 import { Switch } from '../../shared/components/Checkbox';
+import { Input } from '../../shared/components/Input';
 
 type Draft = BusinessRules;
 
@@ -132,7 +133,7 @@ export function BusinessRulesPage() {
             <div className="br-grid">
               <label className="field">
                 <span>Km mínimos por ruta</span>
-                <input
+                <Input
                   name="shippingMinKm"
                   type="number"
                   min={0}
@@ -143,7 +144,7 @@ export function BusinessRulesPage() {
               </label>
               <label className="field">
                 <span>Divisor de paradas</span>
-                <input
+                <Input
                   name="shippingStopsDivisor"
                   type="number"
                   min={1}
@@ -154,7 +155,7 @@ export function BusinessRulesPage() {
               </label>
               <label className="field">
                 <span>Factor base ETA</span>
-                <input
+                <Input
                   name="shippingEtaBaseFactor"
                   type="number"
                   min={0}
@@ -165,7 +166,7 @@ export function BusinessRulesPage() {
               </label>
               <label className="field">
                 <span>ETA extra por parada</span>
-                <input
+                <Input
                   name="shippingEtaPerStop"
                   type="number"
                   min={0}
@@ -195,7 +196,7 @@ export function BusinessRulesPage() {
             <div className="br-grid">
               <label className="field">
                 <span>Referencia de costo ($/km)</span>
-                <input
+                <Input
                   name="assignCostReference"
                   type="number"
                   min={0}
@@ -206,7 +207,7 @@ export function BusinessRulesPage() {
               </label>
               <label className="field">
                 <span>Peso del costo en el score</span>
-                <input
+                <Input
                   name="assignCostWeight"
                   type="number"
                   min={0}
@@ -217,7 +218,7 @@ export function BusinessRulesPage() {
               </label>
               <label className="field">
                 <span>Ocupación ideal máx. (0–1)</span>
-                <input
+                <Input
                   name="assignIdealFillMax"
                   type="number"
                   min={0.1}
@@ -229,7 +230,7 @@ export function BusinessRulesPage() {
               </label>
               <label className="field">
                 <span>Ocupación casi llena (0–1)</span>
-                <input
+                <Input
                   name="assignNearFullFill"
                   type="number"
                   min={0.1}
@@ -253,7 +254,7 @@ export function BusinessRulesPage() {
             <div className="br-grid">
               <label className="field">
                 <span>Cupo holgado hasta (%)</span>
-                <input
+                <Input
                   name="creditOkMaxPct"
                   type="number"
                   min={1}
@@ -265,7 +266,7 @@ export function BusinessRulesPage() {
               </label>
               <label className="field">
                 <span>Cupo ajustado desde (%)</span>
-                <input
+                <Input
                   name="creditTightMaxPct"
                   type="number"
                   min={1}
@@ -277,7 +278,7 @@ export function BusinessRulesPage() {
               </label>
               <label className="field">
                 <span>Límite de crédito por defecto (USD)</span>
-                <input
+                <Input
                   name="defaultCreditLimit"
                   type="number"
                   min={0}
@@ -308,7 +309,7 @@ export function BusinessRulesPage() {
             <p className="br-side-desc">Prueba la fórmula con los valores actuales del formulario.</p>
             <label className="field">
               <span>Paradas</span>
-              <input
+              <Input
                 type="number"
                 min={1}
                 value={previewStops}
@@ -317,7 +318,7 @@ export function BusinessRulesPage() {
             </label>
             <label className="field">
               <span>Ruta base del vehículo (km)</span>
-              <input
+              <Input
                 type="number"
                 min={1}
                 value={previewRouteKm}
@@ -326,7 +327,7 @@ export function BusinessRulesPage() {
             </label>
             <label className="field">
               <span>$/km del vehículo</span>
-              <input
+              <Input
                 type="number"
                 min={0}
                 step={0.01}
@@ -336,7 +337,7 @@ export function BusinessRulesPage() {
             </label>
             <label className="field">
               <span>ETA base (h)</span>
-              <input
+              <Input
                 type="number"
                 min={0.1}
                 step={0.1}

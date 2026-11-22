@@ -16,6 +16,7 @@ import './inventory-product-form.css';
 import { Switch } from '../../shared/components/Checkbox';
 import { Button } from '../../shared/components/ui';
 import { IconButton } from '../../shared/components/IconButton';
+import { Input } from '../../shared/components/Input';
 
 type ProductFormProps = {
   product?: Product;
@@ -442,7 +443,7 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                     <div className="form-grid">
                       <div className="field">
                         <label htmlFor={fieldId('id')}>Código</label>
-                        <input {...fieldProps('id')} readOnly={!!product} placeholder="Ej. P025" autoComplete="off" spellCheck={false} />
+                        <Input {...fieldProps('id')} readOnly={!!product} placeholder="Ej. P025" autoComplete="off" spellCheck={false} />
                         <small id={`${fieldId('id')}-hint`}>{product ? 'No se puede editar.' : 'Único, se guarda en mayúsculas.'}</small>
                         {fieldError('id')}
                       </div>
@@ -456,12 +457,12 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                       </div>
                       <div className="field full">
                         <label htmlFor={fieldId('name')}>Nombre</label>
-                        <input {...fieldProps('name')} placeholder="Ej. Limpiador multiusos 1 L" autoComplete="off" />
+                        <Input {...fieldProps('name')} placeholder="Ej. Limpiador multiusos 1 L" autoComplete="off" />
                         {fieldError('name')}
                       </div>
                       <div className="field full">
                         <label htmlFor={fieldId('supplier')}>Proveedor</label>
-                        <input {...fieldProps('supplier')} list={`${uniqueId}-suppliers`} placeholder="Escribe o selecciona un proveedor" autoComplete="off" />
+                        <Input {...fieldProps('supplier')} list={`${uniqueId}-suppliers`} placeholder="Escribe o selecciona un proveedor" autoComplete="off" />
                         <datalist id={`${uniqueId}-suppliers`}>{supplierOptions.map((supplier) => <option key={supplier} value={supplier} />)}</datalist>
                         {fieldError('supplier')}
                       </div>
@@ -473,19 +474,13 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                   <div className="form-grid">
                     <div className="field">
                       <label htmlFor={fieldId('price')}>Precio por unidad</label>
-                      <div className="inv-input-affix">
-                        <span aria-hidden="true">USD</span>
-                        <input {...fieldProps('price')} type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" readOnly={lockMoney} />
-                      </div>
+                      <Input {...fieldProps('price')} type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" readOnly={lockMoney} prefix="USD" />
                       {fieldError('price')}
                       {lockMoney ? <small>Solo administración cambia el precio.</small> : null}
                     </div>
                     <div className="field">
                       <label htmlFor={fieldId('min')}>Stock mínimo</label>
-                      <div className="inv-input-affix is-suffix">
-                        <input {...fieldProps('min')} type="number" min="0" step="1" inputMode="numeric" />
-                        <span aria-hidden="true">u.</span>
-                      </div>
+                      <Input {...fieldProps('min')} type="number" min="0" step="1" inputMode="numeric" suffix="u." />
                       <small id={`${fieldId('min')}-hint`}>Te avisamos si el disponible baja de aquí.</small>
                       {fieldError('min')}
                     </div>
@@ -500,19 +495,16 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                     </div>
                     <div className="field">
                       <label htmlFor={`${uniqueId}-shelf`}>Vida útil mínima</label>
-                      <div className="inv-input-affix is-suffix">
-                        <input id={`${uniqueId}-shelf`} type="number" min={0} step={1} value={minShelfLifeDays} onChange={(event) => setMinShelfLifeDays(Number(event.target.value))} />
-                        <span aria-hidden="true">días</span>
-                      </div>
+                      <Input id={`${uniqueId}-shelf`} type="number" min={0} step={1} value={minShelfLifeDays} onChange={(event) => setMinShelfLifeDays(Number(event.target.value))} suffix="días" />
                       <small>No se vende un lote que vence antes.</small>
                     </div>
                     <div className="field">
                       <label htmlFor={`${uniqueId}-sanitary`}>Registro sanitario</label>
-                      <input id={`${uniqueId}-sanitary`} value={sanitaryRegistration} onChange={(event) => setSanitaryRegistration(event.target.value)} placeholder="Notificación ARCSA" />
+                      <Input id={`${uniqueId}-sanitary`} value={sanitaryRegistration} onChange={(event) => setSanitaryRegistration(event.target.value)} placeholder="Notificación ARCSA" />
                     </div>
                     <div className="field">
                       <label htmlFor={`${uniqueId}-sanitary-exp`}>Vence el registro</label>
-                      <input id={`${uniqueId}-sanitary-exp`} type="date" value={sanitaryExpires} onChange={(event) => setSanitaryExpires(event.target.value)} />
+                      <Input id={`${uniqueId}-sanitary-exp`} type="date" value={sanitaryExpires} onChange={(event) => setSanitaryExpires(event.target.value)} />
                       <small>Si esta fecha ya pasó, el producto no se puede vender.</small>
                     </div>
                     <div className="field">
@@ -533,7 +525,7 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                     {isAdmin || product?.avgCost != null ? (
                       <div className="field">
                         <label htmlFor={`${uniqueId}-cost`}>Costo promedio</label>
-                        <input
+                        <Input
                           id={`${uniqueId}-cost`}
                           type="number"
                           min="0"
@@ -557,18 +549,12 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                     <div className="form-grid">
                       <div className="field">
                         <label htmlFor={fieldId('weight')}>Peso por unidad</label>
-                        <div className="inv-input-affix is-suffix">
-                          <input {...fieldProps('weight')} type="number" min="0" step="0.01" inputMode="decimal" />
-                          <span aria-hidden="true">kg</span>
-                        </div>
+                        <Input {...fieldProps('weight')} type="number" min="0" step="0.01" inputMode="decimal" suffix="kg" />
                         {fieldError('weight')}
                       </div>
                       <div className="field">
                         <label htmlFor={fieldId('volume')}>Volumen por unidad</label>
-                        <div className="inv-input-affix is-suffix">
-                          <input {...fieldProps('volume')} type="number" min="0" step="0.01" inputMode="decimal" />
-                          <span aria-hidden="true">L</span>
-                        </div>
+                        <Input {...fieldProps('volume')} type="number" min="0" step="0.01" inputMode="decimal" suffix="L" />
                         {fieldError('volume')}
                       </div>
                     </div>
@@ -583,7 +569,7 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                         return (
                           <div className="inv-pack-row" key={code}>
                             <label htmlFor={`${uniqueId}-pack-${code}`}>{label}</label>
-                            <input
+                            <Input
                               id={`${uniqueId}-pack-${code}`}
                               type="number"
                               min={1}
@@ -630,7 +616,7 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                               </label>
                               <label className="field inv-bom-qty">
                                 <span className="inv-sr-only">Cantidad</span>
-                                <input
+                                <Input
                                   type="number"
                                   min="0.01"
                                   step="0.01"

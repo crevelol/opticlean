@@ -9,6 +9,8 @@ import { api } from '../../shared/api/client';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import '../../styles/reception.css';
 import { ChipGroup } from '../../shared/components/Chip';
+import { Input } from '../../shared/components/Input';
+import { SearchInput } from '../../shared/components/SearchInput';
 
 type Period = 'all' | 'today' | '7d' | '30d';
 
@@ -123,16 +125,7 @@ export function ReceptionListPage() {
 
       <section className="panel reception-list">
         <div className="toolbar">
-          <div className="search-input">
-            <Icon name="search" />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar por producto, lote, proveedor o ubicación…"
-              aria-label="Buscar recepciones"
-            />
-          </div>
+          <SearchInput className="search-input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por producto, lote, proveedor o ubicación…" aria-label="Buscar recepciones" />
           <ChipGroup
             type="single"
             label="Periodo"
@@ -259,7 +252,7 @@ export function ReceptionListPage() {
           >
             <div className="field full">
               <label htmlFor="rec-reject-reason">Motivo del rechazo</label>
-              <input
+              <Input
                 id="rec-reject-reason"
                 value={rejecting.reason}
                 placeholder="Ej.: envase roto, sin hoja de seguridad"

@@ -10,6 +10,7 @@ import { Icon } from '../../shared/components/Icon';
 import { roleLabel } from '../../shared/auth/permissions';
 import { Switch } from '../../shared/components/Checkbox';
 import { Select } from '../../shared/components/Select';
+import { Input } from '../../shared/components/Input';
 
 const ROLES = ['ops', 'dispatch', 'driver', 'admin'] as const;
 
@@ -277,11 +278,11 @@ export function UsersPage() {
           <form id="user-form" onSubmit={(e) => void onSubmit(e)} className="form-grid">
             <label className="field full">
               <span>Nombre</span>
-              <input name="name" required defaultValue={edit?.name ?? ''} />
+              <Input name="name" required defaultValue={edit?.name ?? ''} />
             </label>
             <label className="field full">
               <span>Correo</span>
-              <input
+              <Input
                 name="email"
                 type="email"
                 required
@@ -301,7 +302,7 @@ export function UsersPage() {
             </label>
             <label className="field">
               <span>Placa (conductor)</span>
-              <input
+              <Input
                 name="truckPlate"
                 defaultValue={edit?.truckPlate ?? ''}
                 placeholder="GBA-2041"
@@ -309,7 +310,7 @@ export function UsersPage() {
             </label>
             <label className="field full">
               <span>{edit ? 'Nueva contraseña (opcional)' : 'Contraseña'}</span>
-              <input
+              <Input
                 name="password"
                 type="password"
                 minLength={8}
