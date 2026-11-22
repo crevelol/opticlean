@@ -504,14 +504,11 @@ button.whx-rack:hover {
 }
 
 /* ── Panel lateral ─────────────────────────────────────────── */
+/* Velo del drawer (Radix Dialog.Overlay); el panel va dentro. */
 .whx-drawer-root {
   position: fixed;
   inset: 0;
-  z-index: 60;
-}
-.whx-scrim {
-  position: absolute;
-  inset: 0;
+  z-index: var(--z-modal);
   background: var(--color-overlay);
 }
 .whx-drawer {
@@ -525,18 +522,7 @@ button.whx-rack:hover {
   background: var(--color-surface);
   border-left: 1px solid var(--color-border);
   box-shadow: var(--shadow-lg);
-  animation: whx-slide 0.18s ease-out;
-}
-@keyframes whx-slide {
-  from {
-    transform: translateX(24px);
-    opacity: 0.6;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .whx-drawer {
-    animation: none;
-  }
+  /* Entrada animada con motion (DialogContent motionPreset="slide"). */
 }
 .whx-d-head {
   display: grid;

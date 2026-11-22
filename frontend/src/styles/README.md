@@ -39,7 +39,8 @@ igual, todo valor visual sale de [`tokens.css`](./tokens.css).
    | `PageHead`   | `.page-head` | **Obligatoria en toda pantalla.** `eyebrow`, `title`, `desc`, `actions`; `children` para selectores de contexto bajo el título |
    | `SearchInput`| `.search-field` | Buscador con icono dentro, limpiar animado y atajo `/` (`shortcut`)  |
    | `KpiGrid` + `Kpi` | `.kpis` / `.kpi` | **Único diseño de indicadores.** `label`, `icon`, `value`, `unit`, `caption`; `tone` (primary/success/warning/danger), `progress` (0–100), `onClick`+`active` para usarlo como filtro |
-   | `Modal`      | `.modal`     | Diálogo con cabecera, cuerpo y pie                                      |
+   | `Dialog` / `Modal` | `.modal` | **Radix Dialog.** Foco atrapado y restaurado, Escape, clic fuera y ARIA ya resueltos. `size`: default · wide · fill; `busy` bloquea el cierre. Para cabeceras propias o drawers usa las piezas `DialogRoot` + `DialogContent` (`motionPreset="slide"`) + `DialogTitle` |
+   | `Select`     | `.ui-select` | **Radix Popover** + lista propia: búsqueda automática con >8 opciones, `<option>`/`<optgroup>` como hijos, `<select>` oculto para formularios. Funciona dentro de diálogos |
    | `Empty`      | `.empty-state` | Estado vacío                                                          |
 
    **No redefinas** altura, padding ni tamaño de letra de `.btn`, `.badge` o `.panel` dentro

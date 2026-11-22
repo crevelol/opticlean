@@ -1568,7 +1568,7 @@ td .sub {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  animation: appear 0.14s;
+  /* Entrada animada con motion (shared/components/Dialog.tsx) */
 }
 .modal-backdrop.fill {
   align-items: stretch;

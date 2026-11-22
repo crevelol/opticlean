@@ -2,6 +2,12 @@ import { useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } 
 import { Select } from '../../shared/components/Select';
 import { api } from '../../shared/api/client';
 import { Icon } from '../../shared/components/Icon';
+import {
+  DialogContent,
+  DialogDescription,
+  DialogRoot,
+  DialogTitle,
+} from '../../shared/components/Dialog';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import type { HazardClass, Product, ProductComponent, ProductKind } from '../../shared/types';
@@ -37,7 +43,6 @@ export function InventoryProductForm({ product, categories, products, onClose, o
   const { applyResponse, toast } = useAppState();
   const uniqueId = useId();
   const formId = `${uniqueId}-product-form`;
-  const dialogRef = useRef<HTMLElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
   const pendingRef = useRef(false);
@@ -94,44 +99,24 @@ export function InventoryProductForm({ product, categories, products, onClose, o
     closeRef.current = onClose;
   }, [onClose]);
 
+  // Foco atrapado/restaurado, Escape y bloqueo de scroll los gestiona Radix (DialogContent).
   useEffect(() => {
     mountedRef.current = true;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const initialField = formRef.current?.elements.namedItem(initialFieldRef.current);
-    if (initialField instanceof HTMLElement) initialField.focus();
-
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        if (!pendingRef.current) closeRef.current();
-      }
-      if (event.key !== 'Tab' || !dialogRef.current) return;
-      const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex]')]
-        .filter((element) => element.tabIndex >= 0 && !element.matches(':disabled') && element.getClientRects().length > 0);
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (!first) {
-        event.preventDefault();
-        dialogRef.current.focus();
-      } else if (event.shiftKey && (document.activeElement === first || !focusable.includes(document.activeElement as HTMLElement))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (document.activeElement === last || !focusable.includes(document.activeElement as HTMLElement))) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', handleKey, true);
     return () => {
       mountedRef.current = false;
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener('keydown', handleKey, true);
-      if (previousFocus?.isConnected) previousFocus.focus();
     };
   }, []);
+
+  const focusInitialField = (event: Event) => {
+    const initialField = formRef.current?.elements.namedItem(initialFieldRef.current);
+    if (initialField instanceof HTMLElement) {
+      event.preventDefault();
+      initialField.focus();
+    }
+  };
+  const blockWhilePending = (event: Event) => {
+    if (pendingRef.current) event.preventDefault();
+  };
 
   useEffect(() => {
     if (serverError) errorRef.current?.focus();
@@ -358,17 +343,27 @@ export function InventoryProductForm({ product, categories, products, onClose, o
   };
 
   return (
-    <div className="modal-backdrop inv-product-backdrop" onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
-      <section ref={dialogRef} className="modal inv-product-modal" role="dialog" aria-modal="true" aria-labelledby={`${uniqueId}-title`} aria-describedby={`${uniqueId}-description`} tabIndex={-1}>
+    <DialogRoot onClose={close}>
+      <DialogContent
+        overlayClassName="modal-backdrop inv-product-backdrop"
+        className="modal inv-product-modal"
+        onOpenAutoFocus={focusInitialField}
+        onEscapeKeyDown={blockWhilePending}
+        onPointerDownOutside={blockWhilePending}
+      >
         <div className="modal-header inv-product-header">
           <span className="inv-product-symbol" aria-hidden="true"><Icon name={kind === 'raw' ? 'flask' : 'box'} /></span>
           <div>
-            <h2 id={`${uniqueId}-title`}>{product ? 'Editar ficha' : 'Crear producto'}</h2>
-            <p id={`${uniqueId}-description`}>
+            <DialogTitle asChild>
+              <h2>{product ? 'Editar ficha' : 'Crear producto'}</h2>
+            </DialogTitle>
+            <DialogDescription asChild>
+            <p>
               {values.name.trim()
                 ? <>{values.id.trim().toUpperCase() || 'Sin código'} · {values.name.trim()}</>
                 : product ? 'Actualiza datos, tipo e insumos vinculados.' : 'Completa la ficha en pocos pasos.'}
             </p>
+            </DialogDescription>
           </div>
           <button type="button" className="icon-btn" onClick={close} disabled={pending} aria-label="Cerrar formulario"><Icon name="close" /></button>
         </div>
@@ -696,7 +691,7 @@ export function InventoryProductForm({ product, categories, products, onClose, o
             </button>
           </div>
         </div>
-      </section>
-    </div>
+      </DialogContent>
+    </DialogRoot>
   );
 }

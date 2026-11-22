@@ -136,7 +136,7 @@
 }
 
 .ui-select-menu {
-  position: fixed;
+  /* Posicionado por Radix Popover; su wrapper copia este z-index (sobre modales: 100). */
   z-index: 240;
   display: flex;
   flex-direction: column;
