@@ -19,6 +19,7 @@ import { PickingModal, type PickLine } from './PickingModal';
 import { ExitLayer } from './ExitLayer';
 import '../../styles/warehouse-positioning.css';
 import '../../styles/warehouse-page.css';
+import { Tooltip } from '../../shared/components/Tooltip';
 
 const MOVES_PER_PAGE = 6;
 const moveTone = (type: string) => {
@@ -320,15 +321,14 @@ export function WarehousePage() {
               <option key={l} value={l}>Nivel {l}</option>
             ))}
           </Select>
-          <button
+          <Tooltip content={"Restablecer vista"}><button
             type="button"
             className="icon-btn"
             aria-label="Restablecer vista"
-            title="Restablecer vista"
             onClick={() => { setZoom(1); setLevel('all'); setViewYaw(0); setWarehouseSearch(''); }}
           >
             <Icon name="refresh" />
-          </button>
+          </button></Tooltip>
         </div>
 
         {query ? (

@@ -8,6 +8,7 @@ import { SegmentedControl } from '../../shared/components/Tabs';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import { Icon } from '../../shared/components/Icon';
 import { roleLabel } from '../../shared/auth/permissions';
+import { Switch } from '../../shared/components/Checkbox';
 
 const ROLES = ['ops', 'dispatch', 'driver', 'admin'] as const;
 
@@ -321,7 +322,7 @@ export function UsersPage() {
                 className="field full"
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
               >
-                <input type="checkbox" name="active" defaultChecked={edit.active} value="1" />
+                <Switch name="active" defaultChecked={edit.active} value="1" />
                 <span>Usuario activo</span>
               </label>
             ) : null}

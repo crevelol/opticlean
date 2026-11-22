@@ -8,6 +8,7 @@ import { TabPanel, Tabs } from '../../shared/components/Tabs';
 import { Select } from '../../shared/components/Select';
 import type { AppState, CycleCount, Metrics } from '../../shared/types';
 import '../../styles/commercial.css';
+import { Checkbox } from '../../shared/components/Checkbox';
 
 type Tab = 'docs' | 'ledger' | 'prices' | 'stock' | 'supply' | 'recall';
 
@@ -253,11 +254,7 @@ export function CommercialPage() {
                   />
                 </div>
                 <label className="commercial-check">
-                  <input
-                    type="checkbox"
-                    checked={restock}
-                    onChange={(event) => setRestock(event.target.checked)}
-                  />
+                  <Checkbox checked={restock} onCheckedChange={(checked) => setRestock(checked)} />
                   Reingresar el lote a cuarentena
                 </label>
                 <Btn type="submit" variant="primary" disabled={busy}>

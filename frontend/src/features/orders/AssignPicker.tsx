@@ -3,6 +3,7 @@ import { api, type ManagedUser } from '../../shared/api/client';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import type { Order } from '../../shared/types';
+import { Tooltip } from '../../shared/components/Tooltip';
 
 type Props = {
   order: Order;
@@ -34,9 +35,9 @@ export function AssignPicker({ order, compact }: Props) {
   if (user?.role !== 'admin') {
     if (!order.assignedToName) return null;
     return (
-      <span className="assign-chip" title="Asignado a">
+      <Tooltip content={"Asignado a"}><span className="assign-chip">
         {order.assignedToName}
-      </span>
+      </span></Tooltip>
     );
   }
 

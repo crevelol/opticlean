@@ -44,6 +44,9 @@ igual, todo valor visual sale de [`tokens.css`](./tokens.css).
    | `Tabs` + `TabPanel` | `.ui-tabs` | **Radix Tabs.** Cambian de PANEL. Línea inferior deslizante, flechas/Home/End, ARIA pestaña↔panel. Items: `value`, `label`, `icon`, `count` |
    | `SegmentedControl` | `.ui-segmented` | **Radix Toggle Group.** Filtran o cambian la VISTA del mismo contenido (estado, Lista/Tarjetas, periodo). Pastilla glass deslizante; `size="small"`, `full`, `tone` por segmento |
    | `Menu` + `MoreButton` | `.ui-menu` | **Radix Dropdown Menu.** Escape, clic fuera, flechas y foco devuelto al botón. `items`: `label`, `icon`, `hint`, `tone: 'danger'`, `onSelect`, `'separator'`. `MoreButton` es el "⋮" estándar de acciones de fila. Para el chevron de un botón que abre menú usa `<Icon name="chevron" className="ui-menu-chevron" />` |
+   | `Checkbox` | `.ui-checkbox` | **Radix Checkbox.** Seleccionar elementos u opciones puntuales. `checked`/`onCheckedChange(boolean)`, `indeterminate`, `label`, `hint`; con `name`/`value` sigue llegando a `FormData` |
+   | `Switch` | `.ui-switch` | **Radix Switch.** Activar/desactivar una configuración (Activo, Inspección…). Misma API que `Checkbox` |
+   | `Tooltip` | `.ui-tooltip` | **Radix Tooltip.** Sustituye al `title` nativo: aparece con hover **y con teclado**, se enlaza con `aria-describedby`. `content` vacío = sin tooltip; envuelve solo los botones deshabilitados para que también lo muestren. No uses `title=` en elementos para tooltips |
    | `Empty`      | `.empty-state` | Estado vacío                                                          |
 
    **No redefinas** altura, padding ni tamaño de letra de `.btn`, `.badge` o `.panel` dentro

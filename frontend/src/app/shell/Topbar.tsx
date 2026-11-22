@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Icon } from '../../shared/components/Icon';
 import { SearchInput } from '../../shared/components/SearchInput';
 import type { Crumb } from '../navigation';
+import { Tooltip } from '../../shared/components/Tooltip';
 
 const today = new Intl.DateTimeFormat('es-EC', {
   day: 'numeric',
@@ -36,18 +37,17 @@ export function Topbar({
 
   return (
     <header className="topbar">
-      <button
+      <Tooltip content={collapsed ? 'Expandir menú' : 'Colapsar menú'} side="right"><button
         type="button"
         className="sidebar-toggle"
         onClick={onToggleSidebar}
         aria-label={collapsed ? 'Expandir menú lateral' : 'Colapsar menú lateral'}
         aria-expanded={!collapsed}
-        title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
       >
         <motion.span animate={{ rotate: collapsed ? 180 : 0 }} style={{ display: 'inline-flex' }}>
           <Icon name="chevron-left" />
         </motion.span>
-      </button>
+      </button></Tooltip>
 
       <div className="topbar-left">
         <button

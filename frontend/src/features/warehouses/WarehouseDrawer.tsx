@@ -7,6 +7,7 @@ import { RackDetail, RackHeatmap } from './RackHeatmap';
 import { StatusPills } from './WarehouseList';
 import { CAPACITY_WARN, pct, type WarehouseRow } from './warehouseRows';
 import '../../styles/warehouses-list.css';
+import { Tooltip } from '../../shared/components/Tooltip';
 
 export type DrawerConfirm = 'use' | 'delete' | null;
 
@@ -132,10 +133,10 @@ export function WarehouseDrawer({ row, activeRow, confirm, pending, error, onCon
       <footer className="whx-d-foot">
         {isActive
           ? <Btn variant="primary" icon="map" onClick={onOpenMap}>Abrir mapa</Btn>
-          : <Btn variant="primary" icon="swap" disabled={pending || w.status === 'Inactiva' || confirm === 'use'} title={w.status === 'Inactiva' ? 'Cambia su estado a Operativa en Editar para usarla' : undefined} onClick={() => onConfirm('use')}>Usar esta bodega</Btn>}
+          : <Tooltip content={w.status === 'Inactiva' ? 'Cambia su estado a Operativa en Editar para usarla' : undefined}><Btn variant="primary" icon="swap" disabled={pending || w.status === 'Inactiva' || confirm === 'use'} onClick={() => onConfirm('use')}>Usar esta bodega</Btn></Tooltip>}
         <Btn icon="edit" disabled={pending} onClick={() => onEdit()}>Editar</Btn>
         <Btn icon="grid" variant="ghost" disabled={pending} onClick={() => onEdit('layout')}>Distribución</Btn>
-        {!isActive ? <Btn variant="danger" icon="trash" disabled={pending || !canDelete || confirm === 'delete'} title={canDelete ? undefined : 'Revisa los requisitos de «Para eliminarla»'} onClick={() => onConfirm('delete')}>Eliminar</Btn> : null}
+        {!isActive ? <Tooltip content={canDelete ? undefined : 'Revisa los requisitos de «Para eliminarla»'}><Btn variant="danger" icon="trash" disabled={pending || !canDelete || confirm === 'delete'} onClick={() => onConfirm('delete')}>Eliminar</Btn></Tooltip> : null}
       </footer>
     </DialogContent>
   </DialogRoot>;

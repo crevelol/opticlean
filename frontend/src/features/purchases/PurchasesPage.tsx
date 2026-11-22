@@ -16,6 +16,7 @@ import { dateShort, num } from '../../shared/lib/inventory';
 import { Icon } from '../../shared/components/Icon';
 import { ReceivePurchaseDialog } from './ReceivePurchaseDialog';
 import '../../styles/forecast.css';
+import { Tooltip } from '../../shared/components/Tooltip';
 
 const confidenceLabel: Record<ConfidenceLevel, string> = {
   low: 'Aprendiendo',
@@ -226,9 +227,9 @@ export function PurchasesPage() {
                     <td>
                       <strong>{row.daysCover === null ? '—' : `${row.daysCover}d`}</strong>
                       <small className="sub">{num(row.available)} disp. · mín. {num(row.min)}</small>
-                      <div className="fc-learn" title={`Aprendizaje ${(row.learningWeight * 100).toFixed(0)}%`}>
+                      <Tooltip content={`Aprendizaje ${(row.learningWeight * 100).toFixed(0)}%`}><div className="fc-learn">
                         <span style={{ width: `${Math.max(8, row.learningWeight * 100)}%` }} />
-                      </div>
+                      </div></Tooltip>
                     </td>
                     <td>
                       <strong>{num(row.suggestedQty)}</strong>

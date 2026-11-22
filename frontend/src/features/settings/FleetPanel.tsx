@@ -5,6 +5,7 @@ import { Badge, Btn } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import type { Vehicle } from '../../shared/types';
+import { Switch } from '../../shared/components/Checkbox';
 
 export function FleetPanel() {
   const { state, applyResponse, toast } = useAppState();
@@ -145,7 +146,7 @@ export function FleetPanel() {
               </div>
               <div className="field">
                 <label htmlFor="veh-active">
-                  <input id="veh-active" name="active" type="checkbox" defaultChecked={current?.active ?? true} /> Disponible para despacho
+                  <Switch id="veh-active" name="active" defaultChecked={current?.active ?? true} /> Disponible para despacho
                 </label>
               </div>
             </div>

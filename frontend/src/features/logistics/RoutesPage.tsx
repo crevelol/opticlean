@@ -22,6 +22,7 @@ import {
   type Truck,
 } from './fleet';
 import '../../styles/logistics.css';
+import { Checkbox } from '../../shared/components/Checkbox';
 
 export function RoutesPage() {
   const { state, applyResponse, toast } = useAppState();
@@ -300,11 +301,7 @@ export function RoutesPage() {
                   const p = product(state, l.productId);
                   return (
                     <label key={key} className="log-check-item">
-                      <input
-                        type="checkbox"
-                        checked={!!checked[key]}
-                        onChange={() => setChecked((prev) => ({ ...prev, [key]: !prev[key] }))}
-                      />
+                      <Checkbox checked={!!checked[key]} onCheckedChange={() => setChecked((prev) => ({ ...prev, [key]: !prev[key] }))} />
                       <span>
                         {p?.name ?? l.productId} × {l.qty}
                         <small>

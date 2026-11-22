@@ -3,6 +3,7 @@ import type { AppState } from '../../shared/types';
 import { daysUntil, exitOrder, expiryTone, isLotSellable, product, scopedLots } from '../../shared/lib/inventory';
 import { Icon } from '../../shared/components/Icon';
 import { SegmentedControl } from '../../shared/components/Tabs';
+import { Tooltip } from '../../shared/components/Tooltip';
 
 type Cell = {
   loc: string;
@@ -84,14 +85,14 @@ export function ExitLayer({ state, onLocate }: { state: AppState; onLocate: (loc
       {ready.length ? (
         <div className="fx-exit-grid">
           {ready.map((c) => (
-            <button key={`${c.loc}-${c.productId}-${c.expiry}`} type="button" className={`fx-exit-cell ${expiryTone(c.days)}`} onClick={() => onLocate(c.loc)} title={`${c.name} · vence ${c.expiry}`}>
+            <Tooltip key={`${c.loc}-${c.productId}-${c.expiry}`} content={`${c.name} · vence ${c.expiry}`}><button type="button" className={`fx-exit-cell ${expiryTone(c.days)}`} onClick={() => onLocate(c.loc)}>
               <b>{c.loc}</b>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
               <span>
                 {c.qty} u. · {c.days} d
               </span>
               {c.first ? <span className="fx-first">Sale 1º</span> : null}
-            </button>
+            </button></Tooltip>
           ))}
         </div>
       ) : (

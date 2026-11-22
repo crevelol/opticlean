@@ -97,7 +97,6 @@ export function MoreButton({
       {...rest}
       className={cx('icon-btn ui-more-btn', className)}
       aria-label={label}
-      title={label}
     >
       <Icon name="more" />
     </button>

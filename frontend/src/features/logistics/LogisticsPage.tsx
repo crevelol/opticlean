@@ -39,6 +39,7 @@ import {
   type Truck,
 } from './fleet';
 import '../../styles/logistics.css';
+import { Checkbox } from '../../shared/components/Checkbox';
 
 export function LogisticsPage() {
   const { state, applyResponse, toast } = useAppState();
@@ -482,15 +483,7 @@ export function LogisticsPage() {
                                 setDropTarget(null);
                               }}
                             >
-                              <input
-                                className="log-order-check"
-                                type="checkbox"
-                                checked={selected}
-                                disabled={!selectable}
-                                onClick={(e) => e.stopPropagation()}
-                                onChange={() => toggleOrder(o.id)}
-                                aria-label={`Seleccionar ${o.id}`}
-                              />
+                              <Checkbox className="log-order-check" checked={selected} disabled={!selectable} onClick={(e) => e.stopPropagation()} onCheckedChange={() => toggleOrder(o.id)} aria-label={`Seleccionar ${o.id}`} />
                               <button
                                 type="button"
                                 className="log-order-main"

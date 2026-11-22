@@ -6,6 +6,7 @@ import { Modal, ModalActions } from '../../shared/components/Modal';
 import { Icon } from '../../shared/components/Icon';
 import type { WarehouseFamily } from '../../shared/types';
 import '../../styles/families.css';
+import { Switch } from '../../shared/components/Checkbox';
 
 const emptyFamily = (): WarehouseFamily => ({
   id: '',
@@ -217,11 +218,7 @@ export function FamiliesPage() {
               </div>
               <div className="field full">
                 <label className="fam-check">
-                  <input
-                    type="checkbox"
-                    checked={edit.fragilePreferred}
-                    onChange={(e) => setEdit({ ...edit, fragilePreferred: e.target.checked })}
-                  />
+                  <Switch checked={edit.fragilePreferred} onCheckedChange={(checked) => setEdit({ ...edit, fragilePreferred: checked })} />
                   Preferir productos frágiles en esta familia (niveles bajos)
                 </label>
               </div>

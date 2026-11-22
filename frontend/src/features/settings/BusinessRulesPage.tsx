@@ -13,6 +13,7 @@ import { Btn, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import type { BusinessRules } from '../../shared/types';
 import '../../styles/business-rules.css';
+import { Switch } from '../../shared/components/Checkbox';
 
 type Draft = BusinessRules;
 
@@ -287,12 +288,7 @@ export function BusinessRulesPage() {
               </label>
               <label className="field">
                 <span>Un lote por casilla</span>
-                <input
-                  name="separateExpiryLots"
-                  type="checkbox"
-                  checked={draft.separateExpiryLots}
-                  onChange={(e) => setFlag('separateExpiryLots', e.target.checked)}
-                />
+                <Switch name="separateExpiryLots" checked={draft.separateExpiryLots} onCheckedChange={(checked) => setFlag('separateExpiryLots', checked)} />
               </label>
             </div>
           </section>

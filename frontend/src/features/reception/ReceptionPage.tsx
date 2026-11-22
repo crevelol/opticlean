@@ -14,6 +14,7 @@ import { useAuth } from '../../shared/hooks/AuthProvider';
 import { packsOf, pendingUnits, purchaseIncludes } from '../../shared/lib/wholesale';
 import '../../styles/warehouse-positioning.css';
 import '../../styles/reception.css';
+import { Checkbox } from '../../shared/components/Checkbox';
 
 const steps = [
   { title: 'Producto', subtitle: 'Qué llega y de quién' },
@@ -418,7 +419,7 @@ export function ReceptionNewPage() {
                     </div>
                     <div className="field">
                       <label htmlFor="rec-inspect" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <input id="rec-inspect" type="checkbox" checked={inspect} onChange={(e) => setInspect(e.target.checked)} />
+                        <Checkbox id="rec-inspect" checked={inspect} onCheckedChange={(checked) => setInspect(checked)} />
                         Recibir a inspección de calidad
                       </label>
                       <small>El lote queda retenido y no se vende hasta que administración lo libere.</small>

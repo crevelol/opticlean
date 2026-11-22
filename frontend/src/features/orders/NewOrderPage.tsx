@@ -20,6 +20,7 @@ import { Icon } from '../../shared/components/Icon';
 import { SegmentedControl } from '../../shared/components/Tabs';
 import { ImportDialog } from '../imports/ImportDialog';
 import '../../styles/new-order.css';
+import { Checkbox } from '../../shared/components/Checkbox';
 
 type Line = { productId: string; qty: number };
 type KitLine = { bundleId: string; qty: number };
@@ -461,12 +462,8 @@ export function NewOrderPage() {
 
               {catalogMode === 'products' ? (
                 <label className="no-backorder">
-                  <input
-                    id="no-backorder"
-                    type="checkbox"
-                    checked={backorder}
-                    onChange={(e) => {
-                      const on = e.target.checked;
+                  <Checkbox id="no-backorder" checked={backorder} onCheckedChange={(checked) => {
+                      const on = checked;
                       setBackorder(on);
                       if (!on) {
                         setLines((prev) =>
@@ -475,8 +472,7 @@ export function NewOrderPage() {
                             .filter((l) => l.qty > 0),
                         );
                       }
-                    }}
-                  />
+                    }} />
                   <span>
                     <strong>Pedir aunque falte stock</strong>
                     <small>El pedido queda «Esperando stock» y se crea la orden de compra por el faltante. Pasa a preparación solo cuando llega la mercadería.</small>

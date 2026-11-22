@@ -25,6 +25,8 @@ import {
   type InventorySort,
 } from './inventoryModel';
 import '../../styles/inventory.css';
+import { Checkbox } from '../../shared/components/Checkbox';
+import { Tooltip } from '../../shared/components/Tooltip';
 
 const PAGE_CHUNK = 10;
 const statusOptions: { value: InventoryFilter; label: string }[] = [
@@ -143,6 +145,8 @@ export function InventoryWorkspace({
     allRows.find((row) => row.product.id === selectedId);
   const allVisibleChecked =
     visibleRows.length > 0 && visibleRows.every((r) => checked[r.product.id]);
+  const someVisibleChecked =
+    !allVisibleChecked && visibleRows.some((r) => checked[r.product.id]);
 
   const updateParams = (patch: Record<string, string>) => {
     setParams(
@@ -571,12 +575,7 @@ export function InventoryWorkspace({
                     <thead>
                       <tr>
                         <th className="inv-col-check">
-                          <input
-                            type="checkbox"
-                            checked={allVisibleChecked}
-                            onChange={toggleAllVisible}
-                            aria-label="Seleccionar visibles"
-                          />
+                          <Checkbox checked={allVisibleChecked} indeterminate={someVisibleChecked} onCheckedChange={() => toggleAllVisible()} aria-label="Seleccionar visibles" />
                         </th>
                         <th scope="col">Producto / Insumo</th>
                         <th scope="col">Estado</th>
@@ -613,17 +612,10 @@ export function InventoryWorkspace({
                               } ${isRaw(row.product) ? 'inv-row-raw' : ''}`}
                             >
                               <td className="inv-col-check">
-                                <input
-                                  type="checkbox"
-                                  checked={!!checked[row.product.id]}
-                                  onChange={() =>
-                                    setChecked((c) => ({
+                                <Checkbox checked={!!checked[row.product.id]} onCheckedChange={() => setChecked((c) => ({
                                       ...c,
                                       [row.product.id]: !c[row.product.id],
-                                    }))
-                                  }
-                                  aria-label={`Seleccionar ${row.product.name}`}
-                                />
+                                    }))} aria-label={`Seleccionar ${row.product.name}`} />
                               </td>
                               <td>
                                 <div className="inv-table-product-wrap">
@@ -699,17 +691,16 @@ export function InventoryWorkspace({
                                     <Icon name="receive" />
                                     Recibir
                                   </button>
-                                  <button
+                                  <Tooltip content={"Más acciones"}><button
                                     type="button"
                                     className="inv-more-btn"
-                                    title="Más acciones"
                                     aria-label={`Más acciones de ${row.product.name}`}
                                     onClick={() => selectProduct(row.product.id)}
                                   >
                                     <span />
                                     <span />
                                     <span />
-                                  </button>
+                                  </button></Tooltip>
                                 </div>
                               </td>
                             </tr>

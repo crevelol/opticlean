@@ -4,6 +4,7 @@ import { Icon } from '../../shared/components/Icon';
 import type { AppState, Location, WarehouseLayout } from '../../shared/types';
 import { scopedLots } from '../../shared/lib/inventory';
 import { WarehouseFloorPlan, type RackStats } from './WarehouseFloorPlan';
+import { Tooltip } from '../../shared/components/Tooltip';
 
 type Props = {
   state: AppState;
@@ -120,17 +121,15 @@ export function WarehousePositioning({ state, layout, locations, selectedLoc, le
           {levelNumbers.map((value) => {
             const info = levelStats(value);
             const active = value === shownLevel;
-            return <button
-              key={value}
+            return <Tooltip key={value} content={`Nivel ${value}: ${info.occupied}/${info.total} ocupadas`}><button
               type="button"
               aria-current={active ? 'page' : undefined}
               disabled={level !== 'all' && !active}
               className={`${active ? 'active' : ''}${query && info.hits ? ' has-hits' : ''}`}
               onClick={() => goToLevel(value)}
-              title={`Nivel ${value}: ${info.occupied}/${info.total} ocupadas`}
             >
               N{value}
-            </button>;
+            </button></Tooltip>;
           })}
         </div>
         <button type="button" className="level-pager-arrow" aria-label="Nivel siguiente" disabled={level !== 'all' || shownLevel >= layout.levels} onClick={() => goToLevel(shownLevel + 1)}>
@@ -154,20 +153,18 @@ export function WarehousePositioning({ state, layout, locations, selectedLoc, le
                   const item = firstProducts.get(location.id);
                   const dimmed = !isVisible(location);
                   const stateClass = quantity === 0 ? 'is-free' : quantity >= location.capacity ? 'is-full' : 'is-stock';
-                  return <button
-                    key={location.id}
+                  return <Tooltip key={location.id} content={`${location.id} · ${item?.name ?? 'Disponible'} · ${quantity}/${location.capacity} u.`}><button
                     type="button"
                     className={`position-cell ${stateClass} ${location.id === selectedLoc ? 'is-selected' : ''} ${dimmed ? 'is-dimmed' : ''} ${pickLocs.has(location.id) ? 'is-picking' : ''}`}
                     aria-pressed={location.id === selectedLoc}
                     aria-label={`${location.id}, ${quantity === 0 ? 'libre' : `${quantity} de ${location.capacity} unidades`}${item ? `, ${item.name}` : ''}. Doble clic para ver detalle.`}
-                    title={`${location.id} · ${item?.name ?? 'Disponible'} · ${quantity}/${location.capacity} u.`}
                     onClick={() => onSelect(location.id)}
                     onDoubleClick={() => onOpenDetail(location.id)}
                   >
                     <span className="cell-number">{String(location.pos).padStart(2, '0')}{face ? ` · ${face}` : ''}</span>
                     <span className="cell-quantity">{quantity ? `${quantity} u.` : 'Libre'}</span>
                     <span className="cell-product">{item?.name ?? `${location.capacity} u. disp.`}</span>
-                  </button>;
+                  </button></Tooltip>;
                 })}
               </div>
             </div>)}

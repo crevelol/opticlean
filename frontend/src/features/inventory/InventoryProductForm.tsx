@@ -13,6 +13,7 @@ import { useAuth } from '../../shared/hooks/AuthProvider';
 import type { HazardClass, Product, ProductComponent, ProductKind } from '../../shared/types';
 import { HAZARD_OPTIONS } from '../../shared/lib/wholesale';
 import './inventory-product-form.css';
+import { Switch } from '../../shared/components/Checkbox';
 
 type ProductFormProps = {
   product?: Product;
@@ -522,7 +523,7 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                     </div>
                     <div className="field">
                       <label htmlFor={`${uniqueId}-inspect`} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <input id={`${uniqueId}-inspect`} type="checkbox" checked={inspectOnReceipt} onChange={(event) => setInspectOnReceipt(event.target.checked)} />
+                        <Switch id={`${uniqueId}-inspect`} checked={inspectOnReceipt} onCheckedChange={(checked) => setInspectOnReceipt(checked)} />
                         Recibir siempre a inspección
                       </label>
                       <small>Cada recepción queda retenida hasta que se revise etiqueta, sello y hoja de seguridad.</small>

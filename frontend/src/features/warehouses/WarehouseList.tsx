@@ -4,6 +4,7 @@ import { Icon } from '../../shared/components/Icon';
 import { num } from '../../shared/lib/inventory';
 import { RackBars } from './RackHeatmap';
 import { CAPACITY_WARN, pct, type WarehouseRow } from './warehouseRows';
+import { Tooltip } from '../../shared/components/Tooltip';
 
 export function StatusPills({ row, isActive }: { row: WarehouseRow; isActive: boolean }) {
   const { warehouse: w, alerts } = row;
@@ -53,7 +54,7 @@ export function WarehouseList({ rows, active, openId, savedId, pending, onOpen, 
         <div className="whx-row-actions" role="cell" onClick={(e) => e.stopPropagation()}>
           {isActive
             ? <Btn variant="primary" size="small" icon="map" onClick={onOpenMap}>Mapa</Btn>
-            : <Btn size="small" disabled={inactive || !!pending} title={inactive ? 'Actívala desde Editar para poder usarla' : undefined} onClick={() => onUse(w.id)}>Usar</Btn>}
+            : <Tooltip content={inactive ? 'Actívala desde Editar para poder usarla' : undefined}><Btn size="small" disabled={inactive || !!pending} onClick={() => onUse(w.id)}>Usar</Btn></Tooltip>}
           <Btn variant="ghost" size="small" onClick={() => onOpen(w.id)}>Detalles</Btn>
         </div>
       </div>;

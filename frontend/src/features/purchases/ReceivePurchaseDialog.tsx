@@ -6,6 +6,7 @@ import { purchaseLines } from '../../shared/lib/wholesale';
 import { Modal } from '../../shared/components/Modal';
 import { Btn } from '../../shared/components/ui';
 import type { AppState, Purchase } from '../../shared/types';
+import { Checkbox } from '../../shared/components/Checkbox';
 
 type Row = {
   productId: string;
@@ -196,12 +197,7 @@ export function ReceivePurchaseDialog({ state, purchase, onClose }: { state: App
                       </td>
                       <td>
                         <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                          <input
-                            id={`rp-insp-${i}`}
-                            type="checkbox"
-                            checked={row.inspect}
-                            onChange={(e) => update(i, { inspect: e.target.checked })}
-                          />
+                          <Checkbox id={`rp-insp-${i}`} checked={row.inspect} onCheckedChange={(checked) => update(i, { inspect: checked })} />
                           Retener
                         </label>
                       </td>
