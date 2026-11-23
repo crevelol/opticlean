@@ -13,6 +13,16 @@ import { exitParts } from '../motion/exitAnimation';
  * Requiere <TooltipProvider> en la raíz (main.tsx).
  */
 
+// Última forma de interacción: un tooltip solo se abre por foco si fue el teclado.
+// (Durante el evento focus, :focus-visible aún no está calculado de forma fiable.)
+let lastInputWasKeyboard = false;
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', (e) => {
+    if (!e.metaKey && !e.altKey && !e.ctrlKey) lastInputWasKeyboard = true;
+  }, true);
+  window.addEventListener('pointerdown', () => (lastInputWasKeyboard = false), true);
+}
+
 export const TooltipProvider = ({ children }: { children: ReactNode }) => (
   <RT.Provider delayDuration={350} skipDelayDuration={250}>
     {children}
@@ -49,7 +59,17 @@ export function Tooltip({
 
   return (
     <RT.Root>
-      <RT.Trigger asChild>{trigger}</RT.Trigger>
+      <RT.Trigger
+        asChild
+        // Solo con foco de teclado: el foco automático (p. ej. el ✕ al abrir un
+        // diálogo) o tras un clic no debe abrir el tooltip, porque además se
+        // quedaría con el primer Escape en lugar del diálogo.
+        onFocus={(event) => {
+          if (!lastInputWasKeyboard) event.preventDefault();
+        }}
+      >
+        {trigger}
+      </RT.Trigger>
       <RT.Portal>
         <RT.Content
           className="ui-tooltip"

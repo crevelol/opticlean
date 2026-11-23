@@ -60,7 +60,8 @@ export function WarehouseDrawer({ row, activeRow, confirm, pending, error, onCon
     <DialogContent
       overlayClassName="whx-drawer-root"
       className="whx-drawer"
-      motionPreset="slide"
+      motionPreset="sheet"
+      side="right"
       noDescription
       aria-busy={pending}
       onOpenAutoFocus={(event) => { event.preventDefault(); closeBtn.current?.focus(); }}

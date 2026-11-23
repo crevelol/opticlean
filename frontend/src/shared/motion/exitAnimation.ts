@@ -9,6 +9,11 @@ import { duration, ease, layer } from './presets';
  * "fantasma" inerte (sin foco ni clics), lo animamos hacia fuera y lo
  * eliminamos. Funciona igual cierre quien cierre: Escape, clic fuera, ✕,
  * Cancelar o la propia pantalla tras guardar.
+ *
+ * Dos fases: la copia se prepara al instante (el nodo aún está en el DOM) y
+ * solo se muestra si, al terminar el ciclo de React, el original salió del
+ * documento. Así el desmontaje simulado de <StrictMode> (desarrollo), que deja
+ * el DOM en su sitio, no reproduce una salida mientras la capa se abre.
  */
 
 export type GhostPart = {
@@ -23,6 +28,8 @@ const prefersReducedMotion = () =>
 export function playExitGhost(source: HTMLElement | null, parts: GhostPart[], ms = duration.base * 1000) {
   if (!source?.isConnected || prefersReducedMotion()) return;
 
+  // ── Fase 1: preparar la copia mientras el original sigue en el DOM ──
+  const parent = source.parentElement;
   const ghost = source.cloneNode(true) as HTMLElement;
   ghost.setAttribute('aria-hidden', 'true');
   ghost.setAttribute('inert', '');
@@ -38,6 +45,9 @@ export function playExitGhost(source: HTMLElement | null, parts: GhostPart[], ms
     el.removeAttribute('aria-describedby');
   });
   ghost.style.pointerEvents = 'none';
+  // Las animaciones CSS de entrada no deben volver a correr en la copia.
+  ghost.style.animation = 'none';
+  ghost.querySelectorAll<HTMLElement>('*').forEach((el) => (el.style.animation = 'none'));
 
   // Un <iframe> clonado volvería a cargarse: se sustituye por un bloque vacío del mismo tamaño.
   ghost.querySelectorAll('iframe').forEach((frame) => {
@@ -47,48 +57,51 @@ export function playExitGhost(source: HTMLElement | null, parts: GhostPart[], ms
     frame.replaceWith(box);
   });
 
-  // Reproduce la posición de scroll de los contenedores con desplazamiento.
+  // Posición de scroll de los contenedores con desplazamiento.
   const scrolled: Array<[number, number, number]> = [];
-  const all = [source, ...source.querySelectorAll<HTMLElement>('*')];
-  all.forEach((el, i) => {
+  [source, ...source.querySelectorAll<HTMLElement>('*')].forEach((el, i) => {
     if (el.scrollTop || el.scrollLeft) scrolled.push([i, el.scrollTop, el.scrollLeft]);
   });
 
-  (source.parentElement ?? document.body).appendChild(ghost);
+  // ── Fase 2: al terminar el ciclo de React, solo si fue un desmontaje real ──
+  queueMicrotask(() => {
+    if (source.isConnected) return; // desmontaje simulado (StrictMode) o la capa sigue viva
+    (parent?.isConnected ? parent : document.body).appendChild(ghost);
 
-  if (scrolled.length) {
-    const ghostAll = [ghost, ...ghost.querySelectorAll<HTMLElement>('*')];
-    scrolled.forEach(([i, top, left]) => {
-      const el = ghostAll[i];
-      if (el) {
-        el.scrollTop = top;
-        el.scrollLeft = left;
-      }
+    if (scrolled.length) {
+      const ghostAll = [ghost, ...ghost.querySelectorAll<HTMLElement>('*')];
+      scrolled.forEach(([i, top, left]) => {
+        const el = ghostAll[i];
+        if (el) {
+          el.scrollTop = top;
+          el.scrollLeft = left;
+        }
+      });
+    }
+
+    const timing: KeyframeAnimationOptions = {
+      duration: ms,
+      // Curva simétrica: con ease-out la capa se "apaga" en los primeros
+      // milisegundos y se percibe como un corte.
+      easing: `cubic-bezier(${ease.inOut.join(',')})`,
+      fill: 'forwards',
+    };
+    const animations = parts.flatMap(({ selector, keyframes }) => {
+      const target = selector ? ghost.querySelector<HTMLElement>(selector) : ghost;
+      return target ? [target.animate(keyframes, timing)] : [];
     });
-  }
 
-  const timing: KeyframeAnimationOptions = {
-    duration: ms,
-    // Las salidas usan curva simétrica: con ease-out la capa se "apaga" en los
-    // primeros milisegundos y se percibe como un corte.
-    easing: `cubic-bezier(${ease.inOut.join(',')})`,
-    fill: 'forwards',
-  };
-  const animations = parts.flatMap(({ selector, keyframes }) => {
-    const target = selector ? ghost.querySelector<HTMLElement>(selector) : ghost;
-    return target ? [target.animate(keyframes, timing)] : [];
+    const remove = () => ghost.remove();
+    if (!animations.length) return remove();
+    Promise.all(animations.map((a) => a.finished)).then(remove, remove);
+    // Seguridad: nunca dejar el fantasma en pantalla.
+    window.setTimeout(remove, ms + 200);
   });
-
-  const remove = () => ghost.remove();
-  if (!animations.length) return remove();
-  Promise.all(animations.map((a) => a.finished)).then(remove, remove);
-  // Seguridad: nunca dejar el fantasma en pantalla.
-  window.setTimeout(remove, ms + 200);
 }
 
-/** Salidas estándar, espejo de las entradas de presets.ts. */
+/** Salidas estándar: espejo exacto de las entradas (layer en presets.ts). */
 export const exitParts = {
-  /** Diálogo centrado: velo se desvanece, panel se encoge levemente. */
+  /** Diálogo centrado: velo y panel se desvanecen; el panel se encoge levemente. */
   dialog: (panelSelector: string): GhostPart[] => [
     { selector: '', keyframes: [{ opacity: 1 }, { opacity: 0 }] },
     {
@@ -99,20 +112,20 @@ export const exitParts = {
       ],
     },
   ],
-  /** Panel lateral derecho. */
-  drawer: (panelSelector: string): GhostPart[] => [
+  /** Panel lateral (sheet): sale completo hacia su lado; el velo se desvanece. */
+  sheet: (panelSelector: string, side: 'right' | 'left' = 'right'): GhostPart[] => [
     { selector: '', keyframes: [{ opacity: 1 }, { opacity: 0 }] },
     {
       selector: panelSelector,
       keyframes: [
-        { transform: 'translateX(0)', opacity: 1 },
-        { transform: `translateX(${layer.drawerOffset}px)`, opacity: 0 },
+        { transform: 'translateX(0)' },
+        { transform: `translateX(${side === 'right' ? '100%' : '-100%'})` },
       ],
     },
   ],
   /**
-   * Desplegables (select, menús, popovers). Se anima el menú interior: el
-   * wrapper de Radix lleva el transform de posición y no debe tocarse.
+   * Desplegables (select, menús, popovers, tooltips). Se anima el menú
+   * interior: el wrapper de Radix lleva el transform de posición.
    */
   popover: (menuSelector: string): GhostPart[] => [
     {

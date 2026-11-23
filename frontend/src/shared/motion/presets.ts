@@ -77,9 +77,10 @@ export const swap: Variants = {
  */
 export const layer = {
   transition: { duration: duration.base, ease: ease.inOut } satisfies Transition,
+  /** Sheets (paneles laterales): recorren más distancia, así que un poco más lentos. */
+  sheetTransition: { duration: duration.slow, ease: ease.inOut } satisfies Transition,
   /** Desplazamientos/escala compartidos con exitParts. */
   dialogScale: 0.97,
-  drawerOffset: 48,
   popoverOffset: 4,
   popoverScale: 0.98,
 };

@@ -68,8 +68,10 @@ export function DialogRoot({ open = true, onClose, onOpenChange, children }: Roo
 type ContentProps = Omit<ComponentPropsWithoutRef<typeof RD.Content>, 'asChild'> & {
   /** Clase del velo de fondo (por defecto .modal-backdrop). */
   overlayClassName?: string;
-  /** Animación del panel: 'pop' (centrado) o 'slide' (panel lateral). */
-  motionPreset?: 'pop' | 'slide';
+  /** Animación del panel: 'pop' (centrado) o 'sheet' (panel lateral que se desliza desde su borde). */
+  motionPreset?: 'pop' | 'sheet';
+  /** Lado del sheet: entra desde ese borde y sale hacia él. */
+  side?: 'right' | 'left';
   /** Sin descripción accesible (evita el aviso de Radix cuando no hay subtítulo). */
   noDescription?: boolean;
 };
@@ -79,23 +81,25 @@ export function DialogContent({
   overlayClassName = 'modal-backdrop',
   className,
   motionPreset = 'pop',
+  side = 'right',
   noDescription,
   children,
   ...rest
 }: ContentProps) {
-  // Entrada = espejo de la salida (exitParts.dialog / exitParts.drawer).
+  // Entrada = espejo de la salida (exitParts.dialog / exitParts.sheet).
   const panelMotion =
-    motionPreset === 'slide'
+    motionPreset === 'sheet'
       ? {
-          initial: { x: layer.drawerOffset, opacity: 0 },
-          animate: { x: 0, opacity: 1 },
-          transition: layer.transition,
+          initial: { x: side === 'right' ? '100%' : '-100%' },
+          animate: { x: 0 },
+          transition: layer.sheetTransition,
         }
       : {
           initial: { scale: layer.dialogScale, opacity: 0 },
           animate: { scale: 1, opacity: 1 },
           transition: layer.transition,
         };
+  const overlayTransition = motionPreset === 'sheet' ? layer.sheetTransition : layer.transition;
   return (
     <RD.Portal>
       <RD.Overlay asChild>
@@ -104,7 +108,7 @@ export function DialogContent({
           data-dialog-overlay=""
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={layer.transition}
+          transition={overlayTransition}
         >
           <RD.Content
             asChild
@@ -117,10 +121,11 @@ export function DialogContent({
               <ExitGhost
                 closest="[data-dialog-overlay]"
                 parts={
-                  motionPreset === 'slide'
-                    ? exitParts.drawer(':scope > section')
+                  motionPreset === 'sheet'
+                    ? exitParts.sheet(':scope > section', side)
                     : exitParts.dialog(':scope > section')
                 }
+                ms={(motionPreset === 'sheet' ? layer.sheetTransition.duration : layer.transition.duration) * 1000}
               />
             </motion.section>
           </RD.Content>
