@@ -19,6 +19,8 @@ export type AuthUser = {
   passwordHash: string;
   /** false = no puede iniciar sesión */
   active?: boolean;
+  /** Administra la plataforma (todas las empresas). Nunca se concede por registro. */
+  platformAdmin?: boolean;
 };
 
 export type PublicUser = {
@@ -28,6 +30,8 @@ export type PublicUser = {
   role: AuthRole;
   companyId: string;
   truckPlate?: string;
+  /** Solo presente (true) para administradores de la plataforma. */
+  platformAdmin?: boolean;
 };
 
 export type ManagedUser = PublicUser & {
@@ -120,6 +124,7 @@ function signToken(user: PublicUser) {
       role: user.role,
       companyId: user.companyId,
       truckPlate: user.truckPlate,
+      pa: user.platformAdmin ? 1 : undefined,
       iat: now,
       exp: now + TOKEN_TTL_SEC,
     }),
@@ -145,6 +150,7 @@ export function verifyToken(token: string): PublicUser | null {
       role: AuthRole;
       companyId?: string;
       truckPlate?: string;
+      pa?: number;
       exp: number;
     };
     if (!body.exp || body.exp * 1000 < Date.now()) return null;
@@ -155,6 +161,7 @@ export function verifyToken(token: string): PublicUser | null {
       role: body.role,
       companyId: body.companyId || 'co-innovamf',
       truckPlate: body.truckPlate,
+      ...(body.pa === 1 ? { platformAdmin: true } : {}),
     };
   } catch {
     return null;
@@ -169,7 +176,22 @@ function toPublic(u: AuthUser): PublicUser {
     role: u.role,
     companyId: u.companyId || 'co-innovamf',
     truckPlate: u.truckPlate,
+    ...(isPlatformAdmin(u) ? { platformAdmin: true } : {}),
   };
+}
+
+/** El administrador inicial (U-ADMIN) siempre es de plataforma; el resto solo con la bandera explícita. */
+function isPlatformAdmin(u: AuthUser) {
+  return u.role === 'admin' && (u.id === 'U-ADMIN' || u.platformAdmin === true);
+}
+
+/**
+ * Regla de empresa activa, inyectada desde la composición (server.ts) para que auth
+ * no dependa de la base de administración.
+ */
+let companyIsActive: (companyId: string) => boolean = () => true;
+export function setCompanyActiveCheck(fn: (companyId: string) => boolean) {
+  companyIsActive = fn;
 }
 
 function envPass(key: string, fallback: string) {
@@ -471,6 +493,9 @@ export function login(email: string, password: string) {
   if (!user || user.active === false || !verifyPassword(password, user.passwordHash)) {
     throw new Error('Correo o contraseña incorrectos');
   }
+  if (!isPlatformAdmin(user) && !companyIsActive(user.companyId || 'co-innovamf')) {
+    throw new Error('Tu empresa está desactivada. Contacta a soporte.');
+  }
   const publicUser = toPublic(user);
   return { token: signToken(publicUser), user: publicUser };
 }
@@ -487,6 +512,10 @@ export function authRequired(req: Request, res: Response, next: NextFunction) {
     res.status(401).json({ error: 'Sesión expirada o inválida' });
     return;
   }
+  if (!user.platformAdmin && !companyIsActive(user.companyId)) {
+    res.status(403).json({ error: 'Tu empresa está desactivada. Contacta a soporte.' });
+    return;
+  }
   req.user = user;
   next();
 }
@@ -499,6 +528,27 @@ export function adminRequired(req: Request, res: Response, next: NextFunction) {
     }
     next();
   });
+}
+
+/** Solo administradores de la plataforma: gestión de empresas, módulos y menú global. */
+export function platformAdminRequired(req: Request, res: Response, next: NextFunction) {
+  authRequired(req, res, () => {
+    if (req.user?.role !== 'admin' || !req.user.platformAdmin) {
+      res.status(403).json({ error: 'Solo administración de la plataforma' });
+      return;
+    }
+    next();
+  });
+}
+
+/** Correo libre para registrar (sin crear nada). Lanza si no es válido o ya existe. */
+export function assertEmailAvailable(rawEmail: string) {
+  const email = String(rawEmail || '').trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Correo no válido.');
+  if (ensureUsers().users.some((u) => u.email.toLowerCase() === email)) {
+    throw new Error('Ya existe un usuario con ese correo.');
+  }
+  return email;
 }
 
 export function publicUserFromRequest(req: Request) {

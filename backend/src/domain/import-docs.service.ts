@@ -397,22 +397,28 @@ export function commitImport(
 
   const clientName = body.partyName?.trim();
   if (!clientName) throw new Error('Indica el cliente del documento.');
+  const tax = (body.partyTaxId ?? '').replace(/\D/g, '');
+  const taxOk = /^\d{13}$/.test(tax);
   let client = s.clients.find((item) => item.name.toLowerCase() === clientName.toLowerCase());
-  if (!client && body.partyTaxId) {
-    const tax = body.partyTaxId.replace(/\D/g, '');
-    client = s.clients.find((item) => item.contact.replace(/\D/g, '') === tax || item.id.includes(tax));
+  if (!client && tax) {
+    client = s.clients.find(
+      (item) => item.taxId === tax || item.contact.replace(/\D/g, '') === tax || item.id.includes(tax),
+    );
   }
   if (!client) {
     client = {
-      id: body.partyTaxId ? `CL-${body.partyTaxId.replace(/\D/g, '')}` : `CL-${Date.now().toString(36)}`,
+      id: tax ? `CL-${tax}` : `CL-${Date.now().toString(36)}`,
       name: clientName,
       contact: body.partyTaxId || clientName,
       address: body.partyAddress || 'Sin dirección',
       email: 'importado@cliente.local',
       type: 'Mayorista',
       creditLimit: 3000,
+      ...(taxOk ? { taxId: tax } : {}),
     };
     s.clients.push(client);
+  } else if (taxOk && !client.taxId && !s.clients.some((item) => item.taxId === tax)) {
+    client.taxId = tax;
   }
   const lines = rows.map((row) => {
     const item = ensureImportedProduct(s, row, 'Importado');

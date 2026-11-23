@@ -4,6 +4,7 @@ export type AuthUser = {
   name: string;
   role: string;
   companyId: string;
+  platformAdmin?: boolean;
 };
 
 const TOKEN_KEY = 'opticlean.admin.token';

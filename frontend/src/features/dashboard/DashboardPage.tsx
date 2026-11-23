@@ -4,12 +4,13 @@ import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import { api } from '../../shared/api/client';
-import { activeWarehouseId, available, client, money, num, orderValue, statusColor, stock, sellableStock } from '../../shared/lib/inventory';
+import { activeWarehouseId, availableIn, client, money, num, orderValue, sellableIn, statusColor, stockIn } from '../../shared/lib/inventory';
 import { buildForecast } from '../../shared/lib/forecast';
 import { expiryAlerts } from '../../shared/lib/wholesale';
 import { Badge, Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { AssignPicker } from '../orders/AssignPicker';
+import { buildMoneyStory, type MoneyKind } from './moneyStory';
 import '../../styles/dashboard.css';
 import '../../styles/orders.css';
 
@@ -46,22 +47,44 @@ export function DashboardPage() {
 
   if (!state || !meta || !forecast) return null;
 
-  const totalCells = meta.locations.length;
-  const occupied = meta.locations.filter((l) => {
-    const q = state.lots.filter((lot) => lot.loc === l.id).reduce((n, lot) => n + lot.qty, 0);
-    return q > 0;
-  }).length;
-  const occupancyPct = Math.round((occupied / Math.max(totalCells, 1)) * 100);
   const pending = state.orders.filter((o) => o.status === 'Por preparar');
   const unassigned = pending.filter((o) => !o.assignedToUserId).length;
   const activeOrders = state.orders.filter((o) => o.status !== 'Entregado');
-  const low = state.products.filter((p) => available(state, p.id) < p.min);
-  const units = state.products.reduce((n, p) => n + available(state, p.id), 0);
-  // A costo promedio: es el valor que cuadra con contabilidad.
-  const stockValue = state.products.reduce((n, p) => n + stock(state, p.id) * (p.avgCost ?? 0), 0);
-  const saleValue = state.products.reduce((n, p) => n + stock(state, p.id) * p.price, 0);
-  const missingCost = state.products.filter((p) => stock(state, p.id) > 0 && !(p.avgCost && p.avgCost > 0)).length;
-  const unsellable = state.products.reduce((n, p) => n + Math.max(0, stock(state, p.id) - sellableStock(state, p.id)), 0);
+  const activeWh = activeWarehouseId(state);
+  const scope = whFilter;
+  const cellsOf = (layout: { rackCount: number; levels: number; positionsPerLevel: number; depthFaces?: number }) =>
+    layout.rackCount * layout.levels * layout.positionsPerLevel * (layout.depthFaces ?? 1);
+  const sites = scope === 'all' ? state.warehouses.filter((w) => w.status === 'Operativa') : state.warehouses.filter((w) => w.id === scope);
+  const totalCells =
+    scope === activeWh
+      ? meta.locations.length
+      : sites.reduce((n, w) => n + cellsOf(w.layout), 0);
+  const occupied =
+    scope === activeWh
+      ? meta.locations.filter((l) =>
+          state.lots.some((lot) => lot.loc === l.id && (lot.warehouseId ?? 'WH-QT-01') === scope && lot.qty > 0),
+        ).length
+      : new Set(
+          state.lots
+            .filter(
+              (lot) =>
+                lot.qty > 0 &&
+                lot.loc !== 'CUARENTENA' &&
+                lot.loc !== 'TRANSITO' &&
+                (scope === 'all' || (lot.warehouseId ?? 'WH-QT-01') === scope),
+            )
+            .map((lot) => `${lot.warehouseId ?? 'WH-QT-01'}:${lot.loc}`),
+        ).size;
+  const occupancyPct = Math.round((occupied / Math.max(totalCells, 1)) * 100);
+  const low = state.products.filter((p) => availableIn(state, p.id, scope) < p.min);
+  const units = state.products.reduce((n, p) => n + availableIn(state, p.id, scope), 0);
+  const stockValue = state.products.reduce((n, p) => n + stockIn(state, p.id, scope) * (p.avgCost ?? 0), 0);
+  const saleValue = state.products.reduce((n, p) => n + stockIn(state, p.id, scope) * p.price, 0);
+  const missingCost = state.products.filter((p) => stockIn(state, p.id, scope) > 0 && !(p.avgCost && p.avgCost > 0)).length;
+  const unsellable = state.products.reduce(
+    (n, p) => n + Math.max(0, stockIn(state, p.id, scope) - sellableIn(state, p.id, scope)),
+    0,
+  );
   const waiting = state.orders.filter((o) => o.status === 'Esperando stock').length;
   const listed = tab === 'pending' ? pending : activeOrders;
   const pageCount = Math.max(1, Math.ceil(listed.length / ORDERS_PAGE_SIZE));
@@ -72,10 +95,20 @@ export function DashboardPage() {
   const productionAlerts =
     forecast.productionRisks.length ||
     forecast.recommendations.filter((r) => r.urgency === 'now').length;
-  const activeWh = activeWarehouseId(state);
-  const expiry = expiryAlerts(state);
+  const expiry = expiryAlerts(state, scope);
   const expired = expiry.filter((item) => item.band === 'vencido');
   const soon = expiry.filter((item) => item.band !== 'vencido');
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+  const sanitaryGaps = state.products.filter(
+    (item) => item.requiresSanitary && (!item.sanitaryRegistration || (item.sanitaryExpires != null && item.sanitaryExpires < today)),
+  );
+  const moneyStory = buildMoneyStory(state);
+  const moneyKind: Record<MoneyKind, string> = {
+    venta: 'Venta',
+    reclamo: 'Reclamo',
+    flete: 'Camión',
+    compra: 'Compra',
+  };
 
   const onWarehouseChange = async (value: string) => {
     if (whBusy) return;
@@ -105,7 +138,7 @@ export function DashboardPage() {
       <PageHead
         eyebrow="Panel de control"
         title="Resumen de operaciones"
-        desc="Pedidos, stock y movimientos de tu operación de un vistazo."
+        desc="Cuánto vendiste, cuánto te costó y cuánto te quedó, antes del detalle de la bodega."
         actions={
           <>
             <Btn icon="receive" onClick={() => navigate('/recepcion/nueva')}>
@@ -134,6 +167,49 @@ export function DashboardPage() {
           </Select>
         </label>
       </PageHead>
+      <section className="dash-money" aria-label="Dinero de la operación">
+        <div className={`dash-money-hero ${moneyStory.profit >= 0 ? 'is-gain' : 'is-loss'}`}>
+          <span>Te quedó</span>
+          <strong>{money(moneyStory.profit)}</strong>
+          <p>Venta neta menos el costo de esa mercadería y el flete de los camiones que ya salieron.</p>
+        </div>
+        <div className="dash-money-side">
+          <article>
+            <span>Vendiste</span>
+            <strong>{money(moneyStory.sold)}</strong>
+            <small>Facturas menos reclamos, sin IVA</small>
+          </article>
+          <article>
+            <span>Te costó vender</span>
+            <strong>{money(moneyStory.spent)}</strong>
+            <small>Mercadería {money(moneyStory.cogs)} · flete {money(moneyStory.freight)}</small>
+          </article>
+          <article>
+            <span>Te deben</span>
+            <strong>{money(moneyStory.receivable)}</strong>
+            <small>Por pagar a proveedores {money(moneyStory.payable)}</small>
+          </article>
+          <article>
+            <span>Compraste</span>
+            <strong>{money(moneyStory.bought)}</strong>
+            <small>Lo recibido de proveedores, aparte de la ganancia</small>
+          </article>
+        </div>
+        <ul className="dash-money-lines">
+          {moneyStory.lines.length ? moneyStory.lines.slice(0, 12).map((line) => (
+            <li key={line.id}>
+              <span className={`dash-money-kind is-${line.kind}`}>{moneyKind[line.kind]}</span>
+              <span className="dash-money-copy">
+                <strong>{line.title}</strong>
+                <small>{line.detail}</small>
+              </span>
+              <em className={line.amount >= 0 ? 'is-in' : 'is-out'}>{money(line.amount)}</em>
+            </li>
+          )) : (
+            <li className="dash-money-empty">Cuando factures un pedido, aquí aparece cuánto quedó después del costo y del camión.</li>
+          )}
+        </ul>
+      </section>
       <KpiGrid label="Resumen de la operación">
         <Kpi
           label="Pedidos activos"
@@ -171,7 +247,7 @@ export function DashboardPage() {
           label="Ocupación de bodega"
           icon="warehouse"
           value={`${occupancyPct}%`}
-          caption={`${occupied} de ${totalCells} posiciones`}
+          caption={scope === 'all' ? `${occupied} de ${totalCells} en bodegas operativas` : `${occupied} de ${totalCells} posiciones`}
           progress={occupancyPct}
         />
       </KpiGrid>
@@ -345,6 +421,24 @@ export function DashboardPage() {
                   </button>
                 </div>
               </article>
+              {sanitaryGaps.length ? (
+                <article className="dash-prio-item">
+                  <div className="dash-prio-icon">
+                    <Icon name="alert" />
+                  </div>
+                  <div className="dash-prio-body">
+                    <strong>
+                      {sanitaryGaps.length === 1
+                        ? '1 producto sin registro vigente'
+                        : `${sanitaryGaps.length} productos sin registro vigente`}
+                    </strong>
+                    <small>{sanitaryGaps[0]?.name}. No se puede vender hasta actualizar el registro sanitario.</small>
+                    <button type="button" onClick={() => navigate('/inventario')}>
+                      Revisar registros
+                    </button>
+                  </div>
+                </article>
+              ) : null}
               <article className="dash-prio-item">
                 <div className="dash-prio-icon">
                   <Icon name="spark" />
@@ -373,7 +467,7 @@ export function DashboardPage() {
               {meta.categories.map((c) => {
                 const q = state.products
                   .filter((p) => p.category === c)
-                  .reduce((n, p) => n + stock(state, p.id), 0);
+                  .reduce((n, p) => n + stockIn(state, p.id, scope), 0);
                 return (
                   <button
                     type="button"

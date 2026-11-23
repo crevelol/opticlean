@@ -19,7 +19,8 @@ import {
 type Ctx = {
   user: AuthUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<AuthUser>;
+  signup: (input: Parameters<typeof api.signup>[0]) => Promise<AuthUser>;
   logout: () => void;
 };
 
@@ -62,6 +63,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await api.login(email, password);
     setSession(res.token, res.user);
     setUser(res.user);
+    return res.user;
+  }, []);
+
+  const signup = useCallback(async (input: Parameters<typeof api.signup>[0]) => {
+    const res = await api.signup(input);
+    setSession(res.token, res.user);
+    setUser(res.user);
+    return res.user;
   }, []);
 
   const logout = useCallback(() => {
@@ -69,7 +78,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
-  const value = useMemo(() => ({ user, loading, login, logout }), [user, loading, login, logout]);
+  const value = useMemo(
+    () => ({ user, loading, login, signup, logout }),
+    [user, loading, login, signup, logout],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

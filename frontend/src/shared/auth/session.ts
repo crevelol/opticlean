@@ -5,6 +5,7 @@ export type AuthUser = {
   role: 'admin' | 'ops' | 'dispatch' | 'driver';
   companyId?: string;
   truckPlate?: string;
+  platformAdmin?: boolean;
 };
 
 const TOKEN_KEY = 'opticlean.auth.token';

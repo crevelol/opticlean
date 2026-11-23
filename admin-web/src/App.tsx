@@ -22,7 +22,7 @@ export function App() {
       .me()
       .then((r) => {
         if (!cancelled) {
-          if (r.user.role !== 'admin') {
+          if (r.user.role !== 'admin' || !r.user.platformAdmin) {
             clearSession();
             setUser(null);
           } else setUser(r.user);

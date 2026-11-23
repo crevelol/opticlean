@@ -9,6 +9,9 @@ export function Modal({
   footer,
   wide,
   fill,
+  header,
+  className,
+  bodyClassName,
   onClose,
 }: {
   title: string;
@@ -18,6 +21,10 @@ export function Modal({
   wide?: boolean;
   /** Usa casi todo el viewport (importaciones con tabla). */
   fill?: boolean;
+  /** Reemplaza el título y subtítulo por un encabezado propio; `title` queda como nombre accesible. */
+  header?: ReactNode;
+  className?: string;
+  bodyClassName?: string;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -35,21 +42,25 @@ export function Modal({
   return (
     <div className={`modal-backdrop${fill ? ' fill' : ''}`} onClick={onClose}>
       <section
-        className={`modal${wide || fill ? ' wide' : ''}${fill ? ' fill' : ''}`}
+        className={['modal', (wide || fill) && 'wide', fill && 'fill', className].filter(Boolean).join(' ')}
         role="dialog"
         aria-modal
+        aria-label={header ? title : undefined}
+        aria-labelledby={header ? undefined : 'modal-title'}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
-          <div>
-            <h2 id="modal-title">{title}</h2>
-            {subtitle ? <p>{subtitle}</p> : null}
-          </div>
+          {header ?? (
+            <div>
+              <h2 id="modal-title">{title}</h2>
+              {subtitle ? <p>{subtitle}</p> : null}
+            </div>
+          )}
           <button type="button" className="icon-btn" aria-label="Cerrar" onClick={onClose}>
             <Icon name="close" />
           </button>
         </div>
-        <div className="modal-body">{children}</div>
+        <div className={['modal-body', bodyClassName].filter(Boolean).join(' ')}>{children}</div>
         {footer ? <div className="modal-footer">{footer}</div> : null}
       </section>
     </div>
