@@ -19,12 +19,12 @@ export function Modal({
   children: ReactNode;
   footer?: ReactNode;
   wide?: boolean;
+  /** Usa casi todo el viewport (importaciones y tablas grandes). */
+  fill?: boolean;
   /** Reemplaza el título y subtítulo por un encabezado propio; `title` queda como nombre accesible. */
   header?: ReactNode;
   className?: string;
   bodyClassName?: string;
-  /** Usa casi todo el viewport (importaciones y tablas grandes). */
-  fill?: boolean;
   onClose: () => void;
 }) {
   useEffect(() => {

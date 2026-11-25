@@ -42,7 +42,6 @@ type Preview = {
   issueDate: string;
   warnings: string[];
   rows: Row[];
-  source?: string;
 };
 
 const MAX_SIZE_MB = 10;
@@ -97,8 +96,8 @@ export function ImportDialog({
         tone: 'err',
         label: 'Sin stock',
         title: 'No hay stock suficiente',
-        detail: `Pide ${num(row.qty)} ${row.packCode || 'u.'} y no hay suficiente disponible. El pedido no se creará hasta que entre mercadería.`,
-        action: 'Registra la recepción primero o quita esta línea del archivo.',
+        detail: `Pide ${num(row.qty)} ${row.packCode || 'u.'} y no hay suficiente disponible. El pedido se crea igual y queda «Esperando stock».`,
+        action: 'Puedes confirmar ahora; el pedido avanza a preparación cuando haya mercadería.',
         extra,
       };
     }
@@ -118,8 +117,8 @@ export function ImportDialog({
   };
 
   const views = preview?.rows.map(viewOf) ?? [];
-  const blocked = kind === 'sale' ? views.filter((view) => view.label === 'Sin stock').length : 0;
-  const errCount = views.filter((view) => view.tone === 'err').length;
+  const stockAlerts = kind === 'sale' ? views.filter((view) => view.label === 'Sin stock').length : 0;
+  const errCount = views.filter((view) => view.tone === 'err' && view.label !== 'Sin stock').length;
   const infoCount = views.filter((view) => view.tone === 'info').length;
   const importable = preview?.rows.filter((row) => row.status !== 'invalid' && row.qty > 0) ?? [];
   const units = importable.reduce((sum, row) => sum + row.qty, 0);
@@ -155,32 +154,22 @@ export function ImportDialog({
     setBusy(true);
 
     const ext = extOf(picked.name);
-    const fmt =
-      ext === 'xml'
-        ? 'xml'
-        : ext === 'csv' || ext === 'txt'
-          ? 'csv'
-          : ext === 'pdf' || ext === 'docx'
-            ? ext
-            : 'xlsx';
     try {
-      const binary = fmt === 'xlsx' || fmt === 'pdf' || fmt === 'docx';
-      const body = binary
-        ? {
-            kind,
-            format: fmt,
-            base64: await fileToBase64(picked),
-            fileName: picked.name,
-            mimeType: picked.type,
-          }
-        : {
-            kind,
-            format: fmt,
-            text: await picked.text(),
-            fileName: picked.name,
-            mimeType: picked.type,
-          };
       setStep(1);
+      const body =
+        nextRoute === 'ai' || ext === 'pdf' || ext === 'docx'
+          ? {
+              kind,
+              format: ext === 'docx' ? 'docx' : ext === 'doc' ? 'doc' : 'pdf',
+              base64: await fileToBase64(picked),
+              fileName: picked.name,
+              mimeType: picked.type,
+            }
+          : ext === 'xlsx' || ext === 'xls'
+            ? { kind, format: 'xlsx', base64: await fileToBase64(picked), fileName: picked.name }
+            : ext === 'xml'
+              ? { kind, format: 'xml', text: await picked.text(), fileName: picked.name }
+              : { kind, format: 'csv', text: await picked.text() };
       const next = await api.previewImport(body);
       setPreview(next);
       setStatus('ready');
@@ -192,7 +181,7 @@ export function ImportDialog({
   };
 
   const commit = async () => {
-    if (!preview || busy || blocked) return;
+    if (!preview || busy) return;
     const rows = preview.rows.filter((row) => row.status !== 'invalid' && row.qty > 0);
     if (!rows.length) {
       setError('No hay líneas válidas para confirmar.');
@@ -216,17 +205,17 @@ export function ImportDialog({
       });
       applyResponse(res);
       if (kind === 'purchase') {
-        onDone(`Compra ${res.import.purchaseId} creada. La caducidad se confirma al recibir.`);
+        onDone(`Compra ${res.import.purchaseId} importada. La caducidad se confirma al recibir.`);
         return;
       }
       const waiting = res.import.status === 'Esperando stock' || (res.import.shortages?.length ?? 0) > 0;
       onDone(
         waiting
-          ? `Pedido ${res.import.orderId} creado en «Esperando stock». Falta mercadería; el pedido queda con alerta hasta que haya stock.`
-          : `Pedido ${res.import.orderId} creado.`,
+          ? `Pedido ${res.import.orderId} creado en «Esperando stock». Falta mercadería; el pedido queda con alerta.`
+          : `Pedido ${res.import.orderId} importado.`,
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo crear el documento.');
+      setError(err instanceof Error ? err.message : 'No se pudo confirmar la importación.');
     } finally {
       setBusy(false);
     }
@@ -240,19 +229,26 @@ export function ImportDialog({
   return (
     <Modal
       title={kind === 'purchase' ? 'Importar compra' : 'Importar pedido'}
-      subtitle="Sube el archivo, revisa la vista previa y confirma para crear."
+      subtitle="Sube el archivo, revisa el resumen y confirma. PDF/Word usan IA; nada se crea hasta pulsar el botón."
+      wide
       fill
       onClose={onClose}
       footer={
         <>
-          {blocked ? (
+          {stockAlerts ? (
             <span className="import-blocked" role="status">
               <Icon name="alert" />
-              {blocked === 1 ? '1 línea sin stock' : `${blocked} líneas sin stock`}: no se puede crear el pedido.
+              {stockAlerts === 1 ? '1 línea sin stock' : `${stockAlerts} líneas sin stock`}: el pedido se crea
+              igual y queda «Esperando stock».
             </span>
           ) : null}
           <Btn onClick={onClose}>Cancelar</Btn>
-          <Btn variant="primary" icon="save" disabled={!preview || busy || blocked > 0} onClick={() => void commit()}>
+          <Btn
+            variant="primary"
+            icon="save"
+            disabled={!preview || busy || !importable.length}
+            onClick={() => void commit()}
+          >
             {busy && preview ? 'Creando…' : createLabel}
           </Btn>
         </>

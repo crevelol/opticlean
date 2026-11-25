@@ -79,7 +79,7 @@ test('Orders aggregate duplicate lines and reserve stock', () => {
   assert.equal(available(s, 'P015'), before - 5);
 });
 
-test('Picking uses earliest entry date (FIFO)', () => {
+test('Picking uses earliest expiry (FEFO) among sellable lots', () => {
   const s = seed();
   const o = createOrder(s, { clientId: 'CL001', lines: [{ productId: 'P001', qty: 2 }] });
   const plan = pickPlan(s, o);
