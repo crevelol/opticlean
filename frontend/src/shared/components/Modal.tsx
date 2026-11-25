@@ -11,6 +11,7 @@ export function Modal({
   header,
   className,
   bodyClassName,
+  fill,
   onClose,
 }: {
   title: string;
@@ -22,6 +23,8 @@ export function Modal({
   header?: ReactNode;
   className?: string;
   bodyClassName?: string;
+  /** Usa casi todo el viewport (importaciones y tablas grandes). */
+  fill?: boolean;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -37,9 +40,9 @@ export function Modal({
   }, [onClose]);
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className={`modal-backdrop${fill ? ' fill' : ''}`} onClick={onClose}>
       <section
-        className={['modal', wide && 'wide', className].filter(Boolean).join(' ')}
+        className={['modal', (wide || fill) && 'wide', fill && 'fill', className].filter(Boolean).join(' ')}
         role="dialog"
         aria-modal
         aria-label={header ? title : undefined}

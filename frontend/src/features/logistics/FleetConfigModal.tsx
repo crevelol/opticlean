@@ -5,6 +5,14 @@ import { Modal } from '../../shared/components/Modal';
 import { Btn } from '../../shared/components/ui';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import type { Truck, VehicleKind } from './fleet';
+import { VehicleCostRulesModal } from './VehicleCostRulesModal';
+import {
+  citiesOf,
+  formatZonePath,
+  provinces,
+  sectorsOf,
+  zonePathOf,
+} from '../../shared/lib/zones';
 
 type VehicleRow = {
   id: string;
@@ -46,7 +54,7 @@ const emptyForm = {
   allowedSectors: [] as string[],
 };
 
-function sectorsOf(v: VehicleRow) {
+function zonesOfVehicle(v: VehicleRow) {
   if (v.allowed_sectors_list?.length) return v.allowed_sectors_list;
   if (!v.allowed_sectors) return [];
   try {
@@ -68,17 +76,39 @@ export function FleetConfigModal({
   const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [sectorDraft, setSectorDraft] = useState('');
+  const [zoneProvince, setZoneProvince] = useState('');
+  const [zoneCity, setZoneCity] = useState('');
+  const [zoneSector, setZoneSector] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
+  const [costVehicleId, setCostVehicleId] = useState<string | null>(null);
 
   const knownSectors = useMemo(() => {
     const set = new Set<string>();
     for (const c of state?.clients ?? []) {
+      const path = zonePathOf(c);
+      if (path && path !== 'Sin zona') set.add(path);
       if (c.sector?.trim()) set.add(c.sector.trim());
+      if (c.city?.trim()) set.add(c.city.trim());
     }
     return [...set].sort((a, b) => a.localeCompare(b, 'es'));
   }, [state?.clients]);
+
+  const zonePreview = formatZonePath([zoneProvince, zoneCity, zoneSector]);
+  const provinceOptions = provinces();
+  const cityOptions = zoneProvince ? citiesOf(zoneProvince) : [];
+  const sectorOptions =
+    zoneProvince && zoneCity ? sectorsOf(zoneProvince, zoneCity) : [];
+
+  const addZonePath = (raw: string) => {
+    const path = raw.trim();
+    if (!path) return;
+    setForm((prev) => ({
+      ...prev,
+      allowedSectors: addSector(path, prev.allowedSectors),
+    }));
+  };
 
   const load = async () => {
     const res = await api.fleetManage();
@@ -178,11 +208,24 @@ export function FleetConfigModal({
     }
   };
 
+  if (costVehicleId) {
+    return (
+      <VehicleCostRulesModal
+        vehicleId={costVehicleId}
+        onClose={() => setCostVehicleId(null)}
+        onFleetChange={(trucks) => {
+          onFleetChange(trucks);
+          void load();
+        }}
+      />
+    );
+  }
+
   return (
     <Modal
       wide
       title="Configurar flota"
-      subtitle="Tipo, capacidad y sectores permitidos. Sin sectores = sin restricción de zona."
+      subtitle="Tipo, capacidad, sectores y costo real (combustible, llantas, peaje…)."
       onClose={onClose}
       footer={<Btn onClick={onClose}>Cerrar</Btn>}
     >
@@ -266,8 +309,11 @@ export function FleetConfigModal({
           </div>
 
           <div className="fleet-sectors">
-            <strong>Sectores permitidos</strong>
-            <p className="muted">Vacío = puede ir a cualquier sector. Con lista = solo esos.</p>
+            <strong>Zonas permitidas</strong>
+            <p className="muted">
+              Jerarquía flexible: solo provincia, o provincia/ciudad, o hasta sector/barrio. Vacío =
+              puede ir a cualquier zona. «Pichincha / Quito» cubre todos los sectores de Quito.
+            </p>
             <div className="fleet-sector-chips">
               {form.allowedSectors.map((s) => (
                 <button
@@ -285,18 +331,72 @@ export function FleetConfigModal({
                 </button>
               ))}
             </div>
+            <div className="fleet-zone-builder">
+              <Select
+                value={zoneProvince}
+                onChange={(e) => {
+                  setZoneProvince(e.target.value);
+                  setZoneCity('');
+                  setZoneSector('');
+                }}
+              >
+                <option value="">Provincia (opcional)</option>
+                {provinceOptions.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                value={zoneCity}
+                disabled={!zoneProvince}
+                onChange={(e) => {
+                  setZoneCity(e.target.value);
+                  setZoneSector('');
+                }}
+              >
+                <option value="">Ciudad (opcional)</option>
+                {cityOptions.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                value={zoneSector}
+                disabled={!zoneCity}
+                onChange={(e) => setZoneSector(e.target.value)}
+              >
+                <option value="">Sector / barrio (opcional)</option>
+                {sectorOptions.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </Select>
+              <button
+                type="button"
+                disabled={!zonePreview}
+                onClick={() => {
+                  addZonePath(zonePreview);
+                  setZoneSector('');
+                }}
+              >
+                Agregar zona
+              </button>
+            </div>
+            {zonePreview ? (
+              <p className="muted">Se agregará: <strong>{zonePreview}</strong></p>
+            ) : null}
             <div className="fleet-sector-add">
               <input
                 value={sectorDraft}
                 onChange={(e) => setSectorDraft(e.target.value)}
-                placeholder="Escribe un sector y Enter"
+                placeholder="O escribe libre: Pichincha / Quito / Carcelén"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    setForm({
-                      ...form,
-                      allowedSectors: addSector(sectorDraft, form.allowedSectors),
-                    });
+                    addZonePath(sectorDraft);
                     setSectorDraft('');
                   }
                 }}
@@ -304,10 +404,7 @@ export function FleetConfigModal({
               <button
                 type="button"
                 onClick={() => {
-                  setForm({
-                    ...form,
-                    allowedSectors: addSector(sectorDraft, form.allowedSectors),
-                  });
+                  addZonePath(sectorDraft);
                   setSectorDraft('');
                 }}
               >
@@ -356,14 +453,14 @@ export function FleetConfigModal({
                   <th>Placa</th>
                   <th>Nombre</th>
                   <th>Tipo</th>
-                  <th>Sectores</th>
+                  <th>Zonas</th>
                   <th>Estado</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
                 {vehicles.map((v) => {
-                  const sectors = sectorsOf(v);
+                  const sectors = zonesOfVehicle(v);
                   return (
                     <tr key={v.id} className={v.active ? '' : 'is-off'}>
                       <td>
@@ -431,6 +528,9 @@ export function FleetConfigModal({
                       </td>
                       <td>{v.active ? 'Activo' : 'Inactivo'}</td>
                       <td className="fleet-config-actions">
+                        <button type="button" disabled={busy || !v.active} onClick={() => setCostVehicleId(v.id)}>
+                          Costo real
+                        </button>
                         <button
                           type="button"
                           disabled={busy}

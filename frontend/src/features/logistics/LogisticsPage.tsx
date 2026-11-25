@@ -30,6 +30,7 @@ import {
   statusTone,
   suggestAutoAssign,
   truckLoad as calcTruckLoad,
+  truckRouteCost,
   vehicleAllowsSector,
   vehicleIconName,
   vehicleKindLabel,
@@ -674,7 +675,10 @@ export function LogisticsPage() {
                         </div>
                         <div>
                           <span>Costo por km</span>
-                          <strong>${t.costPerKm.toFixed(2)}</strong>
+                          <strong>
+                            ${t.costPerKm.toFixed(2)}
+                            {t.costFromRules ? '/km*' : '/km'}
+                          </strong>
                         </div>
                       </div>
                       <p className="log-truck-zones">
@@ -799,7 +803,7 @@ export function LogisticsPage() {
                           {t.label} · {vehicleKindLabel(t)} - {t.city}
                         </strong>
                         <small>
-                          {fmtHours(t.etaHours)} | {moneyFmt(t.routeKm * t.costPerKm)}
+                          {fmtHours(t.etaHours)} | {moneyFmt(truckRouteCost(t))}
                         </small>
                       </span>
                       <span className="log-route-eta">{fmtHours(t.etaHours)}</span>
@@ -834,7 +838,7 @@ export function LogisticsPage() {
                                 <Icon name="spark" />
                                 <span>
                                   Costo estimado:{' '}
-                                  <strong>{moneyFmt(t.routeKm * t.costPerKm)}</strong>
+                                  <strong>{moneyFmt(truckRouteCost(t))}</strong>
                                 </span>
                               </li>
                               <li>
@@ -1203,6 +1207,7 @@ export function LogisticsPage() {
                   </h4>
                   <small>
                     Cap. {t?.maxKg.toLocaleString('es-EC')} kg / {t?.maxM3} m³ · ${t?.costPerKm}/km
+                    {t?.costPerTrip ? ` + ${moneyFmt(t.costPerTrip)}/viaje` : ''}
                     · {ids.length} pedido(s)
                   </small>
                   <ul>

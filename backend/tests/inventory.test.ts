@@ -79,14 +79,14 @@ test('Orders aggregate duplicate lines and reserve stock', () => {
   assert.equal(available(s, 'P015'), before - 5);
 });
 
-test('Picking uses earliest expiry', () => {
+test('Picking uses earliest entry date (FIFO)', () => {
   const s = seed();
   const o = createOrder(s, { clientId: 'CL001', lines: [{ productId: 'P001', qty: 2 }] });
   const plan = pickPlan(s, o);
   const first = plan.find((l) => l.productId === 'P001')!;
   const earliest = s.lots
     .filter((l) => l.productId === 'P001' && isLotSellable(s, l))
-    .sort((a, b) => a.expiry.localeCompare(b.expiry))[0];
+    .sort((a, b) => a.expiry.localeCompare(b.expiry) || (a.receivedAt ?? '').localeCompare(b.receivedAt ?? ''))[0];
   assert.equal(first.id, earliest.id);
   prepare(s, o.id);
   assert.equal(o.status, 'Preparado');

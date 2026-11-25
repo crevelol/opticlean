@@ -57,7 +57,14 @@ import {
   updateClient as saveClientProfile,
 } from '../../domain/commerce.service.js';
 import { addEvent } from '../../domain/inventory.service.js';
-import { commitImport, previewCsv, previewXlsx, previewXml, type ImportKind } from '../../domain/import-docs.service.js';
+import {
+  commitImport,
+  previewCsv,
+  previewFromInvoice,
+  previewXlsx,
+  previewXml,
+  type ImportKind,
+} from '../../domain/import-docs.service.js';
 import { assembleBundle } from '../../domain/kits.service.js';
 import { createSupplier, updateSupplier } from '../../domain/suppliers.service.js';
 import {
@@ -536,11 +543,34 @@ export class OperationsUseCases {
     });
   }
 
-  async previewImport(body: { kind?: ImportKind; format?: string; text?: string; base64?: string }) {
+  async previewImport(body: {
+    kind?: ImportKind;
+    format?: string;
+    text?: string;
+    base64?: string;
+    fileName?: string;
+    mimeType?: string;
+  }) {
     const state = await this.repo.load();
     const kind: ImportKind = body.kind === 'sale' ? 'sale' : 'purchase';
     const format = String(body.format || 'csv').toLowerCase();
-    if (format === 'xml') return previewXml(state, String(body.text ?? ''), kind);
+    if (format === 'xml') {
+      if (body.base64 && !body.text) {
+        const xml = Buffer.from(String(body.base64), 'base64').toString('utf8');
+        return previewXml(state, xml, kind);
+      }
+      return previewXml(state, String(body.text ?? ''), kind);
+    }
+    if (format === 'pdf' || format === 'docx' || format === 'doc') {
+      const { parseInvoiceDocument } = await import('../../domain/invoice-document.service.js');
+      const buf = Buffer.from(String(body.base64 ?? ''), 'base64');
+      if (!buf.length) throw new Error('El archivo está vacío.');
+      const fileName =
+        String(body.fileName || '').trim() ||
+        `documento.${format === 'docx' ? 'docx' : format === 'doc' ? 'doc' : 'pdf'}`;
+      const invoice = await parseInvoiceDocument(buf, fileName, String(body.mimeType ?? ''));
+      return previewFromInvoice(state, invoice, kind, format);
+    }
     if (format === 'xlsx' || format === 'xls') return previewXlsx(state, String(body.base64 ?? ''), kind);
     return previewCsv(state, String(body.text ?? ''), kind);
   }

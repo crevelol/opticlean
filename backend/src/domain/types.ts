@@ -133,10 +133,14 @@ export type Client = {
   address: string;
   email: string;
   type: string;
+  /** Provincia (nivel alto de zona logística). */
+  province?: string;
   /** Ciudad de entrega para agrupación logística */
   city?: string;
-  /** Sector / barrio de entrega */
+  /** Sector / parroquia de entrega */
   sector?: string;
+  /** Barrio / nivel más bajo (opcional). */
+  neighborhood?: string;
   /** Límite de crédito autorizado (USD) */
   creditLimit?: number;
   /** Días de plazo para pagar una factura antes de bloquear pedidos. */

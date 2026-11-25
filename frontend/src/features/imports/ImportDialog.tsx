@@ -42,6 +42,7 @@ type Preview = {
   issueDate: string;
   warnings: string[];
   rows: Row[];
+  source?: string;
 };
 
 const MAX_SIZE_MB = 10;
@@ -153,39 +154,32 @@ export function ImportDialog({
     setStep(0);
     setBusy(true);
 
-    if (nextRoute === 'ai') {
-      try {
-        const contentBase64 = await fileToBase64(picked);
-        setStep(1);
-        const res = await api.importOrderFile({ fileName: picked.name, mimeType: picked.type, contentBase64 });
-        applyResponse(res);
-        const created = res.import.productsCreated.length;
-        const updated = res.import.productsUpdated.length;
-        const clientMsg = res.import.clientCreated ? 'cliente creado' : 'cliente relacionado';
-        const prodMsg = [
-          created ? `${created} producto(s) creado(s)` : '',
-          updated ? `${updated} relacionado(s)` : '',
-        ]
-          .filter(Boolean)
-          .join(' · ');
-        onDone(
-          `${res.import.orderId} · IA · ${clientMsg}${prodMsg ? ` · ${prodMsg}` : ''} · ${res.import.invoice.docNumber}`,
-        );
-      } catch (err) {
-        fail(err instanceof Error ? err.message : 'No se pudo leer el documento con IA.');
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-
     const ext = extOf(picked.name);
-    const fmt = ext === 'xml' ? 'xml' : ext === 'csv' || ext === 'txt' ? 'csv' : 'xlsx';
+    const fmt =
+      ext === 'xml'
+        ? 'xml'
+        : ext === 'csv' || ext === 'txt'
+          ? 'csv'
+          : ext === 'pdf' || ext === 'docx'
+            ? ext
+            : 'xlsx';
     try {
-      const body =
-        fmt === 'xlsx'
-          ? { kind, format: fmt, base64: await fileToBase64(picked) }
-          : { kind, format: fmt, text: await picked.text() };
+      const binary = fmt === 'xlsx' || fmt === 'pdf' || fmt === 'docx';
+      const body = binary
+        ? {
+            kind,
+            format: fmt,
+            base64: await fileToBase64(picked),
+            fileName: picked.name,
+            mimeType: picked.type,
+          }
+        : {
+            kind,
+            format: fmt,
+            text: await picked.text(),
+            fileName: picked.name,
+            mimeType: picked.type,
+          };
       setStep(1);
       const next = await api.previewImport(body);
       setPreview(next);
@@ -221,13 +215,18 @@ export function ImportDialog({
         rows,
       });
       applyResponse(res);
+      if (kind === 'purchase') {
+        onDone(`Compra ${res.import.purchaseId} creada. La caducidad se confirma al recibir.`);
+        return;
+      }
+      const waiting = res.import.status === 'Esperando stock' || (res.import.shortages?.length ?? 0) > 0;
       onDone(
-        kind === 'purchase'
-          ? `Compra ${res.import.purchaseId} importada. La caducidad se confirma al recibir.`
-          : `Pedido ${res.import.orderId} importado.`,
+        waiting
+          ? `Pedido ${res.import.orderId} creado en «Esperando stock». Falta mercadería; el pedido queda con alerta hasta que haya stock.`
+          : `Pedido ${res.import.orderId} creado.`,
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo confirmar la importación.');
+      setError(err instanceof Error ? err.message : 'No se pudo crear el documento.');
     } finally {
       setBusy(false);
     }
@@ -241,7 +240,8 @@ export function ImportDialog({
   return (
     <Modal
       title={kind === 'purchase' ? 'Importar compra' : 'Importar pedido'}
-      subtitle="PDF y Word se leen con IA. XML, CSV y Excel pasan por una vista previa antes de confirmar."
+      subtitle="Sube el archivo, revisa la vista previa y confirma para crear."
+      fill
       onClose={onClose}
       footer={
         <>

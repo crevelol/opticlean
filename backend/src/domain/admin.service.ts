@@ -6,8 +6,17 @@ import {
   type MobileRole,
   type ModuleRow,
   type Vehicle,
+  type VehicleCostRuleRow,
   type VehicleKind,
 } from '../infrastructure/db/adminDb.js';
+import {
+  defaultRulesForKind,
+  ruleUnitCost,
+  summarizeVehicleCost,
+  type CostBasis,
+  type CostCalc,
+  type TransportCostRuleInput,
+} from './transport-cost.js';
 
 const VEHICLE_KINDS = new Set<VehicleKind>(['carro', 'camion', 'motocicleta']);
 
@@ -339,22 +348,14 @@ export function serializeAllowedSectors(sectors: string[] | undefined | null): s
   return JSON.stringify(unique);
 }
 
-/** Vacío = sin restricción de sector. */
-export function vehicleAllowsSector(allowedSectors: string[] | undefined, sector: string) {
-  if (!allowedSectors?.length) return true;
-  const target = sector.trim().toLowerCase();
-  if (!target) return true;
-  return allowedSectors.some((s) => {
-    const a = s.toLowerCase();
-    return a === target || a.includes(target) || target.includes(a);
-  });
-}
+export { vehicleAllowsSector, vehicleAllowsZone } from './zones.js';
 
 export function fleetForCompany(companyId: string) {
   return listVehicles(companyId)
     .filter((v) => v.active)
     .map((v) => {
       const kind = normalizeVehicleKind(v.vehicle_type);
+      const cost = vehicleCostSummary(v.id, v.cost_per_km);
       return {
         id: v.id,
         plate: v.plate,
@@ -365,7 +366,9 @@ export function fleetForCompany(companyId: string) {
         driver: v.driver,
         maxKg: v.max_kg,
         maxM3: v.max_m3,
-        costPerKm: v.cost_per_km,
+        costPerKm: cost.costPerKm,
+        costPerTrip: cost.costPerTrip,
+        costFromRules: cost.fromRules,
         etaHours: v.eta_hours,
         routeKm: v.route_km,
         allowedSectors: parseAllowedSectors(v.allowed_sectors),
@@ -486,6 +489,265 @@ export function deleteVehicle(id: string) {
   const db = getAdminDb();
   const current = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id) as Vehicle | undefined;
   if (!current) throw new Error('Vehículo no encontrado');
+  db.prepare('DELETE FROM vehicle_cost_rules WHERE vehicle_id = ?').run(id);
   db.prepare('DELETE FROM vehicles WHERE id = ?').run(id);
   return { ok: true };
+}
+
+function normalizeBasis(raw: unknown): CostBasis {
+  return String(raw) === 'per_trip' ? 'per_trip' : 'per_km';
+}
+
+function normalizeCalc(raw: unknown): CostCalc {
+  return String(raw) === 'amortized' ? 'amortized' : 'fixed';
+}
+
+function costRuleDto(row: VehicleCostRuleRow) {
+  const unitCost = ruleUnitCost({
+    basis: row.basis,
+    calc: row.calc,
+    amount: row.amount,
+    lifeUnits: row.life_units,
+  });
+  return {
+    id: row.id,
+    companyId: row.company_id,
+    vehicleId: row.vehicle_id,
+    name: row.name,
+    category: row.category,
+    basis: row.basis,
+    calc: row.calc,
+    amount: row.amount,
+    lifeUnits: row.life_units,
+    active: row.active === 1,
+    sortOrder: row.sort_order,
+    unitCost,
+  };
+}
+
+export function listVehicleCostRules(vehicleId: string) {
+  const db = getAdminDb();
+  const rows = db
+    .prepare(
+      `SELECT * FROM vehicle_cost_rules
+       WHERE vehicle_id = ?
+       ORDER BY sort_order ASC, name ASC`,
+    )
+    .all(vehicleId) as VehicleCostRuleRow[];
+  return rows.map(costRuleDto);
+}
+
+export function vehicleCostSummary(vehicleId: string, fallbackCostPerKm: number) {
+  return summarizeVehicleCost(
+    listVehicleCostRules(vehicleId).map((rule) => ({
+      id: rule.id,
+      name: rule.name,
+      category: rule.category,
+      basis: rule.basis,
+      calc: rule.calc,
+      amount: rule.amount,
+      lifeUnits: rule.lifeUnits,
+      active: rule.active,
+    })),
+    fallbackCostPerKm,
+  );
+}
+
+export function createVehicleCostRule(
+  companyId: string,
+  vehicleId: string,
+  input: TransportCostRuleInput,
+) {
+  assertVehicleCompany(vehicleId, companyId);
+  const name = String(input.name || '').trim();
+  if (!name) throw new Error('Indica el nombre de la regla.');
+  const basis = normalizeBasis(input.basis);
+  const calc = normalizeCalc(input.calc);
+  const amount = Number(input.amount);
+  if (!Number.isFinite(amount) || amount < 0) throw new Error('Monto inválido.');
+  const lifeUnits = calc === 'amortized' ? Math.max(1, Number(input.lifeUnits) || 1) : 0;
+  const db = getAdminDb();
+  const id = `vcr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  const count = (
+    db.prepare('SELECT COUNT(*) AS c FROM vehicle_cost_rules WHERE vehicle_id = ?').get(vehicleId) as {
+      c: number;
+    }
+  ).c;
+  db.prepare(
+    `INSERT INTO vehicle_cost_rules
+     (id, company_id, vehicle_id, name, category, basis, calc, amount, life_units, active, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    companyId,
+    vehicleId,
+    name,
+    String(input.category || 'otro').trim() || 'otro',
+    basis,
+    calc,
+    amount,
+    lifeUnits,
+    input.active === false ? 0 : 1,
+    Number(input.sortOrder ?? (count + 1) * 10),
+  );
+  syncVehicleCostPerKm(vehicleId);
+  return costRuleDto(
+    db.prepare('SELECT * FROM vehicle_cost_rules WHERE id = ?').get(id) as VehicleCostRuleRow,
+  );
+}
+
+export function updateVehicleCostRule(
+  companyId: string,
+  ruleId: string,
+  input: Partial<TransportCostRuleInput>,
+) {
+  const db = getAdminDb();
+  const current = db
+    .prepare('SELECT * FROM vehicle_cost_rules WHERE id = ?')
+    .get(ruleId) as VehicleCostRuleRow | undefined;
+  if (!current || current.company_id !== companyId) throw new Error('Regla no encontrada.');
+  const basis = input.basis !== undefined ? normalizeBasis(input.basis) : current.basis;
+  const calc = input.calc !== undefined ? normalizeCalc(input.calc) : current.calc;
+  const amount = input.amount !== undefined ? Number(input.amount) : current.amount;
+  if (!Number.isFinite(amount) || amount < 0) throw new Error('Monto inválido.');
+  const lifeUnits =
+    calc === 'amortized'
+      ? Math.max(1, Number(input.lifeUnits ?? current.life_units) || 1)
+      : 0;
+  db.prepare(
+    `UPDATE vehicle_cost_rules
+     SET name = ?, category = ?, basis = ?, calc = ?, amount = ?, life_units = ?, active = ?, sort_order = ?
+     WHERE id = ?`,
+  ).run(
+    input.name !== undefined ? String(input.name).trim() || current.name : current.name,
+    input.category !== undefined
+      ? String(input.category).trim() || 'otro'
+      : current.category,
+    basis,
+    calc,
+    amount,
+    lifeUnits,
+    input.active === undefined ? current.active : input.active ? 1 : 0,
+    input.sortOrder !== undefined ? Number(input.sortOrder) : current.sort_order,
+    ruleId,
+  );
+  if (current.vehicle_id) syncVehicleCostPerKm(current.vehicle_id);
+  return costRuleDto(
+    db.prepare('SELECT * FROM vehicle_cost_rules WHERE id = ?').get(ruleId) as VehicleCostRuleRow,
+  );
+}
+
+export function deleteVehicleCostRule(companyId: string, ruleId: string) {
+  const db = getAdminDb();
+  const current = db
+    .prepare('SELECT * FROM vehicle_cost_rules WHERE id = ?')
+    .get(ruleId) as VehicleCostRuleRow | undefined;
+  if (!current || current.company_id !== companyId) throw new Error('Regla no encontrada.');
+  db.prepare('DELETE FROM vehicle_cost_rules WHERE id = ?').run(ruleId);
+  if (current.vehicle_id) syncVehicleCostPerKm(current.vehicle_id);
+  return { ok: true };
+}
+
+/** Copia las reglas del vehículo origen a uno o más destinos (reemplaza las actuales). */
+export function duplicateVehicleCostRules(
+  companyId: string,
+  sourceVehicleId: string,
+  targetVehicleIds: string[],
+) {
+  assertVehicleCompany(sourceVehicleId, companyId);
+  const targets = [...new Set(targetVehicleIds.map(String).filter(Boolean))].filter(
+    (id) => id !== sourceVehicleId,
+  );
+  if (!targets.length) throw new Error('Elige al menos un vehículo destino.');
+  for (const id of targets) assertVehicleCompany(id, companyId);
+  const source = listVehicleCostRules(sourceVehicleId);
+  if (!source.length) throw new Error('El vehículo origen no tiene reglas para copiar.');
+  const db = getAdminDb();
+  const insert = db.prepare(
+    `INSERT INTO vehicle_cost_rules
+     (id, company_id, vehicle_id, name, category, basis, calc, amount, life_units, active, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const wipe = db.prepare('DELETE FROM vehicle_cost_rules WHERE vehicle_id = ?');
+  for (const targetId of targets) {
+    wipe.run(targetId);
+    source.forEach((rule, index) => {
+      insert.run(
+        `vcr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}-${index}`,
+        companyId,
+        targetId,
+        rule.name,
+        rule.category,
+        rule.basis,
+        rule.calc,
+        rule.amount,
+        rule.lifeUnits,
+        rule.active ? 1 : 0,
+        rule.sortOrder || (index + 1) * 10,
+      );
+    });
+    syncVehicleCostPerKm(targetId);
+  }
+  return {
+    copied: source.length,
+    targets: targets.length,
+    trucks: fleetForCompany(companyId),
+  };
+}
+
+/** Si el vehículo no tiene reglas, carga una plantilla típica según su tipo. */
+export function applyDefaultCostRules(companyId: string, vehicleId: string, replace = false) {
+  const vehicle = assertVehicleCompany(vehicleId, companyId);
+  const existing = listVehicleCostRules(vehicleId);
+  if (existing.length && !replace) {
+    throw new Error('El vehículo ya tiene reglas. Usa reemplazar o edítalas una a una.');
+  }
+  const db = getAdminDb();
+  if (replace) db.prepare('DELETE FROM vehicle_cost_rules WHERE vehicle_id = ?').run(vehicleId);
+  const presets = defaultRulesForKind(vehicle.vehicle_type);
+  for (const preset of presets) {
+    createVehicleCostRule(companyId, vehicleId, preset);
+  }
+  return {
+    rules: listVehicleCostRules(vehicleId),
+    summary: vehicleCostSummary(vehicleId, vehicle.cost_per_km),
+  };
+}
+
+function assertVehicleCompany(vehicleId: string, companyId: string) {
+  const vehicle = getVehicle(vehicleId);
+  if (!vehicle) throw new Error('Vehículo no encontrado');
+  if (vehicle.company_id !== companyId) throw new Error('Vehículo de otra empresa');
+  return vehicle;
+}
+
+/** Persiste el $/km derivado en el vehículo para reportes y asignación. */
+function syncVehicleCostPerKm(vehicleId: string) {
+  const vehicle = getVehicle(vehicleId);
+  if (!vehicle) return;
+  const summary = vehicleCostSummary(vehicleId, vehicle.cost_per_km);
+  if (!summary.fromRules) return;
+  getAdminDb()
+    .prepare('UPDATE vehicles SET cost_per_km = ? WHERE id = ?')
+    .run(summary.costPerKm, vehicleId);
+}
+
+export function getVehicleCostPanel(companyId: string, vehicleId: string) {
+  const vehicle = assertVehicleCompany(vehicleId, companyId);
+  const rules = listVehicleCostRules(vehicleId);
+  const summary = vehicleCostSummary(vehicleId, vehicle.cost_per_km);
+  return {
+    vehicle: {
+      id: vehicle.id,
+      plate: vehicle.plate,
+      label: vehicle.label,
+      vehicleType: normalizeVehicleKind(vehicle.vehicle_type),
+      costPerKmFallback: vehicle.cost_per_km,
+    },
+    rules,
+    summary,
+    siblings: listVehicles(companyId)
+      .filter((v) => v.id !== vehicleId && v.active)
+      .map((v) => ({ id: v.id, plate: v.plate, label: v.label })),
+  };
 }

@@ -274,10 +274,10 @@ function ensureUsers(): UsersFile {
 
   const byId = new Map(raw.users.map((u) => [u.id, u]));
   if (isProd()) {
-    // Producción: sin usuarios demo. Solo un administrador inicial desde variables de entorno.
-    for (const id of DEMO_USER_IDS) {
-      if (id !== 'U-ADMIN') byId.delete(id);
-    }
+    // Producción: sin tenant demo; sí mantiene cuentas operativas definidas por env
+    // (bodega / despacho / conductor) para ops.innovamf.com.
+    byId.delete('U-DEMO-CO');
+
     const email = process.env.OPTICLEAN_ADMIN_EMAIL?.trim().toLowerCase();
     const password = process.env.OPTICLEAN_ADMIN_PASSWORD ?? '';
     const prevAdmin = byId.get('U-ADMIN');
@@ -305,6 +305,21 @@ function ensureUsers(): UsersFile {
         active: true,
       });
     }
+
+    // Upsert roles de piso desde variables de entorno (no pisa usuarios desactivados a mano).
+    for (const u of desired) {
+      if (u.id === 'U-ADMIN' || u.id === 'U-DEMO-CO') continue;
+      const prev = byId.get(u.id);
+      if (prev?.active === false) continue;
+      byId.set(u.id, {
+        ...u,
+        active: true,
+        // Conserva placa/nombre si ya los editó un admin.
+        name: prev?.name || u.name,
+        truckPlate: prev?.truckPlate || u.truckPlate,
+      });
+    }
+
     const next: UsersFile = { version: 1, users: [...byId.values()] };
     writeFileSync(USERS_PATH, JSON.stringify(next, null, 2));
     usersCache = next;

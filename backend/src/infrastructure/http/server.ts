@@ -27,13 +27,18 @@ import {
 import {
   companyMobileRoleIds,
   companyModuleIds,
+  applyDefaultCostRules,
   createCompany,
   createVehicle,
+  createVehicleCostRule,
   deleteCompany,
   deleteVehicle,
+  deleteVehicleCostRule,
+  duplicateVehicleCostRules,
   fleetForCompany,
   getCompany,
   getVehicle,
+  getVehicleCostPanel,
   listAllModules,
   listCompanies,
   listMenuItems,
@@ -48,6 +53,7 @@ import {
   updateCompany,
   updateMenuItem,
   updateVehicle,
+  updateVehicleCostRule,
 } from '../../domain/admin.service.js';
 import { getAdminDb } from '../db/adminDb.js';
 import { runAs } from '../../domain/request-context.js';
@@ -983,6 +989,91 @@ app.delete('/api/fleet/:id', authRequired, (req, res, next) => {
     assertVehicleOfCompany(req.params.id, companyIdOf(req));
     deleteVehicle(req.params.id);
     res.json({ ok: true, trucks: fleetForCompany(companyIdOf(req)) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Reglas de costo real (combustible, llantas, peaje, etc.) */
+app.get('/api/fleet/:id/cost-rules', authRequired, (req, res, next) => {
+  try {
+    res.json(getVehicleCostPanel(companyIdOf(req), req.params.id));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/fleet/:id/cost-rules', authRequired, (req, res, next) => {
+  try {
+    const companyId = companyIdOf(req);
+    const rule = createVehicleCostRule(companyId, req.params.id, {
+      name: String(req.body?.name ?? ''),
+      category: req.body?.category ? String(req.body.category) : undefined,
+      basis: req.body?.basis === 'per_trip' ? 'per_trip' : 'per_km',
+      calc: req.body?.calc === 'amortized' ? 'amortized' : 'fixed',
+      amount: Number(req.body?.amount),
+      lifeUnits: req.body?.lifeUnits !== undefined ? Number(req.body.lifeUnits) : undefined,
+      active: req.body?.active !== false,
+    });
+    res.status(201).json({
+      rule,
+      ...getVehicleCostPanel(companyId, req.params.id),
+      trucks: fleetForCompany(companyId),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.patch('/api/fleet/cost-rules/:ruleId', authRequired, (req, res, next) => {
+  try {
+    const companyId = companyIdOf(req);
+    const rule = updateVehicleCostRule(companyId, req.params.ruleId, {
+      name: req.body?.name !== undefined ? String(req.body.name) : undefined,
+      category: req.body?.category !== undefined ? String(req.body.category) : undefined,
+      basis: req.body?.basis !== undefined ? (req.body.basis === 'per_trip' ? 'per_trip' : 'per_km') : undefined,
+      calc: req.body?.calc !== undefined ? (req.body.calc === 'amortized' ? 'amortized' : 'fixed') : undefined,
+      amount: req.body?.amount !== undefined ? Number(req.body.amount) : undefined,
+      lifeUnits: req.body?.lifeUnits !== undefined ? Number(req.body.lifeUnits) : undefined,
+      active: typeof req.body?.active === 'boolean' ? req.body.active : undefined,
+    });
+    const vehicleId = String(rule.vehicleId || '');
+    res.json({
+      rule,
+      ...(vehicleId ? getVehicleCostPanel(companyId, vehicleId) : {}),
+      trucks: fleetForCompany(companyId),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.delete('/api/fleet/cost-rules/:ruleId', authRequired, (req, res, next) => {
+  try {
+    const companyId = companyIdOf(req);
+    deleteVehicleCostRule(companyId, req.params.ruleId);
+    res.json({ ok: true, trucks: fleetForCompany(companyId) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/fleet/:id/cost-rules/duplicate', authRequired, (req, res, next) => {
+  try {
+    const targets = Array.isArray(req.body?.targetVehicleIds)
+      ? req.body.targetVehicleIds.map((x: unknown) => String(x))
+      : [];
+    res.json(duplicateVehicleCostRules(companyIdOf(req), req.params.id, targets));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/fleet/:id/cost-rules/defaults', authRequired, (req, res, next) => {
+  try {
+    const companyId = companyIdOf(req);
+    const result = applyDefaultCostRules(companyId, req.params.id, Boolean(req.body?.replace));
+    res.json({ ...result, trucks: fleetForCompany(companyId) });
   } catch (e) {
     next(e);
   }

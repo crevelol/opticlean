@@ -1,5 +1,6 @@
 import type { AppState, Order } from './types.js';
 import { resolveBusinessRules } from './business-rules.js';
+import { vehicleAllowsZone, zonePathOf } from './zones.js';
 
 export type FleetTruck = {
   id: string;
@@ -120,7 +121,8 @@ function cityOf(s: AppState, o: Order) {
 
 function sectorOf(s: AppState, o: Order) {
   const c = clientOf(s, o.clientId);
-  return c?.sector || c?.address || 'Sin sector';
+  if (!c) return 'Sin zona';
+  return zonePathOf(c);
 }
 
 function buildContext(
@@ -174,14 +176,7 @@ function buildContext(
 }
 
 function allowsSector(t: FleetTruck, sector: string) {
-  const allowed = t.allowedSectors ?? [];
-  if (!allowed.length) return true;
-  const target = sector.trim().toLowerCase();
-  if (!target) return true;
-  return allowed.some((s) => {
-    const a = s.toLowerCase();
-    return a === target || a.includes(target) || target.includes(a);
-  });
+  return vehicleAllowsZone(t.allowedSectors, sector);
 }
 
 function heuristicAssign(
@@ -346,7 +341,7 @@ async function callOpenAi(ready: ReadyOrder[], trucks: TruckContext[]): Promise<
 Asigna pedidos LISTOS a camiones respetando:
 1) Capacidad kg y m³ (no superar freeKg/freeM3 + used).
 2) Preferir misma ciudad del camión.
-3) Si el camión tiene allowedSectors (lista no vacía), SOLO puede recibir pedidos cuyo sector esté en esa lista. Si allowedSectors está vacío o ausente, no hay restricción de sector.
+3) Si el camión tiene allowedSectors (lista no vacía), SOLO puede recibir pedidos cuya zona coincida por jerarquía (prefijo). Ej: "Pichincha / Quito" cubre "Pichincha / Quito / Carcelén". Etiqueta suelta ("Carcelén") coincide con ese nivel. Si allowedSectors está vacío o ausente, no hay restricción de zona.
 4) Equilibrar carga y minimizar costo/km cuando haya empate.
 5) Cada pedido a un solo camión.
 Responde SOLO JSON válido con esta forma:
