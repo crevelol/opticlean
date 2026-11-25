@@ -34,7 +34,8 @@ const STEPS: StepDef[] = [
 ];
 
 export function InventoryProductForm({ product, categories, products, onClose, onSaved }: ProductFormProps) {
-  const { applyResponse, toast } = useAppState();
+  const { state, applyResponse, toast } = useAppState();
+  const families = state?.families ?? [];
   const uniqueId = useId();
   const formId = `${uniqueId}-product-form`;
   const dialogRef = useRef<HTMLElement>(null);
@@ -61,6 +62,8 @@ export function InventoryProductForm({ product, categories, products, onClose, o
   const [inspectOnReceipt, setInspectOnReceipt] = useState(!!product?.inspectOnReceipt);
   const [perishable, setPerishable] = useState(product?.perishable !== false);
   const [requiresSanitary, setRequiresSanitary] = useState(!!product?.requiresSanitary);
+  const [familyId, setFamilyId] = useState(product?.familyId ?? '');
+  const [fragile, setFragile] = useState(!!product?.fragile);
   const [labelText, setLabelText] = useState('');
   const [attributes, setAttributes] = useState(product?.attributes ?? []);
   const [presentations, setPresentations] = useState((product?.presentations ?? []).join(', '));
@@ -326,6 +329,8 @@ export function InventoryProductForm({ product, categories, products, onClose, o
         sanitaryExpires: sanitaryExpires || undefined,
         ivaRate: Number(ivaRate),
         inspectOnReceipt,
+        familyId: familyId || undefined,
+        fragile,
         ...(isAdmin && avgCostDraft.trim() !== '' && Number.isFinite(Number(avgCostDraft))
           ? { avgCost: Number(avgCostDraft) }
           : {}),
@@ -481,6 +486,33 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                         <input {...fieldProps('supplier')} list={`${uniqueId}-suppliers`} placeholder="Escribe o selecciona un proveedor" autoComplete="off" />
                         <datalist id={`${uniqueId}-suppliers`}>{supplierOptions.map((supplier) => <option key={supplier} value={supplier} />)}</datalist>
                         {fieldError('supplier')}
+                      </div>
+                      <div className="field">
+                        <label htmlFor={`${uniqueId}-family`}>Familia de bodega</label>
+                        <Select
+                          id={`${uniqueId}-family`}
+                          value={familyId}
+                          onChange={(e) => setFamilyId(e.target.value)}
+                        >
+                          <option value="">Sin familia (opcional)</option>
+                          {families.map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.name} ({f.code})
+                            </option>
+                          ))}
+                        </Select>
+                        <small>Opcional. Ayuda a sugerir racks al recibir.</small>
+                      </div>
+                      <div className="field">
+                        <label htmlFor={`${uniqueId}-fragile`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <input
+                            id={`${uniqueId}-fragile`}
+                            type="checkbox"
+                            checked={fragile}
+                            onChange={(e) => setFragile(e.target.checked)}
+                          />
+                          Producto frágil
+                        </label>
                       </div>
                     </div>
                   </>

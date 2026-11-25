@@ -61,7 +61,7 @@ export function PurchasesPage() {
 
   if (!state || !forecast) return null;
 
-  const canManage = can(user, 'warehouse');
+  const canManage = can(user, 'purchases');
   const urgent = forecast.recommendations.filter((r) => r.urgency === 'now' || r.productionRisk);
   const soon = forecast.recommendations.filter((r) => r.urgency === 'soon' && !r.productionRisk);
 

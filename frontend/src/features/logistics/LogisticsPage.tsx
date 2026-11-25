@@ -11,14 +11,13 @@ import {
   product,
   statusColor,
 } from '../../shared/lib/inventory';
-import { Badge, Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
+import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import type { Order } from '../../shared/types';
 import { RouteMap } from './RouteMap';
-import { FleetConfigModal } from './FleetConfigModal';
+import { FleetManagePanel } from './FleetManagePanel';
 import {
-  FLEET as DEFAULT_FLEET,
   activeOrders as getActiveOrders,
   cityOf,
   fmtHours,
@@ -39,18 +38,22 @@ import {
 } from './fleet';
 import '../../styles/logistics.css';
 
+type MainTab = 'distribucion' | 'rutas' | 'flota';
+
 export function LogisticsPage() {
   const { state, applyResponse, toast } = useAppState();
   const navigate = useNavigate();
-  const [fleet, setFleet] = useState<Truck[]>(DEFAULT_FLEET);
+  const [fleet, setFleet] = useState<Truck[]>([]);
+  const [fleetReady, setFleetReady] = useState(false);
   const [query, setQuery] = useState('');
   const [openCities, setOpenCities] = useState<Record<string, boolean>>({
     Quito: true,
     Guayaquil: true,
     Cuenca: true,
   });
-  const [selectedTruck, setSelectedTruck] = useState(DEFAULT_FLEET[0]?.id ?? '');
+  const [selectedTruck, setSelectedTruck] = useState('');
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
+  const [mainTab, setMainTab] = useState<MainTab>('distribucion');
   const [listTab, setListTab] = useState<'pendientes' | 'listos' | 'en_ruta'>('listos');
   const [stagedByTruck, setStagedByTruck] = useState<Record<string, string[]>>({});
   const [pedidosTruckId, setPedidosTruckId] = useState<string | null>(null);
@@ -65,17 +68,22 @@ export function LogisticsPage() {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiPlan, setAiPlan] = useState<AutoAssignPlan | null>(null);
   const [preparingId, setPreparingId] = useState<string | null>(null);
-  const [fleetConfigOpen, setFleetConfigOpen] = useState(false);
+
+  const applyFleet = (trucks: Truck[]) => {
+    setFleet(trucks);
+    setSelectedTruck((cur) => (trucks.some((t) => t.id === cur) ? cur : trucks[0]?.id ?? ''));
+    setFleetReady(true);
+  };
 
   useEffect(() => {
     void api
       .fleet()
       .then((r) => {
-        if (!r.trucks?.length) return;
-        setFleet(r.trucks);
-        setSelectedTruck((cur) => (r.trucks.some((t) => t.id === cur) ? cur : r.trucks[0].id));
+        applyFleet(Array.isArray(r.trucks) ? r.trucks : []);
       })
-      .catch(() => {});
+      .catch(() => {
+        applyFleet([]);
+      });
   }, []);
 
   const activeOrders = useMemo(() => (state ? getActiveOrders(state) : []), [state]);
@@ -161,10 +169,18 @@ export function LogisticsPage() {
       .map((id) => activeOrders.find((o) => o.id === id && o.status === 'Preparado'))
       .filter((o): o is Order => Boolean(o));
 
-  const truckLoad = (t: (typeof fleet)[number]) =>
-    calcTruckLoad(state, t, activeOrders, stagedOrdersOf(t.id));
+  const truckLoad = (t: Truck) => calcTruckLoad(state!, t, activeOrders, stagedOrdersOf(t.id));
 
-  const selectedLoad = truckLoad(truck);
+  const emptyLoad = {
+    kg: 0,
+    m3: 0,
+    pct: 0,
+    status: 'ok' as const,
+    label: 'Disponible',
+    orders: [] as Order[],
+    pending: [] as Order[],
+  };
+  const selectedLoad = truck && state ? truckLoad(truck) : emptyLoad;
   const assignedVolume = selectedLoad.m3;
   const assignedWeight = selectedLoad.kg;
   const volPct = selectedLoad.pct;
@@ -246,8 +262,15 @@ export function LogisticsPage() {
     setAssigning(true);
     setError('');
     try {
-      applyResponse(await api.dispatch(ids, t.plate));
-      toast(`${t.label} enviado con ${ids.length} pedido(s).`);
+      const res = await api.dispatch(ids, t.plate);
+      applyResponse(res);
+      if (Array.isArray(res.trucks) && res.trucks.length) {
+        applyFleet(res.trucks as Truck[]);
+      }
+      const kmMsg = res.km
+        ? ` · +${res.km.added} km (odómetro ${res.km.odometerKm.toLocaleString('es-EC')} km)`
+        : '';
+      toast(`${t.label} enviado con ${ids.length} pedido(s)${kmMsg}.`);
       setStagedByTruck((prev) => ({ ...prev, [truckId]: [] }));
       setPedidosTruckId(null);
     } catch (err) {
@@ -354,30 +377,163 @@ export function LogisticsPage() {
     }
   };
 
+  const pageTitle =
+    mainTab === 'flota' ? 'Gestión de flota' : mainTab === 'rutas' ? 'Rutas' : 'Distribución';
+  const pageDesc =
+    mainTab === 'flota'
+      ? 'Alta de vehículos, cobertura por zonas y costo real de transporte'
+      : mainTab === 'rutas'
+        ? 'Rutas previstas por vehículo: tiempo, costo y mapa'
+        : 'Asigna pedidos a camiones y genera rutas eficientes';
+
   return (
     <div className="log-page">
       <PageHead
         eyebrow="Logística"
-        title="Distribución"
-        desc="Asigne pedidos a camiones y genera rutas eficientes"
+        title={pageTitle}
+        desc={pageDesc}
         actions={
           <div className="log-head-actions">
             <div className="log-date-chip">
               <Icon name="calendar" />
               Fecha de entrega: {deliveryDate}
             </div>
-            <Btn
-              icon="spark"
-              variant="primary"
-              disabled={aiBusy || assigning}
-              onClick={() => void runAiAutoAssign()}
-            >
-              {aiBusy ? 'Analizando…' : 'IA autoasignar'}
-            </Btn>
+            {mainTab === 'distribucion' ? (
+              <Btn
+                icon="spark"
+                variant="primary"
+                disabled={aiBusy || assigning}
+                onClick={() => void runAiAutoAssign()}
+              >
+                {aiBusy ? 'Analizando…' : 'IA autoasignar'}
+              </Btn>
+            ) : null}
           </div>
         }
       />
 
+      <div className="log-main-tabs" role="tablist" aria-label="Secciones de logística">
+        <button
+          type="button"
+          role="tab"
+          className={mainTab === 'distribucion' ? 'is-active' : ''}
+          aria-selected={mainTab === 'distribucion'}
+          onClick={() => setMainTab('distribucion')}
+        >
+          <Icon name="truck" />
+          Distribución
+        </button>
+        <button
+          type="button"
+          role="tab"
+          className={mainTab === 'rutas' ? 'is-active' : ''}
+          aria-selected={mainTab === 'rutas'}
+          onClick={() => setMainTab('rutas')}
+        >
+          <Icon name="route" />
+          Rutas
+        </button>
+        <button
+          type="button"
+          role="tab"
+          className={mainTab === 'flota' ? 'is-active' : ''}
+          aria-selected={mainTab === 'flota'}
+          onClick={() => setMainTab('flota')}
+        >
+          <Icon name="truck" />
+          Flota
+        </button>
+      </div>
+
+      {mainTab === 'flota' ? (
+        <FleetManagePanel onFleetChange={applyFleet} />
+      ) : null}
+
+      {mainTab === 'rutas' ? (
+        <section className="log-panel log-routes-tab" aria-label="Rutas previstas">
+          <div className="log-trucks-head">
+            <h3>
+              <Icon name="route" />
+              Rutas previstas
+            </h3>
+            <div className="log-routes-actions">
+              <Btn icon="history" onClick={() => navigate('/logistica/historial')}>
+                Historial
+              </Btn>
+            </div>
+          </div>
+          {!fleet.length ? (
+            <Empty
+              title="Sin vista previa"
+              desc="Agrega vehículos en Flota y asigna pedidos en Distribución para ver rutas aquí."
+            />
+          ) : (
+            <ul className="log-planned-list">
+              {fleet.map((t) => {
+                const load = truckLoad(t);
+                const stops = routeOrders(state, t.plate);
+                const showStops = stops.length ? stops : load.orders.slice(0, 4);
+                const open = expandedRoute === t.id;
+                return (
+                  <li key={t.id} className={`log-planned-card ${open ? 'is-open' : ''}`}>
+                    <div className="log-planned-row">
+                      <span className="log-planned-icon" aria-hidden>
+                        <Icon name="route" />
+                      </span>
+                      <div className="log-planned-copy">
+                        <strong>Ruta prevista · {t.label}</strong>
+                        <small>
+                          {fmtHours(t.etaHours)} · {moneyFmt(truckRouteCost(t))} estimados
+                          {t.routeKm ? ` · ruta ~${t.routeKm} km` : ''}
+                          {typeof t.odometerKm === 'number'
+                            ? ` · odómetro ${t.odometerKm.toLocaleString('es-EC')} km`
+                            : ''}
+                        </small>
+                      </div>
+                      <button
+                        type="button"
+                        className="log-planned-link"
+                        onClick={() => navigate('/logistica/rutas', { state: { truckId: t.id } })}
+                      >
+                        Ver ruta
+                        <Icon name="external" />
+                      </button>
+                      <button
+                        type="button"
+                        className="log-planned-toggle"
+                        aria-expanded={open}
+                        onClick={() => {
+                          setExpandedRoute(open ? null : t.id);
+                          setSelectedTruck(t.id);
+                        }}
+                      >
+                        <Icon name="chevron" className={open ? 'is-open' : ''} />
+                      </button>
+                    </div>
+                    {open ? (
+                      <div className="log-route-detail">
+                        <RouteMap
+                          state={state}
+                          orders={showStops}
+                          city={t.city}
+                          onSelect={(id) => setDetailId(id)}
+                          showFullButton
+                          onFullRoute={() =>
+                            navigate('/logistica/rutas', { state: { truckId: t.id } })
+                          }
+                        />
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      ) : null}
+
+      {mainTab === 'distribucion' ? (
+        <>
       <KpiGrid label="Resumen de distribución">
         <Kpi
           label="Total de pedidos"
@@ -603,12 +759,18 @@ export function LogisticsPage() {
               <button
                 type="button"
                 className="log-filter-btn"
-                onClick={() => setFleetConfigOpen(true)}
+                onClick={() => setMainTab('flota')}
               >
                 <Icon name="settings" />
-                Configurar flota
+                Gestión de flota
               </button>
             </div>
+            {fleetReady && !fleet.length ? (
+              <Empty
+                title="Sin vehículos"
+                desc="Agrega camiones en Gestión de flota para asignar pedidos."
+              />
+            ) : null}
             <ul className="log-truck-list">
               {fleet.map((t) => {
                 const load = truckLoad(t);
@@ -679,6 +841,10 @@ export function LogisticsPage() {
                             ${t.costPerKm.toFixed(2)}
                             {t.costFromRules ? '/km*' : '/km'}
                           </strong>
+                        </div>
+                        <div>
+                          <span>Odómetro</span>
+                          <strong>{(t.odometerKm ?? 0).toLocaleString('es-EC')} km</strong>
                         </div>
                       </div>
                       <p className="log-truck-zones">
@@ -764,14 +930,14 @@ export function LogisticsPage() {
             </ul>
           </section>
 
-          <section className="log-panel log-routes" aria-label="Resumen de rutas">
+          <section className="log-panel log-routes" aria-label="Rutas previstas">
             <div className="log-trucks-head">
               <h3>
                 <Icon name="route" />
-                Resumen de rutas
+                Rutas previstas
               </h3>
               <div className="log-routes-actions">
-                <Btn icon="route" onClick={() => navigate('/logistica/rutas')}>
+                <Btn icon="route" onClick={() => setMainTab('rutas')}>
                   Ver todas
                 </Btn>
                 <Btn icon="history" onClick={() => navigate('/logistica/historial')}>
@@ -779,119 +945,46 @@ export function LogisticsPage() {
                 </Btn>
               </div>
             </div>
-            <ul className="log-route-list">
-              {fleet.map((t, index) => {
-                const load = truckLoad(t);
-                const tone =
-                  load.status === 'full' ? 'red' : load.status === 'partial' ? 'amber' : 'green';
-                const open = expandedRoute === t.id;
-                const stops = routeOrders(state, t.plate);
-                const showStops = stops.length ? stops : load.orders.slice(0, 4);
-                return (
-                  <li key={t.id} className={`log-route-card ${open ? 'is-open' : ''}`}>
+            {!fleet.length ? (
+              <Empty
+                title="Sin vista previa"
+                desc="Cuando tengas vehículos y pedidos asignados, aquí verás las rutas."
+              />
+            ) : (
+            <ul className="log-planned-list">
+              {fleet.map((t) => (
+                <li key={t.id} className="log-planned-card">
+                  <div className="log-planned-row">
+                    <span className="log-planned-icon" aria-hidden>
+                      <Icon name="route" />
+                    </span>
+                    <div className="log-planned-copy">
+                      <strong>Ruta prevista</strong>
+                      <small>
+                        {fmtHours(t.etaHours)} · {moneyFmt(truckRouteCost(t))} estimados
+                      </small>
+                    </div>
                     <button
                       type="button"
-                      className="log-route"
-                      onClick={() => {
-                        setExpandedRoute(open ? null : t.id);
-                        setSelectedTruck(t.id);
-                      }}
+                      className="log-planned-link"
+                      onClick={() => navigate('/logistica/rutas', { state: { truckId: t.id } })}
                     >
-                      <span className={`log-route-num log-route-num-${tone}`}>{index + 1}</span>
-                      <span className="log-route-copy">
-                        <strong>
-                          {t.label} · {vehicleKindLabel(t)} - {t.city}
-                        </strong>
-                        <small>
-                          {fmtHours(t.etaHours)} | {moneyFmt(truckRouteCost(t))}
-                        </small>
-                      </span>
-                      <span className="log-route-eta">{fmtHours(t.etaHours)}</span>
-                      <Icon
-                        name="chevron"
-                        className={`log-route-chevron ${open ? 'is-open' : ''}`}
-                      />
+                      Ver ruta
+                      <Icon name="external" />
                     </button>
-
-                    {open ? (
-                      <div className="log-route-detail">
-                        <div className="log-route-detail-grid">
-                          <RouteMap
-                            state={state}
-                            orders={showStops}
-                            city={t.city}
-                            onSelect={(id) => setDetailId(id)}
-                            showFullButton
-                            onFullRoute={() =>
-                              navigate('/logistica/rutas', { state: { truckId: t.id } })
-                            }
-                          />
-                          <div>
-                            <ul className="log-route-stats">
-                              <li>
-                                <Icon name="history" />
-                                <span>
-                                  Tiempo estimado: <strong>{fmtHours(t.etaHours)}</strong>
-                                </span>
-                              </li>
-                              <li>
-                                <Icon name="spark" />
-                                <span>
-                                  Costo estimado:{' '}
-                                  <strong>{moneyFmt(truckRouteCost(t))}</strong>
-                                </span>
-                              </li>
-                              <li>
-                                <Icon name="route" />
-                                <span>
-                                  Distancia total: <strong>{t.routeKm} km</strong>
-                                </span>
-                              </li>
-                            </ul>
-                            <h4>Puntos de entrega</h4>
-                            {showStops.length ? (
-                              <ol className="log-route-points">
-                                {showStops.map((o) => (
-                                  <li key={o.id}>
-                                    <button type="button" onClick={() => setDetailId(o.id)}>
-                                      <strong>
-                                        {client(state, o.clientId)?.name ?? o.clientId}
-                                      </strong>
-                                      <small>
-                                        {sectorOf(state, o)} · {o.id}
-                                      </small>
-                                    </button>
-                                  </li>
-                                ))}
-                              </ol>
-                            ) : (
-                              <p className="log-empty">Sin paradas asignadas a este camión.</p>
-                            )}
-                            <div className="log-route-detail-actions">
-                              <Btn
-                                variant="primary"
-                                icon="route"
-                                onClick={() =>
-                                  navigate('/logistica/rutas', { state: { truckId: t.id } })
-                                }
-                              >
-                                Pantalla de rutas
-                              </Btn>
-                              <Btn icon="history" onClick={() => navigate('/logistica/historial')}>
-                                Historial de camiones
-                              </Btn>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
-                  </li>
-                );
-              })}
+                  </div>
+                  <p className="log-planned-meta">
+                    {t.label} · {vehicleKindLabel(t)} · {t.city}
+                  </p>
+                </li>
+              ))}
             </ul>
+            )}
           </section>
         </aside>
       </div>
+        </>
+      ) : null}
 
       {detail ? (
         <Modal
@@ -910,7 +1003,7 @@ export function LogisticsPage() {
                   {preparingId === detail.id ? 'Preparando…' : 'Marcar listo'}
                 </Btn>
               ) : null}
-              {detail.status === 'Preparado' && !stagedIds.has(detail.id) ? (
+              {detail.status === 'Preparado' && !stagedIds.has(detail.id) && truck ? (
                 <Btn
                   variant="primary"
                   icon="truck"
@@ -1035,6 +1128,7 @@ export function LogisticsPage() {
       {pedidosTruckId
         ? (() => {
             const pt = fleet.find((t) => t.id === pedidosTruckId) ?? truck;
+            if (!pt) return null;
             const staged = stagedOrdersOf(pt.id);
             const onRoute = activeOrders.filter((o) => o.vehicle === pt.plate);
             return (
@@ -1244,17 +1338,6 @@ export function LogisticsPage() {
         </Modal>
       ) : null}
 
-      {fleetConfigOpen ? (
-        <FleetConfigModal
-          onClose={() => setFleetConfigOpen(false)}
-          onFleetChange={(trucks) => {
-            setFleet(trucks);
-            setSelectedTruck((cur) =>
-              trucks.some((t) => t.id === cur) ? cur : (trucks[0]?.id ?? ''),
-            );
-          }}
-        />
-      ) : null}
     </div>
   );
 }

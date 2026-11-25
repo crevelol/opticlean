@@ -88,14 +88,15 @@ export function FamiliesPage() {
       <PageHead
         eyebrow="Reglas de ubicación"
         title="Familias de bodega"
-        desc="Define qué líneas van a qué racks y si la zona prioriza productos frágiles. El móvil y la recepción usan estas reglas."
+        desc="Agrupación opcional de productos por familia. Sirve para sugerir racks al recibir; no es obligatorio crearlas."
         actions={<Btn variant="primary" icon="plus" onClick={openNew}>Nueva familia</Btn>}
       />
 
       <section className="fam-hint">
         <Icon name="spark" />
         <p>
-          Al recibir mercadería, la guía de ubicación prioriza racks de la familia, huecos vacíos y niveles bajos si el producto es frágil.
+          Opcional: puedes asignar una familia a cada producto o vincular líneas enteras. Al recibir, la guía prioriza
+          racks de la familia, huecos vacíos y niveles bajos si el producto es frágil.
         </p>
       </section>
 
@@ -119,11 +120,11 @@ export function FamiliesPage() {
                 <dl>
                   <div>
                     <dt>Líneas</dt>
-                    <dd>{f.productCategories.join(', ') || '—'}</dd>
+                    <dd>{f.productCategories.join(', ') || 'Sin líneas (solo asignación manual)'}</dd>
                   </div>
                   <div>
                     <dt>Racks</dt>
-                    <dd>{f.rackIds.join(', ') || '—'}</dd>
+                    <dd>{f.rackIds.join(', ') || 'Sin racks preferidos'}</dd>
                   </div>
                 </dl>
                 <footer>
@@ -135,7 +136,10 @@ export function FamiliesPage() {
           })}
         </div>
       ) : (
-        <Empty title="Sin familias" desc="Crea la primera familia para guiar la ubicación." />
+        <Empty
+          title="Sin familias"
+          desc="No hay familias configuradas. Puedes operar sin ellas o crear la primera para agrupar productos y racks."
+        />
       )}
 
       {edit && (
@@ -184,35 +188,47 @@ export function FamiliesPage() {
                 />
               </div>
               <div className="field full">
-                <label>Líneas de producto</label>
+                <label>Líneas de producto <small>(opcional)</small></label>
                 <div className="fam-chips">
-                  {categories.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      className={edit.productCategories.includes(c) ? 'is-on' : ''}
-                      onClick={() =>
-                        setEdit({ ...edit, productCategories: toggleIn(edit.productCategories, c) })
-                      }
-                    >
-                      {c}
-                    </button>
-                  ))}
+                  {categories.length ? (
+                    categories.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        className={edit.productCategories.includes(c) ? 'is-on' : ''}
+                        onClick={() =>
+                          setEdit({ ...edit, productCategories: toggleIn(edit.productCategories, c) })
+                        }
+                      >
+                        {c}
+                      </button>
+                    ))
+                  ) : (
+                    <p className="subtle" style={{ margin: 0 }}>
+                      Aún no hay líneas en el catálogo. Puedes asignar productos a mano desde Inventario.
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="field full">
-                <label>Racks de bodega</label>
+                <label>Racks de bodega <small>(opcional)</small></label>
                 <div className="fam-chips">
-                  {racks.map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      className={edit.rackIds.includes(r) ? 'is-on' : ''}
-                      onClick={() => setEdit({ ...edit, rackIds: toggleIn(edit.rackIds, r) })}
-                    >
-                      Rack {r}
-                    </button>
-                  ))}
+                  {racks.length ? (
+                    racks.map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        className={edit.rackIds.includes(r) ? 'is-on' : ''}
+                        onClick={() => setEdit({ ...edit, rackIds: toggleIn(edit.rackIds, r) })}
+                      >
+                        Rack {r}
+                      </button>
+                    ))
+                  ) : (
+                    <p className="subtle" style={{ margin: 0 }}>
+                      Configura racks en Bodegas para sugerir ubicación por familia.
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="field full">

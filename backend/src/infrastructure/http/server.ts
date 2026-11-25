@@ -12,6 +12,7 @@ import {
   adminRequired,
   assertEmailAvailable,
   authRequired,
+  changePassword,
   createUser,
   deactivateUser,
   getUserById,
@@ -20,10 +21,22 @@ import {
   platformAdminRequired,
   prepareAuth,
   publicUserFromRequest,
+  requestPasswordReset,
+  resetPasswordWithToken,
   setCompanyActiveCheck,
   updateUser,
   type AuthRole,
+  type PublicUser,
 } from '../auth/auth.js';
+import {
+  authServiceChange,
+  authServiceEnabled,
+  authServiceForgot,
+  authServiceLogin,
+  authServiceLogout,
+  authServiceRefresh,
+  authServiceReset,
+} from '../auth/auth-client.js';
 import {
   companyMobileRoleIds,
   companyModuleIds,
@@ -44,12 +57,17 @@ import {
   listMenuItems,
   listMobileRoles,
   listModules,
+  listVehicleKmLogs,
   listVehicles,
   menuForCompany,
   mobileConfigForCompany,
+  applyShippingTemplateToFleet,
   parseAllowedSectors,
+  recordDispatchKm,
+  recordVehicleKm,
   setCompanyMobileRoles,
   setCompanyModules,
+  setVehicleOdometer,
   updateCompany,
   updateMenuItem,
   updateVehicle,
@@ -149,17 +167,26 @@ app.use(express.json({ limit: '15mb' }));
 
 function roleDenied(req: express.Request) {
   const role = req.user?.role;
+  const perms = req.user?.permissions ?? [];
   if (!role || role === 'admin') return null;
   if (req.method === 'GET' || req.method === 'HEAD') return null;
   const path = req.path;
-  const allow = (roles: AuthRole[]) =>
-    roles.includes(role) ? null : 'Tu rol no tiene permiso para esta acción.';
+  const has = (...needed: string[]) => needed.some((p) => perms.includes(p) || perms.includes('*'));
+  const allow = (roles: AuthRole[], permission?: string) => {
+    if (roles.includes(role)) return null;
+    if (permission && has(permission)) return null;
+    return 'Tu rol no tiene permiso para esta acción.';
+  };
   if (path === '/api/delivery' || path === '/api/incidents' || path === '/api/delivery/skip') {
-    return allow(['dispatch', 'driver', 'ops']);
+    return allow(['dispatch', 'driver', 'ops'], 'field');
   }
-  if (path === '/api/packing' || path === '/api/loading/preview') return allow(['ops', 'dispatch']);
-  if (path === '/api/dispatch' || path.startsWith('/api/logistics')) return allow(['dispatch']);
-  if (path.startsWith('/api/guides')) return allow(['dispatch', 'ops']);
+  if (path === '/api/packing' || path === '/api/loading/preview') {
+    return allow(['ops', 'dispatch'], 'packing');
+  }
+  if (path === '/api/dispatch' || path.startsWith('/api/logistics')) {
+    return allow(['dispatch'], 'dispatch');
+  }
+  if (path.startsWith('/api/guides')) return allow(['dispatch', 'ops'], 'orders');
   if (
     path.startsWith('/api/invoices') ||
     path.startsWith('/api/credit-notes') ||
@@ -191,7 +218,8 @@ function roleDenied(req: express.Request) {
       return 'Solo administración cambia el cupo o el plazo de crédito.';
     }
   }
-  if (role === 'ops') return null;
+  // Bodega (ops) o quien tenga permisos operativos de inventario/pedidos.
+  if (role === 'ops' || has('warehouse', 'inventory', 'reception', 'orders', 'purchases')) return null;
   return 'Tu rol no tiene permiso para esta acción.';
 }
 
@@ -199,6 +227,10 @@ const PUBLIC_API_PATHS = new Set([
   '/api/health',
   '/api/auth/login',
   '/api/auth/signup',
+  '/api/auth/password/forgot',
+  '/api/auth/password/reset',
+  '/api/auth/refresh',
+  '/api/auth/logout',
   '/api/public/config',
   '/api/public/delivery-code',
 ]);
@@ -232,7 +264,7 @@ app.use((req, res, next) => {
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   try {
     const email = String(req.body?.email ?? '');
     const password = String(req.body?.password ?? '');
@@ -250,7 +282,27 @@ app.post('/api/auth/login', (req, res) => {
       return;
     }
     try {
-      const result = login(email, password);
+      let result: { token: string; user: PublicUser } | null = null;
+      if (authServiceEnabled()) {
+        try {
+          const remote = await authServiceLogin(email, password, 'opticlean');
+          if (remote?.token && remote.user) {
+            res.json({
+              token: remote.accessToken || remote.token,
+              accessToken: remote.accessToken || remote.token,
+              refreshToken: remote.refreshToken,
+              expiresIn: remote.expiresIn,
+              refreshExpiresIn: remote.refreshExpiresIn,
+              user: remote.user as unknown as PublicUser,
+            });
+            registerLoginSuccess(ip, email);
+            return;
+          }
+        } catch {
+          /* fallback local si el microservicio falla */
+        }
+      }
+      result = login(email, password);
       registerLoginSuccess(ip, email);
       res.json(result);
     } catch (e) {
@@ -311,6 +363,130 @@ app.post('/api/auth/signup', (req, res) => {
 
 app.get('/api/auth/me', authRequired, (req, res) => {
   res.json({ user: publicUserFromRequest(req) });
+});
+
+/** Renueva access JWT con refresh token (auth-service). */
+app.post('/api/auth/refresh', async (req, res) => {
+  try {
+    const refreshToken = String(req.body?.refreshToken ?? '');
+    if (!refreshToken) {
+      res.status(400).json({ error: 'Falta refreshToken' });
+      return;
+    }
+    if (!authServiceEnabled()) {
+      res.status(503).json({ error: 'Refresh token no disponible sin auth-service.' });
+      return;
+    }
+    const remote = await authServiceRefresh(refreshToken);
+    if (!remote) {
+      res.status(503).json({ error: 'Auth service no disponible' });
+      return;
+    }
+    res.json({
+      token: remote.accessToken || remote.token,
+      accessToken: remote.accessToken || remote.token,
+      refreshToken: remote.refreshToken,
+      expiresIn: remote.expiresIn,
+      refreshExpiresIn: remote.refreshExpiresIn,
+      user: remote.user,
+    });
+  } catch (e) {
+    res.status(401).json({ error: e instanceof Error ? e.message : 'No se pudo renovar la sesión' });
+  }
+});
+
+/** Revoca refresh / cierra sesión en auth-service. */
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    const header = req.headers.authorization || '';
+    const accessToken = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+    const refreshToken = req.body?.refreshToken ? String(req.body.refreshToken) : undefined;
+    if (authServiceEnabled()) {
+      await authServiceLogout({ refreshToken, accessToken: accessToken || undefined });
+    }
+    res.json({ ok: true });
+  } catch {
+    res.json({ ok: true });
+  }
+});
+
+/** Cambio de contraseña (sesión activa). Prefiere auth-service. */
+app.post('/api/auth/password/change', authRequired, async (req, res) => {
+  try {
+    const currentPassword = String(req.body?.currentPassword ?? '');
+    const newPassword = String(req.body?.newPassword ?? '');
+    if (authServiceEnabled()) {
+      try {
+        const header = req.headers.authorization || '';
+        const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+        const remote = await authServiceChange(token, currentPassword, newPassword);
+        if (remote) {
+          res.json(remote);
+          return;
+        }
+      } catch (e) {
+        res.status(400).json({ error: e instanceof Error ? e.message : 'No se pudo cambiar' });
+        return;
+      }
+    }
+    res.json(changePassword(req.user!.id, currentPassword, newPassword));
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : 'No se pudo cambiar' });
+  }
+});
+
+/** Olvidé mi contraseña. */
+app.post('/api/auth/password/forgot', async (req, res) => {
+  try {
+    const email = String(req.body?.email ?? '');
+    if (!email) {
+      res.status(400).json({ error: 'Indica tu correo' });
+      return;
+    }
+    if (authServiceEnabled()) {
+      try {
+        const remote = await authServiceForgot(email, 'opticlean');
+        if (remote) {
+          res.json(remote);
+          return;
+        }
+      } catch {
+        /* fallback local */
+      }
+    }
+    res.json(requestPasswordReset(email));
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : 'No se pudo procesar' });
+  }
+});
+
+/** Restablecer con token del enlace. */
+app.post('/api/auth/password/reset', async (req, res) => {
+  try {
+    const token = String(req.body?.token ?? '');
+    const newPassword = String(req.body?.newPassword ?? '');
+    if (authServiceEnabled()) {
+      try {
+        const remote = await authServiceReset(token, newPassword, 'opticlean');
+        if (remote) {
+          res.json(remote);
+          return;
+        }
+      } catch (e) {
+        // Si el token es del flujo local, intentar localmente.
+        try {
+          res.json(resetPasswordWithToken(token, newPassword));
+          return;
+        } catch {
+          res.status(400).json({ error: e instanceof Error ? e.message : 'No se pudo restablecer' });
+          return;
+        }
+      }
+    }
+    res.json(resetPasswordWithToken(token, newPassword));
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : 'No se pudo restablecer' });
+  }
 });
 
 app.use('/api', (req, res, next) => {
@@ -608,15 +784,32 @@ app.post('/api/dispatch', async (req, res, next) => {
   try {
     const { orderIds, vehicle } = req.body as { orderIds: string[]; vehicle?: string };
     const plate = String(vehicle || 'GBA-2041').trim().toUpperCase();
-    const truck = fleetForCompany(companyIdOf(req)).find(
-      (t) => t.plate.toUpperCase() === plate,
-    );
+    const companyId = companyIdOf(req);
+    const truck = fleetForCompany(companyId).find((t) => t.plate.toUpperCase() === plate);
+    const ids = Array.isArray(orderIds) ? orderIds.map(String) : [];
     const state = await ops.confirmDispatch(
-      orderIds,
+      ids,
       plate,
       truck ? { maxKg: truck.maxKg, maxM3: truck.maxM3 } : undefined,
     );
-    res.json({ state, metrics: ops.metricsSnapshot(state) });
+    let kmLog = null;
+    try {
+      kmLog = recordDispatchKm(companyId, plate, ids.length, ids, state.settings);
+    } catch {
+      /* el despacho ya quedó; el odómetro no debe tumbar la operación */
+    }
+    res.json({
+      state,
+      metrics: ops.metricsSnapshot(state),
+      km: kmLog
+        ? {
+            added: kmLog.log.km,
+            odometerKm: kmLog.log.odometerAfter,
+            plate: kmLog.log.plate,
+          }
+        : null,
+      trucks: fleetForCompany(companyId),
+    });
   } catch (e) {
     next(e);
   }
@@ -951,11 +1144,30 @@ app.post('/api/fleet', authRequired, (req, res, next) => {
       etaHours: typeof req.body?.etaHours === 'number' ? req.body.etaHours : undefined,
       routeKm: typeof req.body?.routeKm === 'number' ? req.body.routeKm : undefined,
       allowedSectors: sectorsFromBody(req.body),
+      shippingTemplateId:
+        req.body?.shippingTemplateId !== undefined
+          ? req.body.shippingTemplateId
+            ? String(req.body.shippingTemplateId)
+            : ''
+          : undefined,
     });
     res.status(201).json({
       vehicle: vehicleDto(vehicle),
       trucks: fleetForCompany(companyIdOf(req)),
     });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/fleet/shipping-template', authRequired, (req, res, next) => {
+  try {
+    const templateId = String(req.body?.templateId ?? '').trim();
+    const vehicleIds = Array.isArray(req.body?.vehicleIds)
+      ? req.body.vehicleIds.map(String)
+      : undefined;
+    const result = applyShippingTemplateToFleet(companyIdOf(req), templateId, vehicleIds);
+    res.json(result);
   } catch (e) {
     next(e);
   }
@@ -976,6 +1188,12 @@ app.patch('/api/fleet/:id', authRequired, (req, res, next) => {
       etaHours: typeof req.body?.etaHours === 'number' ? req.body.etaHours : undefined,
       routeKm: typeof req.body?.routeKm === 'number' ? req.body.routeKm : undefined,
       allowedSectors: sectorsFromBody(req.body),
+      shippingTemplateId:
+        req.body?.shippingTemplateId !== undefined
+          ? req.body.shippingTemplateId
+            ? String(req.body.shippingTemplateId)
+            : ''
+          : undefined,
       active: typeof req.body?.active === 'boolean' ? req.body.active : undefined,
     });
     res.json({ vehicle: vehicleDto(vehicle), trucks: fleetForCompany(companyIdOf(req)) });
@@ -1074,6 +1292,56 @@ app.post('/api/fleet/:id/cost-rules/defaults', authRequired, (req, res, next) =>
     const companyId = companyIdOf(req);
     const result = applyDefaultCostRules(companyId, req.params.id, Boolean(req.body?.replace));
     res.json({ ...result, trucks: fleetForCompany(companyId) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Historial y registro de kilómetros del vehículo */
+app.get('/api/fleet/:id/km', authRequired, (req, res, next) => {
+  try {
+    const companyId = companyIdOf(req);
+    const vehicle = assertVehicleOfCompany(req.params.id, companyId);
+    res.json({
+      vehicleId: vehicle.id,
+      plate: vehicle.plate,
+      odometerKm: Number(vehicle.odometer_km) || 0,
+      logs: listVehicleKmLogs(companyId, vehicle.id, Number(req.query.limit) || 50),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/fleet/:id/km', authRequired, (req, res, next) => {
+  try {
+    const companyId = companyIdOf(req);
+    assertVehicleOfCompany(req.params.id, companyId);
+    const result = recordVehicleKm(companyId, {
+      vehicleId: req.params.id,
+      km: Number(req.body?.km),
+      stops: req.body?.stops !== undefined ? Number(req.body.stops) : undefined,
+      source: 'manual',
+      note: req.body?.note ? String(req.body.note) : 'Registro manual de km',
+    });
+    res.status(201).json(result);
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/fleet/:id/odometer', authRequired, (req, res, next) => {
+  try {
+    const companyId = companyIdOf(req);
+    assertVehicleOfCompany(req.params.id, companyId);
+    res.json(
+      setVehicleOdometer(
+        companyId,
+        req.params.id,
+        Number(req.body?.odometerKm),
+        req.body?.note ? String(req.body.note) : '',
+      ),
+    );
   } catch (e) {
     next(e);
   }

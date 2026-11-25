@@ -6,6 +6,7 @@ function variantForPath(path: string): SkeletonVariant {
   if (path === '/' || path === '') return 'dashboard';
   if (
     path.startsWith('/pedidos/nuevo') ||
+    path.startsWith('/cotizaciones/nueva') ||
     path.startsWith('/reglas') ||
     path.startsWith('/configuracion') ||
     path.startsWith('/recepcion')

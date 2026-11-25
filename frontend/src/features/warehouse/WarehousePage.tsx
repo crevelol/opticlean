@@ -33,7 +33,7 @@ export function WarehousePage() {
   const { user } = useAuth();
   const canStock = can(user, 'warehouse');
   const canPick = can(user, 'picking');
-  const canLayout = can(user, 'admin');
+  const canLayout = user?.role === 'admin';
   const meta = useMemo(() => {
     if (!state || !serverMeta) return null;
     const warehouse = state.warehouses.find((item) => item.id === activeWarehouseId(state));

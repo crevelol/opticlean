@@ -6,6 +6,8 @@ import { useAuth } from '../shared/hooks/AuthProvider';
 import { homeForRole } from './navigation';
 import { LoginPage } from '../features/auth/LoginPage';
 import { SignupPage } from '../features/auth/SignupPage';
+import { ForgotPasswordPage } from '../features/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
 import { AppSkeleton } from './shell/PageSkeleton';
 
 // Cada pantalla se descarga solo al visitarla (code splitting por ruta).
@@ -79,6 +81,9 @@ const CommercialPage = lazy(() =>
 const QuotesPage = lazy(() =>
   import('../features/quotes/QuotesPage').then((m) => ({ default: m.QuotesPage })),
 );
+const NewQuotePage = lazy(() =>
+  import('../features/quotes/NewQuotePage').then((m) => ({ default: m.NewQuotePage })),
+);
 const PackingPage = lazy(() =>
   import('../features/packing/PackingPage').then((m) => ({ default: m.PackingPage })),
 );
@@ -124,6 +129,7 @@ function ProtectedApp() {
         <Route path="pedidos" element={<OrdersPage />} />
         <Route path="pedidos/nuevo" element={<NewOrderPage />} />
         <Route path="cotizaciones" element={<QuotesPage />} />
+        <Route path="cotizaciones/nueva" element={<NewQuotePage />} />
         <Route path="empaque" element={<PackingPage />} />
         <Route path="plan" element={<PlanPage />} />
         <Route path="compras" element={<PurchasesPage />} />
@@ -149,6 +155,8 @@ export function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/registro" element={<SignupPage />} />
+      <Route path="/olvide-contrasena" element={<ForgotPasswordPage />} />
+      <Route path="/restablecer" element={<ResetPasswordPage />} />
       <Route path="/entrega" element={<DeliveryCodePage />} />
       <Route path="/*" element={<ProtectedApp />} />
     </Routes>

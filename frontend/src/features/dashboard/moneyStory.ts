@@ -88,6 +88,16 @@ export function buildMoneyStory(state: AppState) {
       date: when > current.date ? when : current.date,
     });
   }
+  const routes: Array<{
+    plate: string;
+    label: string;
+    vehicleType: string;
+    stops: number;
+    km: number;
+    fuel: number;
+    cost: number;
+    date: string;
+  }> = [];
   for (const [plate, route] of byPlate) {
     const vehicle = state.vehicles?.find((item) => item.plate === plate);
     const km = routeKm(route.stops);
@@ -95,6 +105,16 @@ export function buildMoneyStory(state: AppState) {
     const per = vehicle?.kmPerUnit && vehicle.kmPerUnit > 0 ? vehicle.kmPerUnit : 0;
     const fuel = per > 0 ? round((km / per) * (vehicle?.fuelPrice ?? 0)) : 0;
     freight += allIn;
+    routes.push({
+      plate,
+      label: vehicle?.label || `Camión ${plate}`,
+      vehicleType: 'Camión',
+      stops: route.stops,
+      km,
+      fuel,
+      cost: allIn,
+      date: route.date,
+    });
     lines.push({
       id: `ruta-${plate}`,
       kind: 'flete',
@@ -104,6 +124,7 @@ export function buildMoneyStory(state: AppState) {
       amount: round(-allIn),
     });
   }
+  routes.sort((a, b) => a.plate.localeCompare(b.plate));
 
   let bought = 0;
   for (const purchase of state.purchases) {
@@ -160,6 +181,9 @@ export function buildMoneyStory(state: AppState) {
     bought: round(bought),
     receivable,
     payable,
+    routes,
+    routeStops: routes.reduce((n, r) => n + r.stops, 0),
+    routeKmTotal: routes.reduce((n, r) => n + r.km, 0),
     lines: ranked,
   };
 }

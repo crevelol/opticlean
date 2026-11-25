@@ -1,6 +1,10 @@
 import type { StateRepository } from '../ports/StateRepository.js';
 import type { AppState, Client, Product, Settings } from '../../domain/types.js';
-import { mergeBusinessRules, resolveBusinessRules } from '../../domain/business-rules.js';
+import {
+  applyShippingTemplatesToSettings,
+  mergeBusinessRules,
+  resolveBusinessRules,
+} from '../../domain/business-rules.js';
 import { actorIsAdmin, recordChange } from '../../domain/audit.js';
 import { IVA_RATE } from '../../domain/ledger.js';
 import { categories } from '../../domain/warehouse.js';
@@ -185,10 +189,17 @@ export class OperationsUseCases {
 
   async updateSettings(settings: Partial<Settings>) {
     return this.mutate((s) => {
-      const { businessRules, ...rest } = settings;
+      const { businessRules, shippingTemplates, defaultShippingTemplateId, ...rest } = settings;
       s.settings = { ...s.settings, ...rest };
       if (businessRules) {
         s.settings.businessRules = mergeBusinessRules(s.settings.businessRules, businessRules);
+      }
+      if (shippingTemplates !== undefined || defaultShippingTemplateId !== undefined) {
+        s.settings = applyShippingTemplatesToSettings(
+          s.settings,
+          shippingTemplates ?? s.settings.shippingTemplates,
+          defaultShippingTemplateId ?? s.settings.defaultShippingTemplateId,
+        );
       }
     });
   }
@@ -433,7 +444,13 @@ export class OperationsUseCases {
     });
   }
 
-  async addClient(body: Omit<Client, 'id'> & { creditLimit?: number | string; paymentTermsDays?: number | string }) {
+  async addClient(
+    body: Omit<Client, 'id'> & {
+      creditLimit?: number | string;
+      paymentTermsDays?: number | string;
+      marginPct?: number | string | null;
+    },
+  ) {
     return this.mutate((s) => {
       // Cupo y plazo los fija administración; bodega crea el cliente con el cupo por defecto.
       const admin = actorIsAdmin();
@@ -446,6 +463,20 @@ export class OperationsUseCases {
       if (admin && body.paymentTermsDays != null && Number.isInteger(terms) && terms >= 0) {
         created.paymentTermsDays = terms;
       }
+      if (body.marginPct != null && String(body.marginPct).trim() !== '') {
+        const margin = Number(body.marginPct);
+        if (Number.isFinite(margin) && margin >= 0) {
+          created.marginPct = Math.round(margin * 100) / 100;
+          recordChange(s, {
+            entity: 'Cliente',
+            entityId: created.id,
+            entityName: created.name,
+            field: 'Margen de cotización (%)',
+            from: undefined,
+            to: created.marginPct,
+          });
+        }
+      }
       recordChange(s, { entity: 'Cliente', entityId: created.id, entityName: created.name, field: 'Cupo de crédito', from: undefined, to: creditLimit });
       if (created.paymentTermsDays != null) {
         recordChange(s, { entity: 'Cliente', entityId: created.id, entityName: created.name, field: 'Plazo de pago (días)', from: undefined, to: created.paymentTermsDays });
@@ -455,7 +486,11 @@ export class OperationsUseCases {
 
   async updateClient(
     id: string,
-    body: Partial<Omit<Client, 'id'>> & { creditLimit?: number | string; paymentTermsDays?: number | string },
+    body: Partial<Omit<Client, 'id'>> & {
+      creditLimit?: number | string;
+      paymentTermsDays?: number | string;
+      marginPct?: number | string | null;
+    },
   ) {
     return this.mutate((s) => {
       const c = saveClientProfile(s, id, body);
@@ -473,6 +508,32 @@ export class OperationsUseCases {
         if (!Number.isInteger(n) || n < 0) throw new Error('Plazo de pago inválido.');
         recordChange(s, { entity: 'Cliente', entityId: c.id, entityName: c.name, field: 'Plazo de pago (días)', from: c.paymentTermsDays, to: n });
         c.paymentTermsDays = n;
+      }
+      if (body.marginPct !== undefined) {
+        if (body.marginPct === null || String(body.marginPct).trim() === '') {
+          recordChange(s, {
+            entity: 'Cliente',
+            entityId: c.id,
+            entityName: c.name,
+            field: 'Margen de cotización (%)',
+            from: c.marginPct,
+            to: undefined,
+          });
+          delete c.marginPct;
+        } else {
+          const n = Number(body.marginPct);
+          if (!Number.isFinite(n) || n < 0 || n > 1000) throw new Error('Margen de cotización inválido.');
+          const next = Math.round(n * 100) / 100;
+          recordChange(s, {
+            entity: 'Cliente',
+            entityId: c.id,
+            entityName: c.name,
+            field: 'Margen de cotización (%)',
+            from: c.marginPct,
+            to: next,
+          });
+          c.marginPct = next;
+        }
       }
     });
   }

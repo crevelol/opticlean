@@ -11,6 +11,7 @@ export function SettingsPage() {
   const [resetOpen, setResetOpen] = useState(false);
   /** En producción el servidor desactiva el reinicio; el botón no se muestra. */
   const [resetAllowed, setResetAllowed] = useState(false);
+  const [pwdBusy, setPwdBusy] = useState(false);
   useEffect(() => {
     let cancelled = false;
     void api
@@ -39,6 +40,29 @@ export function SettingsPage() {
     toast('Configuración guardada.');
   };
 
+  const changePassword = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (pwdBusy) return;
+    const data = Object.fromEntries(new FormData(e.currentTarget));
+    const currentPassword = String(data.currentPassword || '');
+    const newPassword = String(data.newPassword || '');
+    const confirm = String(data.confirmPassword || '');
+    if (newPassword !== confirm) {
+      toast('Las contraseñas nuevas no coinciden.');
+      return;
+    }
+    setPwdBusy(true);
+    try {
+      const res = await api.changePassword(currentPassword, newPassword);
+      toast(res.message || 'Contraseña actualizada.');
+      e.currentTarget.reset();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'No se pudo cambiar la contraseña.');
+    } finally {
+      setPwdBusy(false);
+    }
+  };
+
   const reset = async () => {
     try {
       applyResponse(await api.reset());
@@ -54,7 +78,7 @@ export function SettingsPage() {
       <PageHead
         eyebrow="Administración"
         title="Configuración"
-        desc="Datos de la empresa y de la bodega activa."
+        desc="Datos de la empresa, bodega activa y seguridad de la cuenta."
       />
       <div className="two-col">
         <form className="panel" id="settings-form" onSubmit={(e) => void save(e)}>
@@ -84,6 +108,36 @@ export function SettingsPage() {
             <button type="submit" className="btn primary">
               <Icon name="save" />
               Guardar cambios
+            </button>
+          </div>
+        </form>
+        <form className="panel" onSubmit={(e) => void changePassword(e)}>
+          <div className="panel-head">
+            <span className="panel-title">
+              <Icon name="shield" />
+              Cambiar contraseña
+            </span>
+          </div>
+          <div className="form-section">
+            <div className="form-grid">
+              <div className="field full">
+                <label htmlFor="pwd-current">Contraseña actual</label>
+                <input id="pwd-current" name="currentPassword" type="password" required minLength={8} autoComplete="current-password" />
+              </div>
+              <div className="field full">
+                <label htmlFor="pwd-new">Nueva contraseña</label>
+                <input id="pwd-new" name="newPassword" type="password" required minLength={8} autoComplete="new-password" />
+              </div>
+              <div className="field full">
+                <label htmlFor="pwd-confirm">Confirmar nueva</label>
+                <input id="pwd-confirm" name="confirmPassword" type="password" required minLength={8} autoComplete="new-password" />
+              </div>
+            </div>
+          </div>
+          <div className="form-footer">
+            <button type="submit" className="btn primary" disabled={pwdBusy}>
+              <Icon name="save" />
+              {pwdBusy ? 'Guardando…' : 'Actualizar contraseña'}
             </button>
           </div>
         </form>

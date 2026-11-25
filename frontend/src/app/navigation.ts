@@ -1,4 +1,6 @@
 import { matchPath } from 'react-router-dom';
+import type { AuthUser } from '../shared/auth/session';
+import { canAccessPath } from '../shared/auth/permissions';
 
 export type MenuItem = {
   id: string;
@@ -29,6 +31,7 @@ export const routeMeta: Record<string, RouteMeta> = {
   '/pedidos': { title: 'Pedidos' },
   '/pedidos/nuevo': { title: 'Nuevo pedido', parent: '/pedidos' },
   '/cotizaciones': { title: 'Cotizaciones' },
+  '/cotizaciones/nueva': { title: 'Nueva', parent: '/cotizaciones' },
   '/empaque': { title: 'Empaque' },
   '/plan': { title: 'Plan de mañana' },
   '/entrega': { title: 'Código de entrega' },
@@ -66,7 +69,6 @@ export const fallbackMenu: MenuSection[] = [
   {
     section: 'Abastecimiento',
     items: [
-      { id: 'f-plan', label: 'Plan de mañana', path: '/plan', icon: 'calendar', badge: null },
       { id: 'f-buy', label: 'Abastecimiento', path: '/compras', icon: 'cart', badge: null },
       { id: 'f-sup', label: 'Proveedores', path: '/proveedores', icon: 'building', badge: null },
     ],
@@ -82,6 +84,7 @@ export const fallbackMenu: MenuSection[] = [
   {
     section: 'Gestión',
     items: [
+      { id: 'f-plan', label: 'Plan de mañana', path: '/plan', icon: 'calendar', badge: null },
       { id: 'f-cli', label: 'Clientes', path: '/clientes', icon: 'users', badge: null },
       { id: 'f-com', label: 'Comercial', path: '/comercial', icon: 'orders', badge: null },
       { id: 'f-rep', label: 'Reportes', path: '/reportes', icon: 'chart', badge: null },
@@ -128,12 +131,6 @@ export function breadcrumbsFor(path: string, menu: MenuSection[]): Crumb[] {
   return chain;
 }
 
-const ROLE_PATHS: Record<string, readonly string[]> = {
-  ops: ['/', '/inventario', '/recepcion', '/bodega', '/bodegas', '/familias', '/pedidos', '/cotizaciones', '/compras', '/plan', '/empaque', '/proveedores', '/trazabilidad'],
-  dispatch: ['/', '/pedidos', '/clientes', '/logistica', '/empaque', '/logistica/rutas', '/logistica/historial', '/trazabilidad'],
-  driver: ['/logistica/rutas', '/logistica/historial'],
-};
-
 /** Pantalla de entrada según el puesto. Administración abre el resumen. */
 export function homeForRole(role?: string) {
   if (role === 'driver') return '/logistica/rutas';
@@ -142,20 +139,32 @@ export function homeForRole(role?: string) {
   return '/';
 }
 
-/** El menú muestra solo lo que ese rol puede operar. Administración ve todo. */
-export function menuForRole(sections: MenuSection[], role?: string): MenuSection[] {
-  const allow = role ? ROLE_PATHS[role] : undefined;
-  if (!allow) return sections;
+/**
+ * El menú muestra solo lo que los permisos del JWT permiten.
+ * Administración ve todo. Sin usuario, se muestra el menú completo (guest shell).
+ */
+export function menuForRole(sections: MenuSection[], roleOrUser?: string | AuthUser | null): MenuSection[] {
+  const user =
+    typeof roleOrUser === 'object' && roleOrUser
+      ? roleOrUser
+      : roleOrUser
+        ? ({ role: roleOrUser } as AuthUser)
+        : null;
+  if (!user) return sections;
+  if (user.role === 'admin') return sections;
   return sections
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => allow.includes(item.path)),
+      items: section.items.filter((item) => canAccessPath(user, item.path)),
     }))
     .filter((section) => section.items.length > 0);
 }
 
-export function roleAllowsPath(role: string | undefined, path: string) {
-  const allow = role ? ROLE_PATHS[role] : undefined;
-  if (!allow) return true;
-  return allow.some((item) => path === item || (item !== '/' && path.startsWith(`${item}/`)));
+export function roleAllowsPath(roleOrUser: string | AuthUser | null | undefined, path: string) {
+  if (!roleOrUser) return true;
+  const user =
+    typeof roleOrUser === 'object'
+      ? roleOrUser
+      : ({ role: roleOrUser } as AuthUser);
+  return canAccessPath(user, path);
 }

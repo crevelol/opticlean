@@ -202,7 +202,11 @@ export function updateClient(s: AppState, id: string, input: Partial<Client>) {
   delete c.reorderEveryDays;
   delete c.lat;
   delete c.lng;
+  const keepMargin = c.marginPct;
   Object.assign(c, data);
+  if (data.marginPct == null && keepMargin != null && input.marginPct === undefined) {
+    c.marginPct = keepMargin;
+  }
   return c;
 }
 

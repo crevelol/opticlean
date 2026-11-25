@@ -10,6 +10,7 @@ import {
 import { api } from '../api/client';
 import {
   clearSession,
+  getRefreshToken,
   getStoredUser,
   getToken,
   setSession,
@@ -61,19 +62,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await api.login(email, password);
-    setSession(res.token, res.user);
+    setSession(res.accessToken || res.token, res.user, res.refreshToken);
     setUser(res.user);
     return res.user;
   }, []);
 
   const signup = useCallback(async (input: Parameters<typeof api.signup>[0]) => {
     const res = await api.signup(input);
-    setSession(res.token, res.user);
+    setSession(res.accessToken || res.token, res.user, res.refreshToken);
     setUser(res.user);
     return res.user;
   }, []);
 
   const logout = useCallback(() => {
+    const refreshToken = getRefreshToken() || undefined;
+    void api.logout(refreshToken).catch(() => undefined);
     clearSession();
     setUser(null);
   }, []);

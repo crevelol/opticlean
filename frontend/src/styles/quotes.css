@@ -1,0 +1,455 @@
+/* Nueva cotización — layout de documento + resumen */
+
+.nq-page {
+  color: var(--color-text);
+  min-width: 0;
+  padding-bottom: 96px;
+}
+
+.nq-page .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.nq-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.nq-head .page-eyebrow {
+  margin-bottom: 4px;
+}
+
+.nq-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--slate-100);
+  color: var(--color-text-secondary);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+}
+
+.nq-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 18px;
+  align-items: start;
+}
+
+.nq-main {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.nq-panel {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--slate-0);
+  padding: 16px 18px;
+}
+
+.nq-panel h2 {
+  margin: 0 0 12px;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+
+.nq-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
+}
+
+.nq-grid .field.full,
+.nq-grid .full {
+  grid-column: 1 / -1;
+}
+
+.nq-client-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.nq-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.35;
+}
+
+.nq-products-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.nq-table-wrap {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  overflow: auto;
+}
+
+.nq-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 560px;
+}
+
+.nq-table th,
+.nq-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border-subtle);
+  vertical-align: middle;
+}
+
+.nq-table th {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-muted);
+  background: var(--color-surface-subtle);
+}
+
+.nq-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.nq-product strong {
+  display: block;
+  font-size: var(--text-base);
+}
+
+.nq-product span {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.nq-qty {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nq-qty button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--slate-0);
+  cursor: pointer;
+  color: var(--color-text);
+}
+
+.nq-qty input {
+  width: 56px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.nq-price input {
+  width: 96px;
+  font-variant-numeric: tabular-nums;
+}
+
+.nq-price-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.nq-price-cell.is-manual input {
+  border-color: var(--color-primary);
+}
+
+.nq-price-source,
+.nq-price-reset {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.nq-price-source {
+  color: var(--color-text-muted);
+}
+
+.nq-price-reset {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.nq-price-reset:hover {
+  text-decoration: underline;
+}
+
+.nq-money {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.nq-remove {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.nq-remove:hover {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.nq-lines-foot {
+  margin-top: 10px;
+  font-size: var(--text-md);
+  color: var(--color-text-muted);
+}
+
+.nq-notes textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.nq-side {
+  position: sticky;
+  top: 16px;
+}
+
+.nq-summary {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--slate-0);
+  padding: 16px 18px;
+}
+
+.nq-summary h2 {
+  margin: 0 0 14px;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+
+.nq-sum-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
+}
+
+.nq-sum-row b {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.nq-sum-row .subtle {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  text-align: right;
+}
+
+.nq-discount-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nq-discount-edit input {
+  width: 88px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.nq-total {
+  margin: 14px 0 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.nq-total strong {
+  display: block;
+  font-size: 28px;
+  line-height: 1.1;
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.nq-total small {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.nq-meta {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+  font-size: var(--text-md);
+  color: var(--color-text-secondary);
+}
+
+.nq-meta span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nq-meta b {
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+}
+
+.nq-info {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--blue-50);
+  color: var(--color-primary);
+  font-size: var(--text-md);
+  line-height: 1.35;
+}
+
+.nq-info .icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+.nq-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--slate-0) 92%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.nq-actions .spacer {
+  flex: 1;
+}
+
+.nq-preview {
+  display: grid;
+  gap: 12px;
+}
+
+.nq-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.nq-preview-table th,
+.nq-preview-table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  text-align: left;
+  font-size: var(--text-md);
+}
+
+.nq-preview-table th {
+  color: var(--color-text-muted);
+  font-weight: var(--weight-semibold);
+}
+
+.nq-catalog {
+  margin-top: 10px;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.nq-catalog button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.nq-catalog button:last-child {
+  border-bottom: 0;
+}
+
+.nq-catalog button:hover {
+  background: var(--blue-50);
+}
+
+.nq-catalog strong {
+  display: block;
+}
+
+.nq-catalog span {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+@media (max-width: 960px) {
+  .nq-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .nq-side {
+    position: static;
+  }
+
+  .nq-grid {
+    grid-template-columns: 1fr;
+  }
+}
