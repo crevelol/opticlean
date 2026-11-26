@@ -13,6 +13,7 @@ import { useAuth } from '../../shared/hooks/AuthProvider';
 import type { HazardClass, Product, ProductComponent, ProductKind } from '../../shared/types';
 import { HAZARD_OPTIONS } from '../../shared/lib/wholesale';
 import './inventory-product-form.css';
+import { WizardFooter, WizardSteps, useDiscardGuard } from '../../shared/components/Wizard';
 import { Switch } from '../../shared/components/Checkbox';
 import { Button } from '../../shared/components/ui';
 import { IconButton } from '../../shared/components/IconButton';
@@ -189,8 +190,31 @@ export function InventoryProductForm({
   }, [step]);
 
   const fieldId = (name: FieldName) => `${uniqueId}-${name}`;
+  // Foto de todo lo editable para saber si cerrar perdería algo.
+  const snapshot = JSON.stringify([
+    values,
+    kind,
+    hazardClass,
+    minShelfLifeDays,
+    sanitaryRegistration,
+    sanitaryExpires,
+    ivaRate,
+    inspectOnReceipt,
+    perishable,
+    requiresSanitary,
+    familyId,
+    fragile,
+    labelText,
+    attributes,
+    presentations,
+    packUnits,
+    components,
+    avgCostDraft,
+  ]);
+  const [initialSnapshot] = useState(snapshot);
+  const discard = useDiscardGuard(!pending && snapshot !== initialSnapshot);
   const close = () => {
-    if (!pendingRef.current) onClose();
+    if (!pendingRef.current) discard.guard(onClose);
   };
 
   const validateField = (name: FieldName, value: string): string => {
@@ -490,38 +514,20 @@ export function InventoryProductForm({
           <IconButton icon="close" label="Cerrar formulario" onClick={close} disabled={pending} />
         </div>
 
-        <nav className="inv-stepper" aria-label="Pasos del formulario">
-          <ol style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}>
-            {steps.map((item, index) => {
-              const state = index === step ? 'current' : index <= maxReached ? 'done' : 'todo';
-              const hasError =
-                item.fields.some((name) => errors[name]) ||
-                (item.key === 'bom' && !!errors.components);
-              const reachable = !!product || index <= maxReached + 1;
-              return (
-                <li
-                  key={item.key}
-                  className={`inv-step is-${state}${hasError ? ' has-error' : ''}`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => goToStep(index)}
-                    disabled={pending || !reachable}
-                    aria-current={index === step ? 'step' : undefined}
-                  >
-                    <span className="inv-step-dot" aria-hidden="true">
-                      {hasError ? '!' : state === 'done' ? <Icon name="check" /> : index + 1}
-                    </span>
-                    <span className="inv-step-text">
-                      <strong>{item.title}</strong>
-                      <small>{item.subtitle}</small>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        </nav>
+        <WizardSteps
+          variant="dialog"
+          label="Pasos del formulario"
+          steps={steps}
+          current={step}
+          onSelect={goToStep}
+          canSelect={(index) => !!product || index <= maxReached + 1}
+          isDone={(index) => index <= maxReached}
+          hasError={(index) =>
+            steps[index].fields.some((name) => errors[name]) ||
+            (steps[index].key === 'bom' && !!errors.components)
+          }
+          disabled={pending}
+        />
 
         <div className="modal-body inv-product-body">
           <form
@@ -1037,47 +1043,33 @@ export function InventoryProductForm({
           </form>
         </div>
 
-        <div className="modal-footer inv-product-footer">
-          <span role="status" className="inv-product-status">
-            {pending ? (
-              'Guardando…'
-            ) : isLastStep && !product ? (
-              <>
-                <Icon name="info" /> Crear la ficha no añade existencias.
-              </>
-            ) : (
-              `Paso ${step + 1} de ${steps.length}`
-            )}
-          </span>
-          <div>
-            {step > 0 ? (
-              <Button type="button" onClick={() => goToStep(step - 1)} disabled={pending}>
-                <Icon name="chevron-left" /> Atrás
-              </Button>
-            ) : (
-              <Button type="button" onClick={close} disabled={pending}>
-                Cancelar
-              </Button>
-            )}
-            {product && !isLastStep ? (
-              <Button type="button" onClick={() => goToStep(step + 1)} disabled={pending}>
-                Siguiente <Icon name="chevron" />
-              </Button>
-            ) : null}
-            <Button variant="primary" type="submit" form={formId} disabled={pending}>
-              {isLastStep || product ? (
-                <>
-                  <Icon name={pending ? 'refresh' : 'save'} />
-                  {pending ? 'Guardando…' : product ? 'Guardar cambios' : 'Crear ficha'}
-                </>
-              ) : (
-                <>
-                  Siguiente <Icon name="chevron" />
-                </>
-              )}
+        <WizardFooter
+          variant="dialog"
+          step={step}
+          total={steps.length}
+          onBack={() => goToStep(step - 1)}
+          onCancel={close}
+          info={
+            isLastStep && !product
+              ? `Paso ${step + 1} de ${steps.length} · Crear la ficha no añade existencias.`
+              : undefined
+          }
+          primary={{
+            type: 'submit',
+            form: formId,
+            label: isLastStep || product ? (product ? 'Guardar cambios' : 'Crear ficha') : 'Siguiente',
+            icon: isLastStep || product ? 'save' : 'arrow',
+            busy: pending,
+            busyLabel: 'Guardando…',
+          }}
+        >
+          {product && !isLastStep ? (
+            <Button icon="arrow" onClick={() => goToStep(step + 1)} disabled={pending}>
+              Siguiente
             </Button>
-          </div>
-        </div>
+          ) : null}
+        </WizardFooter>
+        {discard.dialog}
       </DialogContent>
     </DialogRoot>
   );
