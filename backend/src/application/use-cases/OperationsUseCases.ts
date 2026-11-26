@@ -14,6 +14,8 @@ import {
   client,
   confirmDelivery,
   createOrder,
+  editOrder,
+  deleteProduct,
   dispatch,
   move,
   orderValue,
@@ -52,6 +54,8 @@ import { deleteBundle, ensureBundles, saveBundle } from '../../domain/bundles.se
 import {
   cancelOrder,
   cancelPurchase,
+  editPurchase,
+  deleteClient,
   closePurchase,
   createBackorderPurchases,
   createClient,
@@ -572,6 +576,30 @@ export class OperationsUseCases {
   async addPurchase(body: Parameters<typeof createPurchase>[1]) {
     return this.mutate((s) => {
       createPurchase(s, body);
+    });
+  }
+
+  async editClientOrder(orderId: string, body: Parameters<typeof editOrder>[2]) {
+    return this.mutate((s) => {
+      editOrder(s, orderId, body);
+    });
+  }
+
+  async editPurchaseOrder(id: string, body: Parameters<typeof editPurchase>[2]) {
+    return this.mutate((s) => {
+      editPurchase(s, id, body);
+    });
+  }
+
+  async removeClient(id: string) {
+    return this.mutate((s) => {
+      deleteClient(s, id);
+    });
+  }
+
+  async removeProduct(id: string) {
+    return this.mutate((s) => {
+      deleteProduct(s, id);
     });
   }
 

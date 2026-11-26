@@ -301,6 +301,20 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
+  deleteClient: (id: string) =>
+    request<StateResponse>(`/api/clients/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  deleteProduct: (id: string) =>
+    request<StateResponse>(`/api/products/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  editOrder: (id: string, body: Record<string, unknown>) =>
+    request<StateResponse>(`/api/orders/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  editPurchase: (id: string, body: Record<string, unknown>) =>
+    request<StateResponse>(`/api/purchases/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
   addPurchase: (body: Record<string, unknown>) =>
     request<StateResponse>('/api/purchases', { method: 'POST', body: JSON.stringify(body) }),
   cancelPurchase: (id: string) =>

@@ -53,11 +53,26 @@ Todos los roles autenticados pueden consultar el estado. Los permisos se validan
 
 ## Datos
 
-El estado se persiste en `backend/data/state.json`. Usa **Configuración → Restablecer demo** para volver al seed inicial.
+Por defecto el estado se persiste en archivos JSON (`backend/data/state.json`, uno por empresa). Usa **Configuración → Restablecer demo** para volver al seed inicial.
+
+Con `DATABASE_URL` el estado de cada empresa vive en **PostgreSQL** (una fila JSONB por empresa, escritura con bloqueo de fila y copia diaria en `app_state_backup`):
+
+```sh
+cd backend
+DATABASE_URL=postgres://user:pass@host:5432/opticlean npm run migrate:pg -- --dry-run   # ver qué se copiaría
+DATABASE_URL=… npm run migrate:pg                                                       # copia los JSON existentes
+```
+
+Usuarios (`users.json`) y empresas/menú (`admin.db`) siguen en archivos de `OPTICLEAN_DATA_DIR`.
+
+## Facturación: RUC
+
+El RUC se valida con su dígito verificador en producción (`NODE_ENV=production`) o con `OPTICLEAN_STRICT_RUC=1`. En desarrollo basta con 13 dígitos para no bloquear los datos demo.
 
 ## Pruebas de negocio
 
 ```sh
 cd backend
-npm test
+npm test            # dominio + API HTTP (permisos por rol, multiempresa, endpoints)
+TEST_DATABASE_URL=postgres://… npm run test:pg   # repositorio PostgreSQL (base desechable)
 ```

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.resolve(__dirname, '../../../../data');
+const DATA_DIR = process.env.OPTICLEAN_DATA_DIR?.trim() || path.resolve(__dirname, '../../../../data');
 const DB_PATH = path.join(DATA_DIR, 'admin.db');
 
 let db: DatabaseSync | null = null;

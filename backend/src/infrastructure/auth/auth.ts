@@ -66,7 +66,7 @@ declare global {
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.resolve(__dirname, '../../../../data');
+const DATA_DIR = process.env.OPTICLEAN_DATA_DIR?.trim() || path.resolve(__dirname, '../../../../data');
 const USERS_PATH = path.join(DATA_DIR, 'users.json');
 
 /** Ruta del archivo de usuarios (para respaldos). */

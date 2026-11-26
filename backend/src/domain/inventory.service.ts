@@ -427,6 +427,51 @@ export function createOrder(
   return o;
 }
 
+/**
+ * Edita un pedido que aún no se prepara. Se retira de la lista, se valida de nuevo
+ * (stock, cupo, cartera) como si fuera nuevo y se conserva número, fecha y origen.
+ */
+export function editOrder(
+  s: AppState,
+  orderId: string,
+  data: { clientId?: string; lines?: OrderLine[]; kits?: OrderKit[]; priority?: string; notes?: string },
+) {
+  const index = s.orders.findIndex((o) => o.id === orderId);
+  if (index < 0) throw new Error('Pedido no encontrado.');
+  const old = s.orders[index];
+  if (old.status !== 'Por preparar') {
+    throw new Error('Solo se edita un pedido que todavía no se prepara. Cancélalo y crea uno nuevo.');
+  }
+  if (old.assignedToUserId) throw new Error('Quita la asignación del bodeguero antes de editar el pedido.');
+  if (s.invoices?.some((invoice) => invoice.orderId === orderId && invoice.status === 'Emitida')) {
+    throw new Error('El pedido tiene factura emitida. Emite una nota de crédito.');
+  }
+  s.orders.splice(index, 1);
+  try {
+    const next = createOrder(s, {
+      clientId: data.clientId ?? old.clientId,
+      lines: (data.lines ?? old.lines).map((l) => ({ productId: l.productId, qty: Number(l.qty) })),
+      kits: data.kits ?? old.kits,
+      priority: data.priority ?? old.priority,
+      notes: data.notes ?? old.notes,
+      channel: old.channel,
+    });
+    s.orders.shift();
+    Object.assign(old, {
+      clientId: next.clientId,
+      lines: next.lines,
+      kits: next.kits,
+      priority: next.priority,
+      notes: next.notes,
+    });
+    s.orders.splice(index, 0, old);
+    return old;
+  } catch (e) {
+    s.orders.splice(index, 0, old);
+    throw e;
+  }
+}
+
 export type PickPlanLine = Lot & { qty: number };
 
 /** Fecha de entrada: receivedAt → recepción del lote → caducidad como último recurso. */

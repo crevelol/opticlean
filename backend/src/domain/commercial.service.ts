@@ -1,3 +1,4 @@
+import { isValidEcuadorRuc, strictRucEnabled } from './ruc.js';
 import type {
   AdjustmentKind,
   AppState,
@@ -144,6 +145,9 @@ export function issueInvoice(s: AppState, orderId: string) {
   const buyer = client(s, order.clientId);
   if (!buyer?.taxId || !/^\d{13}$/.test(buyer.taxId)) {
     throw new Error('El cliente necesita un RUC de 13 dígitos para facturar.');
+  }
+  if (strictRucEnabled() && !isValidEcuadorRuc(buyer.taxId)) {
+    throw new Error('El RUC del cliente no es válido: corrígelo antes de facturar.');
   }
   for (const line of order.lines) assertSanitary(s, line.productId);
   const pool = (order.picks ?? []).map((pick) => ({ ...pick }));
