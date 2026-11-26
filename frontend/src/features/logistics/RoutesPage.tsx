@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
 import { client, orderWeight, product } from '../../shared/lib/inventory';
-import { Badge, Btn, PageHead, Button } from '../../shared/components/ui';
+import { Badge, Btn, Empty, PageHead, Button } from '../../shared/components/ui';
 import { SegmentedControl } from '../../shared/components/Tabs';
 import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
@@ -29,6 +29,7 @@ export function RoutesPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [fleet, setFleet] = useState<Truck[]>([]);
+  const [fleetReady, setFleetReady] = useState(false);
   const initialTruck =
     (location.state as { truckId?: string } | null)?.truckId ??
     new URLSearchParams(location.search).get('truck') ??
@@ -47,7 +48,8 @@ export function RoutesPage() {
       })
       .catch(() => {
         setFleet([]);
-      });
+      })
+      .finally(() => setFleetReady(true));
   }, []);
 
   const [stopId, setStopId] = useState<string | null>(null);
@@ -66,7 +68,42 @@ export function RoutesPage() {
     [state, truck, today],
   );
 
-  if (!state || !truck) return null;
+  if (!state) return null;
+
+  if (fleetReady && !fleet.length) {
+    return (
+      <div className="log-page log-routes-page">
+        <PageHead
+          eyebrow="Operativo"
+          title="Mi ruta"
+          desc="Paradas del día, mapa y confirmación real de entregas."
+          actions={
+            <Btn icon="truck" onClick={() => navigate('/logistica')}>
+              Distribución
+            </Btn>
+          }
+        />
+        <Empty
+          title="Sin vehículos en flota"
+          desc="Agrega al menos un camión en Logística → Gestión de flota para ver y operar la ruta del día."
+          action={
+            <Btn variant="primary" icon="plus" onClick={() => navigate('/logistica')}>
+              Ir a flota
+            </Btn>
+          }
+        />
+      </div>
+    );
+  }
+
+  if (!truck) {
+    return (
+      <div className="log-page log-routes-page">
+        <PageHead eyebrow="Operativo" title="Mi ruta" desc="Cargando vehículos…" />
+        <p className="log-empty">Cargando flota…</p>
+      </div>
+    );
+  }
 
   const stops = [...pendingStops, ...doneStops];
   const allActive = activeOrders(state);
