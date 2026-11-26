@@ -1,5 +1,6 @@
 import type { AppState, Product, WarehouseFamily } from './types.js';
 
+/** Plantilla solo para el seed de demostración (Innova MF demo). */
 export const defaultFamilies = (): WarehouseFamily[] => [
   {
     id: 'FAM-HOG',
@@ -53,8 +54,10 @@ export const defaultFamilies = (): WarehouseFamily[] => [
   },
 ];
 
+/** Familia del producto: asignación directa o por línea. Opcional. */
 export function familyOf(s: AppState, product: Product): WarehouseFamily | undefined {
-  const families = s.families?.length ? s.families : defaultFamilies();
+  const families = s.families ?? [];
+  if (!families.length) return undefined;
   if (product.familyId) {
     const byId = families.find((f) => f.id === product.familyId);
     if (byId) return byId;
@@ -66,24 +69,18 @@ export function validateFamily(f: WarehouseFamily) {
   if (!f.id?.trim() || !f.code?.trim() || !f.name?.trim()) {
     throw new Error('Cada familia necesita código, id y nombre.');
   }
-  if (!Array.isArray(f.productCategories) || !f.productCategories.length) {
-    throw new Error('Asigna al menos una línea de producto a la familia.');
-  }
-  if (!Array.isArray(f.rackIds) || !f.rackIds.length) {
-    throw new Error('Asigna al menos un rack a la familia.');
-  }
 }
 
 export function upsertFamily(s: AppState, family: WarehouseFamily) {
   validateFamily(family);
-  if (!s.families) s.families = defaultFamilies();
+  if (!s.families) s.families = [];
   const normalized: WarehouseFamily = {
     ...family,
     id: family.id.trim().toUpperCase(),
     code: family.code.trim().toUpperCase(),
     name: family.name.trim(),
-    productCategories: [...new Set(family.productCategories.map((c) => c.trim()).filter(Boolean))],
-    rackIds: [...new Set(family.rackIds.map((r) => r.trim().toUpperCase()).filter(Boolean))],
+    productCategories: [...new Set((family.productCategories ?? []).map((c) => c.trim()).filter(Boolean))],
+    rackIds: [...new Set((family.rackIds ?? []).map((r) => r.trim().toUpperCase()).filter(Boolean))],
     fragilePreferred: !!family.fragilePreferred,
     color: family.color || '#467fc2',
     notes: family.notes?.trim() || undefined,
@@ -102,8 +99,7 @@ export function deleteFamily(s: AppState, id: string) {
   s.families = s.families.filter((f) => f.id !== id);
 }
 
+/** Solo garantiza el arreglo; no inyecta familias de demostración. */
 export function ensureFamilies(s: AppState) {
-  if (!Array.isArray(s.families) || !s.families.length) {
-    s.families = defaultFamilies();
-  }
+  if (!Array.isArray(s.families)) s.families = [];
 }

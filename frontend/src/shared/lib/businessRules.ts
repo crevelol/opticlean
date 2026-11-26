@@ -1,4 +1,4 @@
-import type { BusinessRules, Settings } from '../types';
+import type { BusinessRules, Settings, ShippingCostTemplate } from '../types';
 
 export const DEFAULT_BUSINESS_RULES: BusinessRules = {
   shippingMinKm: 8,
@@ -15,14 +15,87 @@ export const DEFAULT_BUSINESS_RULES: BusinessRules = {
   separateExpiryLots: true,
 };
 
+export type ShippingParams = Pick<
+  BusinessRules,
+  'shippingMinKm' | 'shippingStopsDivisor' | 'shippingEtaBaseFactor' | 'shippingEtaPerStop'
+>;
+
+function newTemplateId() {
+  return `ship-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function normalizeTemplate(
+  raw: Partial<ShippingCostTemplate> | null | undefined,
+  fallback: ShippingParams,
+): ShippingCostTemplate {
+  const name = String(raw?.name ?? '').trim() || 'Estándar';
+  return {
+    id: String(raw?.id ?? '').trim() || newTemplateId(),
+    name,
+    shippingMinKm: Math.max(0, Number(raw?.shippingMinKm ?? fallback.shippingMinKm) || 0),
+    shippingStopsDivisor: Math.max(1, Number(raw?.shippingStopsDivisor ?? fallback.shippingStopsDivisor) || 1),
+    shippingEtaBaseFactor: Math.max(0, Number(raw?.shippingEtaBaseFactor ?? fallback.shippingEtaBaseFactor) || 0),
+    shippingEtaPerStop: Math.max(0, Number(raw?.shippingEtaPerStop ?? fallback.shippingEtaPerStop) || 0),
+  };
+}
+
+/** Garantiza al menos una plantilla (migra desde businessRules.shipping*). */
+export function ensureShippingTemplates(settings?: Settings | null): {
+  templates: ShippingCostTemplate[];
+  defaultId: string;
+} {
+  const rules = { ...DEFAULT_BUSINESS_RULES, ...(settings?.businessRules ?? {}) };
+  const fallback: ShippingParams = {
+    shippingMinKm: rules.shippingMinKm,
+    shippingStopsDivisor: rules.shippingStopsDivisor,
+    shippingEtaBaseFactor: rules.shippingEtaBaseFactor,
+    shippingEtaPerStop: rules.shippingEtaPerStop,
+  };
+  const raw = settings?.shippingTemplates;
+  const templates =
+    Array.isArray(raw) && raw.length
+      ? raw.map((t) => normalizeTemplate(t, fallback))
+      : [normalizeTemplate({ id: 'ship-default', name: 'Estándar', ...fallback }, fallback)];
+  const preferred = String(settings?.defaultShippingTemplateId ?? '').trim();
+  const defaultId = templates.some((t) => t.id === preferred) ? preferred : templates[0].id;
+  return { templates, defaultId };
+}
+
+export function createShippingTemplate(
+  name: string,
+  params: ShippingParams = DEFAULT_BUSINESS_RULES,
+): ShippingCostTemplate {
+  return normalizeTemplate({ name, ...params }, params);
+}
+
+export function resolveShippingParams(
+  settings?: Settings | null,
+  templateId?: string | null,
+): ShippingParams {
+  const { templates, defaultId } = ensureShippingTemplates(settings);
+  const wanted = String(templateId ?? '').trim();
+  const t =
+    (wanted ? templates.find((x) => x.id === wanted) : undefined) ??
+    templates.find((x) => x.id === defaultId) ??
+    templates[0];
+  return {
+    shippingMinKm: t.shippingMinKm,
+    shippingStopsDivisor: t.shippingStopsDivisor,
+    shippingEtaBaseFactor: t.shippingEtaBaseFactor,
+    shippingEtaPerStop: t.shippingEtaPerStop,
+  };
+}
+
 export function resolveBusinessRules(settings?: Settings | null): BusinessRules {
-  return { ...DEFAULT_BUSINESS_RULES, ...(settings?.businessRules ?? {}) };
+  const base = { ...DEFAULT_BUSINESS_RULES, ...(settings?.businessRules ?? {}) };
+  const shipping = resolveShippingParams(settings);
+  return { ...base, ...shipping };
 }
 
 export function estimateRouteKm(
   baseRouteKm: number,
   stops: number,
-  rules: BusinessRules = DEFAULT_BUSINESS_RULES,
+  rules: ShippingParams = DEFAULT_BUSINESS_RULES,
 ) {
   const divisor = Math.max(1, rules.shippingStopsDivisor);
   const n = Math.max(1, stops);
@@ -36,7 +109,7 @@ export function estimateRouteCost(km: number, costPerKm: number, costPerTrip = 0
 export function estimateRouteEtaHours(
   baseEtaHours: number,
   stops: number,
-  rules: BusinessRules = DEFAULT_BUSINESS_RULES,
+  rules: ShippingParams = DEFAULT_BUSINESS_RULES,
 ) {
   return (
     Math.round(

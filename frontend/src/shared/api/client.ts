@@ -1,5 +1,11 @@
 import type { AppState, Location, Meta, Metrics, PlanAction } from '../types';
-import { clearSession, getToken, type AuthUser } from '../auth/session';
+import {
+  clearSession,
+  getRefreshToken,
+  getToken,
+  setSession,
+  type AuthUser,
+} from '../auth/session';
 
 type StateResponse = { state: AppState; metrics: Metrics };
 
@@ -14,7 +20,43 @@ export type ManagedUser = {
   isDemo: boolean;
 };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+type SessionResponse = {
+  token: string;
+  accessToken?: string;
+  refreshToken?: string;
+  user: AuthUser;
+  expiresIn?: number;
+  refreshExpiresIn?: number;
+};
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function tryRefreshSession(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const res = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+        const data = (await res.json().catch(() => ({}))) as SessionResponse & { error?: string };
+        if (!res.ok || !data.token || !data.user) return false;
+        setSession(data.accessToken || data.token, data.user, data.refreshToken || refreshToken);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+  }
+  return refreshInFlight;
+}
+
+async function request<T>(path: string, init?: RequestInit, retried = false): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(init?.headers as Record<string, string> | undefined),
@@ -28,6 +70,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && !path.startsWith('/api/auth/') && !path.startsWith('/api/public/')) {
+    if (!retried) {
+      const ok = await tryRefreshSession();
+      if (ok) return request<T>(path, init, true);
+    }
     clearSession();
     if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
       window.location.assign('/login');
@@ -58,17 +104,42 @@ export async function downloadReport(kind: 'traceability' | 'diagnostics', forma
 
 export const api = {
   login: (email: string, password: string) =>
-    request<{ token: string; user: AuthUser }>('/api/auth/login', {
+    request<SessionResponse>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
   signup: (body: { companyName: string; name: string; email: string; password: string }) =>
-    request<{ token: string; user: AuthUser; company: { id: string; name: string } }>('/api/auth/signup', {
+    request<SessionResponse & { company: { id: string; name: string } }>('/api/auth/signup', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  refresh: (refreshToken: string) =>
+    request<SessionResponse>('/api/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken }),
+    }),
+  logout: (refreshToken?: string) =>
+    request<{ ok: boolean }>('/api/auth/logout', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken }),
+    }),
   publicConfig: () => request<{ signupEnabled: boolean }>('/api/public/config'),
   me: () => request<{ user: AuthUser }>('/api/auth/me'),
+  forgotPassword: (email: string) =>
+    request<{ ok: boolean; message: string; resetUrl?: string }>('/api/auth/password/forgot', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+  resetPassword: (token: string, newPassword: string) =>
+    request<{ ok: boolean; message: string }>('/api/auth/password/reset', {
+      method: 'POST',
+      body: JSON.stringify({ token, newPassword }),
+    }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: boolean; message: string }>('/api/auth/password/change', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
   getMeta: () => request<Meta>('/api/meta'),
   getState: () => request<StateResponse>('/api/state'),
   reset: () => request<StateResponse>('/api/state/reset', { method: 'POST' }),
@@ -208,7 +279,12 @@ export const api = {
       method: 'DELETE',
     }),
   dispatch: (orderIds: string[], vehicle?: string) =>
-    request<StateResponse>('/api/dispatch', {
+    request<
+      StateResponse & {
+        km?: { added: number; odometerKm: number; plate: string } | null;
+        trucks?: Array<Record<string, unknown>>;
+      }
+    >('/api/dispatch', {
       method: 'POST',
       body: JSON.stringify({ orderIds, vehicle }),
     }),
@@ -393,10 +469,16 @@ export const api = {
         route_km: number;
         allowed_sectors?: string;
         allowed_sectors_list?: string[];
+        shipping_template_id?: string;
         active: number;
         sort_order: number;
       }>;
     }>('/api/fleet/manage'),
+  applyShippingTemplateToFleet: (body: { templateId: string; vehicleIds?: string[] }) =>
+    request<{ updated: number; trucks: Array<Record<string, unknown>> }>(
+      '/api/fleet/shipping-template',
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
   createFleetVehicle: (body: {
     plate: string;
     label: string;
@@ -409,6 +491,7 @@ export const api = {
     etaHours?: number;
     routeKm?: number;
     allowedSectors?: string[];
+    shippingTemplateId?: string | null;
   }) =>
     request<{
       vehicle: Record<string, unknown>;
@@ -443,6 +526,7 @@ export const api = {
       etaHours: number;
       routeKm: number;
       allowedSectors: string[];
+      shippingTemplateId: string | null;
       active: boolean;
     }>,
   ) =>
@@ -562,6 +646,35 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ replace }),
     }),
+  vehicleKmLogs: (vehicleId: string) =>
+    request<{
+      vehicleId: string;
+      plate: string;
+      odometerKm: number;
+      logs: Array<{
+        id: string;
+        km: number;
+        stops: number;
+        source: string;
+        note: string;
+        odometerAfter: number;
+        createdAt: string;
+      }>;
+    }>(`/api/fleet/${encodeURIComponent(vehicleId)}/km`),
+  recordVehicleKm: (vehicleId: string, body: { km: number; note?: string; stops?: number }) =>
+    request<{
+      vehicle: Record<string, unknown>;
+      log: { km: number; odometerAfter: number };
+      trucks: Array<Record<string, unknown>>;
+    }>(`/api/fleet/${encodeURIComponent(vehicleId)}/km`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  setVehicleOdometer: (vehicleId: string, body: { odometerKm: number; note?: string }) =>
+    request<{ vehicle: Record<string, unknown>; trucks: Array<Record<string, unknown>> }>(
+      `/api/fleet/${encodeURIComponent(vehicleId)}/odometer`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
   logisticsAutoAssign: (body: {
     orderIds?: string[];
     stagedByTruck?: Record<string, string[]>;

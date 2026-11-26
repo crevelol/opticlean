@@ -3,6 +3,8 @@ import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
 import {
   DEFAULT_BUSINESS_RULES,
+  createShippingTemplate,
+  ensureShippingTemplates,
   estimateRouteCost,
   estimateRouteEtaHours,
   estimateRouteKm,
@@ -11,7 +13,7 @@ import {
 import { money } from '../../shared/lib/inventory';
 import { Btn, PageHead } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
-import type { BusinessRules } from '../../shared/types';
+import type { BusinessRules, ShippingCostTemplate } from '../../shared/types';
 import '../../styles/business-rules.css';
 
 type Draft = BusinessRules;
@@ -31,18 +33,32 @@ export function BusinessRulesPage() {
   const [previewEta, setPreviewEta] = useState(3.33);
 
   const rules = resolveBusinessRules(state?.settings);
+  const ensured = ensureShippingTemplates(state?.settings);
   const [draft, setDraft] = useState<Draft>(rules);
+  const [templates, setTemplates] = useState<ShippingCostTemplate[]>(ensured.templates);
+  const [defaultTplId, setDefaultTplId] = useState(ensured.defaultId);
+  const [selectedTplId, setSelectedTplId] = useState(ensured.defaultId);
 
   useEffect(() => {
-    setDraft(resolveBusinessRules(state?.settings));
-  }, [state?.settings.businessRules]);
+    const nextRules = resolveBusinessRules(state?.settings);
+    const nextTpl = ensureShippingTemplates(state?.settings);
+    setDraft(nextRules);
+    setTemplates(nextTpl.templates);
+    setDefaultTplId(nextTpl.defaultId);
+    setSelectedTplId((prev) =>
+      nextTpl.templates.some((t) => t.id === prev) ? prev : nextTpl.defaultId,
+    );
+  }, [state?.settings]);
+
+  const selectedTpl =
+    templates.find((t) => t.id === selectedTplId) ?? templates[0] ?? createShippingTemplate('Estándar');
 
   const preview = useMemo(() => {
-    const km = estimateRouteKm(previewRouteKm, previewStops, draft);
+    const km = estimateRouteKm(previewRouteKm, previewStops, selectedTpl);
     const cost = estimateRouteCost(km, previewCostPerKm);
-    const eta = estimateRouteEtaHours(previewEta, previewStops, draft);
+    const eta = estimateRouteEtaHours(previewEta, previewStops, selectedTpl);
     return { km, cost, eta };
-  }, [draft, previewStops, previewRouteKm, previewCostPerKm, previewEta]);
+  }, [selectedTpl, previewStops, previewRouteKm, previewCostPerKm, previewEta]);
 
   if (!state) return null;
 
@@ -54,17 +70,58 @@ export function BusinessRulesPage() {
     setDraft((d) => ({ ...d, [key]: value }));
   };
 
+  const patchSelectedTpl = (patch: Partial<ShippingCostTemplate>) => {
+    setTemplates((list) =>
+      list.map((t) => (t.id === selectedTpl.id ? { ...t, ...patch } : t)),
+    );
+  };
+
+  const addTemplate = () => {
+    const base = selectedTpl;
+    const tpl = createShippingTemplate(`Plantilla ${templates.length + 1}`, base);
+    setTemplates((list) => [...list, tpl]);
+    setSelectedTplId(tpl.id);
+  };
+
+  const removeTemplate = () => {
+    if (templates.length <= 1) {
+      setError('Debe quedar al menos una plantilla.');
+      return;
+    }
+    if (!window.confirm(`¿Eliminar la plantilla «${selectedTpl.name}»?`)) return;
+    const next = templates.filter((t) => t.id !== selectedTpl.id);
+    setTemplates(next);
+    const nextDefault = defaultTplId === selectedTpl.id ? next[0].id : defaultTplId;
+    setDefaultTplId(nextDefault);
+    setSelectedTplId(next[0].id);
+  };
+
   const save = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (busy) return;
     setBusy(true);
     setError('');
     const data = new FormData(e.currentTarget);
+    const cleaned = templates.map((t) => ({
+      ...t,
+      name: t.name.trim() || 'Sin nombre',
+      shippingMinKm: Math.max(0, t.shippingMinKm),
+      shippingStopsDivisor: Math.max(1, t.shippingStopsDivisor),
+      shippingEtaBaseFactor: Math.max(0, t.shippingEtaBaseFactor),
+      shippingEtaPerStop: Math.max(0, t.shippingEtaPerStop),
+    }));
+    if (!cleaned.length) {
+      setError('Agrega al menos una plantilla de costo de envío.');
+      setBusy(false);
+      return;
+    }
+    const defId = cleaned.some((t) => t.id === defaultTplId) ? defaultTplId : cleaned[0].id;
+    const def = cleaned.find((t) => t.id === defId) ?? cleaned[0];
     const next: BusinessRules = {
-      shippingMinKm: Math.max(0, num(data.get('shippingMinKm'), draft.shippingMinKm)),
-      shippingStopsDivisor: Math.max(1, num(data.get('shippingStopsDivisor'), draft.shippingStopsDivisor)),
-      shippingEtaBaseFactor: Math.max(0, num(data.get('shippingEtaBaseFactor'), draft.shippingEtaBaseFactor)),
-      shippingEtaPerStop: Math.max(0, num(data.get('shippingEtaPerStop'), draft.shippingEtaPerStop)),
+      shippingMinKm: def.shippingMinKm,
+      shippingStopsDivisor: def.shippingStopsDivisor,
+      shippingEtaBaseFactor: def.shippingEtaBaseFactor,
+      shippingEtaPerStop: def.shippingEtaPerStop,
       assignCostReference: num(data.get('assignCostReference'), draft.assignCostReference),
       assignCostWeight: Math.max(0, num(data.get('assignCostWeight'), draft.assignCostWeight)),
       assignIdealFillMax: Math.min(1, Math.max(0.1, num(data.get('assignIdealFillMax'), draft.assignIdealFillMax))),
@@ -85,9 +142,12 @@ export function BusinessRulesPage() {
       return;
     }
     try {
-      const res = await api.updateSettings({ businessRules: next });
+      const res = await api.updateSettings({
+        businessRules: next,
+        shippingTemplates: cleaned,
+        defaultShippingTemplateId: defId,
+      });
       applyResponse(res);
-      setDraft(resolveBusinessRules(res.state.settings));
       toast('Reglas de negocio guardadas.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo guardar');
@@ -96,7 +156,52 @@ export function BusinessRulesPage() {
     }
   };
 
+  const applyToFleet = async () => {
+    if (busy) return;
+    if (
+      !window.confirm(
+        `¿Asignar la plantilla «${selectedTpl.name}» a todos los vehículos de la flota?`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      // Guarda primero para que la plantilla exista en settings
+      const cleaned = templates.map((t) => ({
+        ...t,
+        name: t.name.trim() || 'Sin nombre',
+      }));
+      const defId = cleaned.some((t) => t.id === defaultTplId) ? defaultTplId : cleaned[0].id;
+      const def = cleaned.find((t) => t.id === defId) ?? cleaned[0];
+      const res = await api.updateSettings({
+        businessRules: {
+          ...draft,
+          shippingMinKm: def.shippingMinKm,
+          shippingStopsDivisor: def.shippingStopsDivisor,
+          shippingEtaBaseFactor: def.shippingEtaBaseFactor,
+          shippingEtaPerStop: def.shippingEtaPerStop,
+        },
+        shippingTemplates: cleaned,
+        defaultShippingTemplateId: defId,
+      });
+      applyResponse(res);
+      const applied = await api.applyShippingTemplateToFleet({ templateId: selectedTpl.id });
+      toast(`Plantilla aplicada a ${applied.updated} vehículo(s).`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo aplicar a la flota');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const restoreDefaults = () => {
+    const tpl = createShippingTemplate('Estándar', DEFAULT_BUSINESS_RULES);
+    tpl.id = 'ship-default';
+    setTemplates([tpl]);
+    setDefaultTplId(tpl.id);
+    setSelectedTplId(tpl.id);
     setDraft({ ...DEFAULT_BUSINESS_RULES });
     toast('Valores por defecto cargados. Guarda para aplicarlos.');
   };
@@ -120,63 +225,111 @@ export function BusinessRulesPage() {
             <header className="br-card-head">
               <Icon name="truck" />
               <div>
-                <h2>Costo de envío</h2>
+                <h2>Costo de envío · plantillas</h2>
                 <p>
-                  Fórmula: <code>km = max(mínimo, round(rutaBase × paradas / max(divisor, paradas)))</code>
-                  {' · '}
-                  <code>costo = km × $/km del vehículo</code>
+                  Crea plantillas con la fórmula de km/ETA y asígnalas a la flota. El{' '}
+                  <strong>$/km</strong> sigue configurándose por vehículo.
                 </p>
               </div>
             </header>
+
+            <div className="br-tpl-bar">
+              <div className="br-tpl-list" role="list">
+                {templates.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="listitem"
+                    className={`br-tpl-chip${t.id === selectedTpl.id ? ' is-on' : ''}`}
+                    onClick={() => setSelectedTplId(t.id)}
+                  >
+                    {t.name}
+                    {t.id === defaultTplId ? <em>default</em> : null}
+                  </button>
+                ))}
+              </div>
+              <div className="br-tpl-actions">
+                <Btn type="button" icon="plus" onClick={addTemplate}>
+                  Nueva
+                </Btn>
+                <Btn type="button" onClick={() => setDefaultTplId(selectedTpl.id)}>
+                  Marcar default
+                </Btn>
+                <Btn type="button" onClick={() => void applyToFleet()} disabled={busy}>
+                  Aplicar a flota
+                </Btn>
+                <Btn type="button" onClick={removeTemplate} disabled={templates.length <= 1}>
+                  Eliminar
+                </Btn>
+              </div>
+            </div>
+
+            <p className="br-formula">
+              Fórmula:{' '}
+              <code>km = max(mínimo, round(rutaBase × paradas / max(divisor, paradas)))</code>
+              {' · '}
+              <code>costo = km × $/km del vehículo</code>
+            </p>
+
             <div className="br-grid">
+              <label className="field">
+                <span>Nombre de la plantilla</span>
+                <input
+                  type="text"
+                  value={selectedTpl.name}
+                  onChange={(e) => patchSelectedTpl({ name: e.target.value })}
+                  required
+                />
+              </label>
               <label className="field">
                 <span>Km mínimos por ruta</span>
                 <input
-                  name="shippingMinKm"
                   type="number"
                   min={0}
                   step={1}
-                  value={draft.shippingMinKm}
-                  onChange={(e) => setField('shippingMinKm', Number(e.target.value))}
+                  value={selectedTpl.shippingMinKm}
+                  onChange={(e) => patchSelectedTpl({ shippingMinKm: Number(e.target.value) })}
                 />
               </label>
               <label className="field">
                 <span>Divisor de paradas</span>
                 <input
-                  name="shippingStopsDivisor"
                   type="number"
                   min={1}
                   step={1}
-                  value={draft.shippingStopsDivisor}
-                  onChange={(e) => setField('shippingStopsDivisor', Number(e.target.value))}
+                  value={selectedTpl.shippingStopsDivisor}
+                  onChange={(e) =>
+                    patchSelectedTpl({ shippingStopsDivisor: Number(e.target.value) })
+                  }
                 />
               </label>
               <label className="field">
                 <span>Factor base ETA</span>
                 <input
-                  name="shippingEtaBaseFactor"
                   type="number"
                   min={0}
                   step={0.01}
-                  value={draft.shippingEtaBaseFactor}
-                  onChange={(e) => setField('shippingEtaBaseFactor', Number(e.target.value))}
+                  value={selectedTpl.shippingEtaBaseFactor}
+                  onChange={(e) =>
+                    patchSelectedTpl({ shippingEtaBaseFactor: Number(e.target.value) })
+                  }
                 />
               </label>
               <label className="field">
                 <span>ETA extra por parada</span>
                 <input
-                  name="shippingEtaPerStop"
                   type="number"
                   min={0}
                   step={0.01}
-                  value={draft.shippingEtaPerStop}
-                  onChange={(e) => setField('shippingEtaPerStop', Number(e.target.value))}
+                  value={selectedTpl.shippingEtaPerStop}
+                  onChange={(e) => patchSelectedTpl({ shippingEtaPerStop: Number(e.target.value) })}
                 />
               </label>
             </div>
             <p className="br-note">
-              El <strong>$/km</strong> se configura por vehículo en Logística → flota. Aquí defines cómo se
-              estiman km, costo y tiempo de la ruta.
+              La plantilla <strong>default</strong> se usa cuando un vehículo no tiene una asignada.
+              En Logística → flota puedes elegir la plantilla por camión, o usar «Aplicar a flota»
+              aquí.
             </p>
           </section>
 
@@ -186,8 +339,8 @@ export function BusinessRulesPage() {
               <div>
                 <h2>Asignación automática de flota</h2>
                 <p>
-                  Score de costo: <code>(referencia − $/km) × peso</code>. También umbrales de ocupación
-                  al preferir camiones.
+                  Score de costo: <code>(referencia − $/km) × peso</code>. También umbrales de
+                  ocupación al preferir camiones.
                 </p>
               </div>
             </header>
@@ -308,8 +461,8 @@ export function BusinessRulesPage() {
 
         <aside className="br-side">
           <section className="br-card">
-            <h3>Simulador de costo</h3>
-            <p className="br-side-desc">Prueba la fórmula con los valores actuales del formulario.</p>
+            <h3>Simulador · {selectedTpl.name}</h3>
+            <p className="br-side-desc">Prueba la fórmula con la plantilla seleccionada.</p>
             <label className="field">
               <span>Paradas</span>
               <input
@@ -365,19 +518,16 @@ export function BusinessRulesPage() {
           </section>
 
           <section className="br-card br-help">
-            <h3>Otras reglas ya en la app</h3>
+            <h3>Cómo usarlo en flota</h3>
             <ul>
               <li>
-                <strong>Flota:</strong> capacidad kg/m³, sectores permitidos y $/km por vehículo (Logística).
+                <strong>Aquí:</strong> defines plantillas (urbana, larga distancia, etc.).
               </li>
               <li>
-                <strong>Stock mínimo:</strong> alerta por producto en Inventario.
+                <strong>Flota:</strong> cada vehículo elige una plantilla, o usas «Aplicar a flota».
               </li>
               <li>
-                <strong>Familias de bodega:</strong> reglas de ubicación en Familias.
-              </li>
-              <li>
-                <strong>Prioridad de pedido:</strong> Normal / Alta al crear el pedido.
+                <strong>$/km:</strong> se configura por vehículo (Costo real / ficha).
               </li>
             </ul>
           </section>

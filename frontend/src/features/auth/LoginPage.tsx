@@ -171,6 +171,9 @@ export function LoginPage() {
           </Button>
 
           <p className="login-hint">
+            <Link to="/olvide-contrasena">¿Olvidaste tu contraseña?</Link>
+          </p>
+          <p className="login-hint">
             Panel: <code>admin@innovamf.com</code> · Piso: <code>ops@innovamf.com</code>
           </p>
           {signupEnabled ? (

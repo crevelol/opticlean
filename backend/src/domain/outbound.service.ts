@@ -87,6 +87,7 @@ export function createQuote(
     validUntil?: string;
     channel?: string;
     note?: string;
+    discount?: number | string;
     lines?: Array<{ productId?: string; qty?: number | string; unitPrice?: number | string }>;
   },
 ) {
@@ -107,6 +108,12 @@ export function createQuote(
     return { productId: item.id, qty, unitPrice: Math.round(unitPrice * 100) / 100 };
   });
   if (!lines.length) throw new Error('La cotización necesita al menos un producto.');
+  const subtotal = lines.reduce((n, line) => n + line.qty * line.unitPrice, 0);
+  const rawDiscount = Number(body.discount ?? 0);
+  const discount =
+    Number.isFinite(rawDiscount) && rawDiscount > 0
+      ? Math.round(Math.min(rawDiscount, subtotal) * 100) / 100
+      : 0;
   const quote: CustomerQuote = {
     id: nextNumber(s.quotes!.map((item) => item.id), 'COT-', 4),
     number: '',
@@ -116,6 +123,7 @@ export function createQuote(
     status: 'Abierta',
     channel: channelOf(body.channel),
     lines,
+    ...(discount > 0 ? { discount } : {}),
     note: body.note?.trim() || undefined,
   };
   quote.number = quote.id;

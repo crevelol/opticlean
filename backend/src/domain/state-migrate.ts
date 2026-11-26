@@ -10,7 +10,11 @@ import { ensureCommercial } from './commercial.service.js';
 import { ensureOutbound } from './outbound.service.js';
 import { linkOpeningReceipts } from './opening-stock.js';
 import type { AppState } from './types.js';
-import { mergeBusinessRules } from './business-rules.js';
+import {
+  applyShippingTemplatesToSettings,
+  ensureShippingTemplates,
+  mergeBusinessRules,
+} from './business-rules.js';
 import { DEFAULT_WAREHOUSE_ID, syncSettingsWarehouseLabel } from './warehouse-admin.service.js';
 import {
   DEFAULT_LAYOUT,
@@ -193,6 +197,14 @@ export function migrateState(raw: AppState): AppState {
   }
 
   base.settings.businessRules = mergeBusinessRules(base.settings.businessRules, undefined);
+  {
+    const ensured = ensureShippingTemplates(base.settings);
+    base.settings = applyShippingTemplatesToSettings(
+      base.settings,
+      ensured.templates,
+      ensured.defaultId,
+    );
+  }
   ensureCommercial(base);
 
   if (isDemo) {

@@ -25,6 +25,7 @@ export function DashboardPage() {
   const [whFilter, setWhFilter] = useState('all');
   const [whBusy, setWhBusy] = useState(false);
   const [bodegueroCount, setBodegueroCount] = useState(0);
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const forecast = useMemo(() => (state ? buildForecast(state) : null), [state]);
 
   useEffect(() => {
@@ -109,6 +110,12 @@ export function DashboardPage() {
     flete: 'Camión',
     compra: 'Compra',
   };
+  const periodLabel = new Date().toLocaleDateString('es-EC', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'America/Guayaquil',
+  });
 
   const onWarehouseChange = async (value: string) => {
     if (whBusy) return;
@@ -138,7 +145,7 @@ export function DashboardPage() {
       <PageHead
         eyebrow="Panel de control"
         title="Resumen de operaciones"
-        desc="Cuánto vendiste, cuánto te costó y cuánto te quedó, antes del detalle de la bodega."
+        desc="Ventas, costos y fletes del período, con acceso rápido a la operación."
         actions={
           <>
             <Btn icon="receive" onClick={() => navigate('/recepcion/nueva')}>
@@ -149,66 +156,224 @@ export function DashboardPage() {
             </Btn>
           </>
         }
-      >
-        <label className="dash-wh">
-          <Icon name="warehouse" />
-          <Select
-            value={whFilter}
-            disabled={whBusy}
-            onChange={(e) => void onWarehouseChange(e.target.value)}
-            aria-label="Bodega"
-          >
-            <option value="all">Todas las bodegas</option>
-            {state.warehouses.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </Select>
-        </label>
-      </PageHead>
-      <section className="dash-money" aria-label="Dinero de la operación">
-        <div className={`dash-money-hero ${moneyStory.profit >= 0 ? 'is-gain' : 'is-loss'}`}>
-          <span>Te quedó</span>
-          <strong>{money(moneyStory.profit)}</strong>
-          <p>Venta neta menos el costo de esa mercadería y el flete de los camiones que ya salieron.</p>
+      />
+
+      <section className="dash-summary" aria-label="Resumen financiero">
+        <div className="dash-summary-toolbar">
+          <label className="dash-wh">
+            <Icon name="warehouse" />
+            <Select
+              value={whFilter}
+              disabled={whBusy}
+              onChange={(e) => void onWarehouseChange(e.target.value)}
+              aria-label="Bodega"
+            >
+              <option value="all">Todas las bodegas</option>
+              {state.warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <div className="dash-period" aria-label="Período">
+            <Icon name="calendar" />
+            <span>Hoy · {periodLabel}</span>
+          </div>
+          <span className="dash-currency">Valores en USD</span>
         </div>
-        <div className="dash-money-side">
-          <article>
-            <span>Vendiste</span>
+
+        <div className="dash-kpi-row">
+          <article className="dash-kpi-card">
+            <span>Ventas netas</span>
             <strong>{money(moneyStory.sold)}</strong>
-            <small>Facturas menos reclamos, sin IVA</small>
+            <small>Facturas menos reclamos · Sin IVA</small>
           </article>
-          <article>
-            <span>Te costó vender</span>
+          <article className="dash-kpi-card">
+            <span>Costo de venta</span>
             <strong>{money(moneyStory.spent)}</strong>
-            <small>Mercadería {money(moneyStory.cogs)} · flete {money(moneyStory.freight)}</small>
+            <small>
+              Mercancía {money(moneyStory.cogs)} · Fletes {money(moneyStory.freight)}
+            </small>
           </article>
-          <article>
-            <span>Te deben</span>
+          <article
+            className={`dash-kpi-card is-result ${moneyStory.profit >= 0 ? 'is-gain' : 'is-loss'}`}
+          >
+            <span>Resultado del período</span>
+            <strong>{money(moneyStory.profit)}</strong>
+            <small>Ventas − mercancía − fletes</small>
+          </article>
+          <article className="dash-kpi-card">
+            <span>Por cobrar</span>
             <strong>{money(moneyStory.receivable)}</strong>
-            <small>Por pagar a proveedores {money(moneyStory.payable)}</small>
-          </article>
-          <article>
-            <span>Compraste</span>
-            <strong>{money(moneyStory.bought)}</strong>
-            <small>Lo recibido de proveedores, aparte de la ganancia</small>
+            <small>Saldo pendiente de clientes</small>
           </article>
         </div>
-        <ul className="dash-money-lines">
-          {moneyStory.lines.length ? moneyStory.lines.slice(0, 12).map((line) => (
-            <li key={line.id}>
-              <span className={`dash-money-kind is-${line.kind}`}>{moneyKind[line.kind]}</span>
-              <span className="dash-money-copy">
-                <strong>{line.title}</strong>
-                <small>{line.detail}</small>
-              </span>
-              <em className={line.amount >= 0 ? 'is-in' : 'is-out'}>{money(line.amount)}</em>
-            </li>
-          )) : (
-            <li className="dash-money-empty">Cuando factures un pedido, aquí aparece cuánto quedó después del costo y del camión.</li>
-          )}
-        </ul>
+
+        {(moneyStory.freight > 0 || moneyStory.sold === 0) && moneyStory.routes.length ? (
+          <div className="dash-insight" role="status">
+            <Icon name="info" />
+            <p>
+              El resultado incluye {money(moneyStory.freight)} en fletes y{' '}
+              {money(moneyStory.sold)} en ventas netas.
+            </p>
+            <button type="button" onClick={() => setShowBreakdown((v) => !v)}>
+              {showBreakdown ? 'Ocultar desglose' : 'Ver desglose'}
+            </button>
+          </div>
+        ) : null}
+
+        {showBreakdown ? (
+          <ul className="dash-money-lines">
+            {moneyStory.lines.length ? (
+              moneyStory.lines.slice(0, 12).map((line) => (
+                <li key={line.id}>
+                  <span className={`dash-money-kind is-${line.kind}`}>{moneyKind[line.kind]}</span>
+                  <span className="dash-money-copy">
+                    <strong>{line.title}</strong>
+                    <small>{line.detail}</small>
+                  </span>
+                  <em className={line.amount >= 0 ? 'is-in' : 'is-out'}>{money(line.amount)}</em>
+                </li>
+              ))
+            ) : (
+              <li className="dash-money-empty">
+                Cuando factures un pedido, aquí aparece el desglose del período.
+              </li>
+            )}
+          </ul>
+        ) : null}
+
+        <div className="dash-summary-grid">
+          <section className="dash-panel dash-routes" aria-label="Costos de rutas">
+            <header>
+              <div>
+                <h2>Costos de rutas</h2>
+                <p>
+                  {moneyStory.routes.length} vehículo
+                  {moneyStory.routes.length === 1 ? '' : 's'} · {moneyStory.routeStops} parada
+                  {moneyStory.routeStops === 1 ? '' : 's'} · {moneyStory.routeKmTotal} km
+                </p>
+              </div>
+              <button type="button" className="dash-kpi-link" onClick={() => navigate('/logistica')}>
+                Ver logística
+              </button>
+            </header>
+            {moneyStory.routes.length ? (
+              <>
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Vehículo</th>
+                        <th>Paradas</th>
+                        <th>Distancia</th>
+                        <th>Costo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {moneyStory.routes.map((route) => (
+                        <tr key={route.plate}>
+                          <td>
+                            <div className="dash-route-vehicle">
+                              <span className="dash-route-icon" aria-hidden>
+                                <Icon name="truck" />
+                              </span>
+                              <div>
+                                <strong>{route.plate}</strong>
+                                <small>{route.vehicleType}</small>
+                              </div>
+                            </div>
+                          </td>
+                          <td>{route.stops}</td>
+                          <td>{route.km} km</td>
+                          <td>
+                            <strong>{money(route.cost)}</strong>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <footer>
+                  <span>Total de fletes</span>
+                  <strong>{money(moneyStory.freight)}</strong>
+                </footer>
+              </>
+            ) : (
+              <p className="dash-empty-copy">
+                Aún no hay camiones en ruta o entregados en este período.
+              </p>
+            )}
+          </section>
+
+          <div className="dash-side-stack">
+            <section className="dash-panel dash-shortcuts" aria-label="Accesos operativos">
+              <header>
+                <h2>Accesos operativos</h2>
+              </header>
+              <ul>
+                <li>
+                  <button type="button" onClick={() => navigate('/pedidos')}>
+                    <span className="dash-shortcut-icon">
+                      <Icon name="orders" />
+                      {pending.length ? <em>{pending.length}</em> : null}
+                    </span>
+                    <span>
+                      <strong>Pedidos</strong>
+                      <small>Consultar bandeja de pedidos</small>
+                    </span>
+                    <Icon name="chevron" />
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={() => navigate('/recepcion')}>
+                    <span className="dash-shortcut-icon">
+                      <Icon name="receive" />
+                    </span>
+                    <span>
+                      <strong>Recepción</strong>
+                      <small>Consultar entradas de mercancía</small>
+                    </span>
+                    <Icon name="chevron" />
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={() => navigate('/inventario')}>
+                    <span className="dash-shortcut-icon">
+                      <Icon name="box" />
+                    </span>
+                    <span>
+                      <strong>Inventario</strong>
+                      <small>Revisar existencias por bodega</small>
+                    </span>
+                    <Icon name="chevron" />
+                  </button>
+                </li>
+              </ul>
+            </section>
+
+            <section className="dash-panel dash-supply" aria-label="Abastecimiento">
+              <header>
+                <h2>Abastecimiento</h2>
+              </header>
+              <dl>
+                <div>
+                  <dt>Compras recibidas</dt>
+                  <dd>{money(moneyStory.bought)}</dd>
+                </div>
+                <div>
+                  <dt>Por pagar a proveedores</dt>
+                  <dd>{money(moneyStory.payable)}</dd>
+                </div>
+              </dl>
+              <button type="button" className="dash-kpi-link" onClick={() => navigate('/compras')}>
+                Ver abastecimiento
+                <Icon name="arrow" />
+              </button>
+            </section>
+          </div>
+        </div>
       </section>
       <KpiGrid label="Resumen de la operación">
         <Kpi

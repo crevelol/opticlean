@@ -124,6 +124,11 @@ export type Client = {
   /** Límite de crédito autorizado (USD) */
   creditLimit?: number;
   paymentTermsDays?: number;
+  /**
+   * Margen % sobre costo para cotizar a este cliente.
+   * Si está definido, la cotización prioriza costo×(1+margen%) frente al PVP del producto.
+   */
+  marginPct?: number;
   /** RUC del cliente, 13 dígitos. Hace falta para facturar. */
   taxId?: string;
   phone?: string;
@@ -265,6 +270,8 @@ export type CustomerQuote = {
   status: 'Abierta' | 'Ganada' | 'Perdida';
   channel: SalesChannel;
   lines: Array<{ productId: string; qty: number; unitPrice: number }>;
+  /** Descuento en USD sobre el subtotal (sin IVA). */
+  discount?: number;
   note?: string;
   orderId?: string;
 };
@@ -318,12 +325,26 @@ export type BusinessRules = {
   separateExpiryLots: boolean;
 };
 
+/** Plantilla reutilizable de estimación de km / ETA / costo de envío. */
+export type ShippingCostTemplate = {
+  id: string;
+  name: string;
+  shippingMinKm: number;
+  shippingStopsDivisor: number;
+  shippingEtaBaseFactor: number;
+  shippingEtaPerStop: number;
+};
+
 export type Settings = {
   company: string;
   warehouse: string;
   operator: string;
   activeWarehouseId?: string;
   businessRules?: BusinessRules;
+  /** Plantillas de costo de envío aplicables a la flota. */
+  shippingTemplates?: ShippingCostTemplate[];
+  /** Plantilla por defecto cuando el vehículo no tiene una asignada. */
+  defaultShippingTemplateId?: string;
 };
 
 export type AppState = {

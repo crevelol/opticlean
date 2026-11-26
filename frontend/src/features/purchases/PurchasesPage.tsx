@@ -71,7 +71,7 @@ export function PurchasesPage() {
 
   if (!state || !forecast) return null;
 
-  const canManage = can(user, 'warehouse');
+  const canManage = can(user, 'purchases');
   const groupOf = (status?: string) =>
     (status ?? 'Abierta') === 'Abierta' ? 'open' : status === 'Parcial' ? 'partial' : 'done';
   const shownOrders = state.purchases.filter((o) => filter === 'all' || groupOf(o.status) === filter);

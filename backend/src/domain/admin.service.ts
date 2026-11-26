@@ -7,6 +7,7 @@ import {
   type ModuleRow,
   type Vehicle,
   type VehicleCostRuleRow,
+  type VehicleKmLog,
   type VehicleKind,
 } from '../infrastructure/db/adminDb.js';
 import {
@@ -17,6 +18,8 @@ import {
   type CostCalc,
   type TransportCostRuleInput,
 } from './transport-cost.js';
+import { estimateRouteKm, resolveShippingParams } from './business-rules.js';
+import type { Settings } from './types.js';
 
 const VEHICLE_KINDS = new Set<VehicleKind>(['carro', 'camion', 'motocicleta']);
 
@@ -371,7 +374,9 @@ export function fleetForCompany(companyId: string) {
         costFromRules: cost.fromRules,
         etaHours: v.eta_hours,
         routeKm: v.route_km,
+        odometerKm: Number(v.odometer_km) || 0,
         allowedSectors: parseAllowedSectors(v.allowed_sectors),
+        shippingTemplateId: String(v.shipping_template_id || '').trim() || undefined,
         baseOccupancy: 0,
       };
     });
@@ -391,6 +396,7 @@ export function createVehicle(
     etaHours?: number;
     routeKm?: number;
     allowedSectors?: string[];
+    shippingTemplateId?: string | null;
   },
 ) {
   const company = getCompany(companyId);
@@ -413,8 +419,8 @@ export function createVehicle(
   ).c;
   db.prepare(
     `INSERT INTO vehicles
-     (id, company_id, plate, label, vehicle_type, city, driver, max_kg, max_m3, cost_per_km, eta_hours, route_km, allowed_sectors, active, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+     (id, company_id, plate, label, vehicle_type, city, driver, max_kg, max_m3, cost_per_km, eta_hours, route_km, odometer_km, allowed_sectors, shipping_template_id, active, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1, ?)`,
   ).run(
     id,
     companyId,
@@ -429,6 +435,7 @@ export function createVehicle(
     Number(input.etaHours ?? defaults.etaHours),
     Number(input.routeKm ?? defaults.routeKm),
     serializeAllowedSectors(input.allowedSectors),
+    String(input.shippingTemplateId ?? '').trim(),
     (count + 1) * 10,
   );
   return db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id) as Vehicle;
@@ -448,6 +455,7 @@ export function updateVehicle(
     etaHours: number;
     routeKm: number;
     allowedSectors: string[];
+    shippingTemplateId: string | null;
     active: boolean;
   }>,
 ) {
@@ -462,10 +470,14 @@ export function updateVehicle(
     input.allowedSectors !== undefined
       ? serializeAllowedSectors(input.allowedSectors)
       : current.allowed_sectors ?? '[]';
+  const shippingTemplateId =
+    input.shippingTemplateId !== undefined
+      ? String(input.shippingTemplateId ?? '').trim()
+      : String(current.shipping_template_id ?? '').trim();
   db.prepare(
     `UPDATE vehicles
      SET plate = ?, label = ?, vehicle_type = ?, city = ?, driver = ?, max_kg = ?, max_m3 = ?,
-         cost_per_km = ?, eta_hours = ?, route_km = ?, allowed_sectors = ?, active = ?
+         cost_per_km = ?, eta_hours = ?, route_km = ?, allowed_sectors = ?, shipping_template_id = ?, active = ?
      WHERE id = ?`,
   ).run(
     input.plate?.trim().toUpperCase() || current.plate,
@@ -479,10 +491,32 @@ export function updateVehicle(
     input.etaHours ?? current.eta_hours,
     input.routeKm ?? current.route_km,
     sectorsJson,
+    shippingTemplateId,
     input.active === undefined ? current.active : input.active ? 1 : 0,
     id,
   );
   return db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id) as Vehicle;
+}
+
+/** Asigna una plantilla de costo de envío a varios vehículos. */
+export function applyShippingTemplateToFleet(
+  companyId: string,
+  templateId: string,
+  vehicleIds?: string[] | null,
+) {
+  const db = getAdminDb();
+  const tpl = String(templateId ?? '').trim();
+  if (!tpl) throw new Error('Plantilla requerida');
+  const all = listVehicles(companyId);
+  const targets =
+    Array.isArray(vehicleIds) && vehicleIds.length
+      ? all.filter((v) => vehicleIds.includes(v.id))
+      : all;
+  const stmt = db.prepare('UPDATE vehicles SET shipping_template_id = ? WHERE id = ? AND company_id = ?');
+  for (const v of targets) {
+    stmt.run(tpl, v.id, companyId);
+  }
+  return { updated: targets.length, trucks: fleetForCompany(companyId) };
 }
 
 export function deleteVehicle(id: string) {
@@ -490,8 +524,152 @@ export function deleteVehicle(id: string) {
   const current = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id) as Vehicle | undefined;
   if (!current) throw new Error('Vehículo no encontrado');
   db.prepare('DELETE FROM vehicle_cost_rules WHERE vehicle_id = ?').run(id);
+  db.prepare('DELETE FROM vehicle_km_logs WHERE vehicle_id = ?').run(id);
   db.prepare('DELETE FROM vehicles WHERE id = ?').run(id);
   return { ok: true };
+}
+
+function kmLogDto(row: VehicleKmLog) {
+  return {
+    id: row.id,
+    companyId: row.company_id,
+    vehicleId: row.vehicle_id,
+    plate: row.plate,
+    km: row.km,
+    stops: row.stops,
+    source: row.source,
+    note: row.note,
+    orderIds: (() => {
+      try {
+        const parsed = JSON.parse(row.order_ids || '[]') as unknown;
+        return Array.isArray(parsed) ? parsed.map(String) : [];
+      } catch {
+        return [] as string[];
+      }
+    })(),
+    odometerAfter: row.odometer_after,
+    createdAt: row.created_at,
+  };
+}
+
+/** Suma km al odómetro y deja historial. */
+export function recordVehicleKm(
+  companyId: string,
+  input: {
+    vehicleId?: string;
+    plate?: string;
+    km: number;
+    stops?: number;
+    source?: 'dispatch' | 'manual' | 'adjust';
+    note?: string;
+    orderIds?: string[];
+  },
+) {
+  const km = Math.round(Number(input.km) * 10) / 10;
+  if (!Number.isFinite(km) || km <= 0) throw new Error('Indica kilómetros mayores a cero.');
+  const db = getAdminDb();
+  let vehicle: Vehicle | undefined;
+  if (input.vehicleId) {
+    vehicle = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(input.vehicleId) as Vehicle | undefined;
+  } else if (input.plate) {
+    vehicle = db
+      .prepare('SELECT * FROM vehicles WHERE company_id = ? AND upper(plate) = upper(?)')
+      .get(companyId, input.plate.trim()) as Vehicle | undefined;
+  }
+  if (!vehicle || vehicle.company_id !== companyId) throw new Error('Vehículo no encontrado.');
+  const after = Math.round(((Number(vehicle.odometer_km) || 0) + km) * 10) / 10;
+  const id = `vkm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  const createdAt = new Date().toISOString();
+  db.prepare('UPDATE vehicles SET odometer_km = ? WHERE id = ?').run(after, vehicle.id);
+  db.prepare(
+    `INSERT INTO vehicle_km_logs
+     (id, company_id, vehicle_id, plate, km, stops, source, note, order_ids, odometer_after, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    companyId,
+    vehicle.id,
+    vehicle.plate,
+    km,
+    Math.max(0, Math.round(Number(input.stops) || 0)),
+    input.source || 'manual',
+    String(input.note || '').trim(),
+    JSON.stringify(input.orderIds ?? []),
+    after,
+    createdAt,
+  );
+  return {
+    vehicle: db.prepare('SELECT * FROM vehicles WHERE id = ?').get(vehicle.id) as Vehicle,
+    log: kmLogDto(
+      db.prepare('SELECT * FROM vehicle_km_logs WHERE id = ?').get(id) as VehicleKmLog,
+    ),
+    trucks: fleetForCompany(companyId),
+  };
+}
+
+/** Corrige el odómetro (ajuste absoluto) y deja traza. */
+export function setVehicleOdometer(companyId: string, vehicleId: string, odometerKm: number, note = '') {
+  const value = Math.round(Number(odometerKm) * 10) / 10;
+  if (!Number.isFinite(value) || value < 0) throw new Error('Odómetro inválido.');
+  const vehicle = assertVehicleCompany(vehicleId, companyId);
+  const prev = Number(vehicle.odometer_km) || 0;
+  const delta = Math.round((value - prev) * 10) / 10;
+  const db = getAdminDb();
+  db.prepare('UPDATE vehicles SET odometer_km = ? WHERE id = ?').run(value, vehicleId);
+  const id = `vkm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  db.prepare(
+    `INSERT INTO vehicle_km_logs
+     (id, company_id, vehicle_id, plate, km, stops, source, note, order_ids, odometer_after, created_at)
+     VALUES (?, ?, ?, ?, ?, 0, 'adjust', ?, '[]', ?, ?)`,
+  ).run(
+    id,
+    companyId,
+    vehicleId,
+    vehicle.plate,
+    delta,
+    note.trim() || `Ajuste de odómetro (${prev} → ${value} km)`,
+    value,
+    new Date().toISOString(),
+  );
+  return {
+    vehicle: db.prepare('SELECT * FROM vehicles WHERE id = ?').get(vehicleId) as Vehicle,
+    trucks: fleetForCompany(companyId),
+  };
+}
+
+export function listVehicleKmLogs(companyId: string, vehicleId: string, limit = 50) {
+  assertVehicleCompany(vehicleId, companyId);
+  const rows = getAdminDb()
+    .prepare(
+      `SELECT * FROM vehicle_km_logs
+       WHERE company_id = ? AND vehicle_id = ?
+       ORDER BY created_at DESC
+       LIMIT ?`,
+    )
+    .all(companyId, vehicleId, Math.min(200, Math.max(1, limit))) as VehicleKmLog[];
+  return rows.map(kmLogDto);
+}
+
+/** Al despachar: estima km de la ruta y los suma al odómetro del camión. */
+export function recordDispatchKm(
+  companyId: string,
+  plate: string,
+  stops: number,
+  orderIds: string[],
+  settings?: Settings | null,
+) {
+  const truck = listVehicles(companyId).find((v) => v.plate.toUpperCase() === plate.toUpperCase());
+  if (!truck) return null;
+  const shipping = resolveShippingParams(settings, truck.shipping_template_id);
+  const km = estimateRouteKm(truck.route_km || 50, Math.max(1, stops), shipping);
+  return recordVehicleKm(companyId, {
+    vehicleId: truck.id,
+    km,
+    stops,
+    source: 'dispatch',
+    note: `Despacho ${plate} · ${stops} parada(s)`,
+    orderIds,
+  });
 }
 
 function normalizeBasis(raw: unknown): CostBasis {

@@ -97,6 +97,19 @@ function ClientFields({
           defaultValue={client?.reorderEveryDays ?? ''}
         />
       </div>
+      <div className="field">
+        <label htmlFor={`${idPrefix}-margin`}>Margen de cotización (%)</label>
+        <input
+          id={`${idPrefix}-margin`}
+          name="marginPct"
+          type="number"
+          min={0}
+          max={1000}
+          step={0.1}
+          defaultValue={client?.marginPct ?? ''}
+          placeholder="Vacío = usar PVP del producto"
+        />
+      </div>
       {isAdmin ? (
         <>
           <div className="field">
@@ -298,6 +311,7 @@ export function ClientsPage() {
       address: data.address,
       email: data.email,
       reorderEveryDays: data.reorderEveryDays ? Number(data.reorderEveryDays) : undefined,
+      marginPct: String(data.marginPct ?? '').trim() === '' ? null : Number(data.marginPct),
     };
     if (isAdmin) {
       body.creditLimit = Number(data.creditLimit);
@@ -648,6 +662,14 @@ export function ClientsPage() {
                   <div>
                     <dt>Plazo</dt>
                     <dd>{selected.client.paymentTermsDays ?? 30} días</dd>
+                  </div>
+                  <div>
+                    <dt>Margen cotización</dt>
+                    <dd>
+                      {selected.client.marginPct != null
+                        ? `${selected.client.marginPct}% sobre costo`
+                        : 'Sin margen · usa PVP'}
+                    </dd>
                   </div>
                   <div>
                     <dt>Reposición</dt>

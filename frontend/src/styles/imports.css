@@ -4,6 +4,35 @@
   margin-top: 14px;
 }
 
+.import-pricing {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) minmax(140px, 180px) 1fr;
+  gap: 12px 16px;
+  align-items: end;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+}
+.import-pricing .field {
+  margin: 0;
+}
+.import-pricing-hint {
+  margin: 0;
+  font-size: var(--text-md);
+  color: var(--color-text-muted);
+  line-height: 1.35;
+}
+@media (max-width: 720px) {
+  .import-pricing {
+    grid-template-columns: 1fr 1fr;
+  }
+  .import-pricing-hint {
+    grid-column: 1 / -1;
+  }
+}
+
 /* Avisos sin línea asociada */
 .import-general {
   display: flex;
@@ -91,7 +120,7 @@
 }
 .import-table table {
   table-layout: fixed;
-  min-width: 520px;
+  min-width: 760px;
 }
 .import-table th,
 .import-table td {
@@ -105,11 +134,23 @@
 .import-table .c-pack {
   width: 76px;
 }
+.import-table .c-price {
+  width: 96px;
+}
 .import-table .c-date {
   width: 136px;
 }
 .import-table .c-status {
   width: 112px;
+}
+.import-price input {
+  width: 100%;
+  max-width: 110px;
+  font-variant-numeric: tabular-nums;
+}
+.import-money {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .import-table th small {
   margin-left: 4px;

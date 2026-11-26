@@ -17,6 +17,12 @@ import {
   type FileRoute,
 } from '../../shared/lib/fileFormats';
 import { indexImportWarnings } from './importWarnings';
+import {
+  deriveImportPrices,
+  readStoredPricing,
+  storePricing,
+  type ImportPriceRole,
+} from './importPricing';
 import '../../styles/imports.css';
 
 type ImportKind = 'purchase' | 'sale';
@@ -70,6 +76,9 @@ export function ImportDialog({
   const [fileError, setFileError] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const stored = useMemo(() => readStoredPricing(kind), [kind]);
+  const [priceRole, setPriceRole] = useState<ImportPriceRole>(stored.priceRole);
+  const [marginPct, setMarginPct] = useState(stored.marginPct);
 
   const party = kind === 'purchase' ? 'Proveedor' : 'Cliente';
   const [filter, setFilter] = useState<RowFilter>('all');
@@ -120,10 +129,29 @@ export function ImportDialog({
   const stockAlerts = kind === 'sale' ? views.filter((view) => view.label === 'Sin stock').length : 0;
   const errCount = views.filter((view) => view.tone === 'err' && view.label !== 'Sin stock').length;
   const infoCount = views.filter((view) => view.tone === 'info').length;
-  const importable = preview?.rows.filter((row) => row.status !== 'invalid' && row.qty > 0) ?? [];
+  const importable = useMemo(
+    () => preview?.rows.filter((row) => row.status !== 'invalid' && row.qty > 0) ?? [],
+    [preview],
+  );
   const units = importable.reduce((sum, row) => sum + row.qty, 0);
-  const total = importable.reduce((sum, row) => sum + row.qty * (row.unitPrice || 0), 0);
+  const pricedByIndex = useMemo(() => {
+    if (!preview) return [] as Array<{ cost: number; pvp: number }>;
+    return preview.rows.map((row) => deriveImportPrices(row.unitPrice || 0, priceRole, marginPct));
+  }, [preview, priceRole, marginPct]);
+  const { totalCost, totalPvp } = useMemo(() => {
+    let cost = 0;
+    let pvp = 0;
+    if (!preview) return { totalCost: 0, totalPvp: 0 };
+    preview.rows.forEach((row, index) => {
+      if (row.status === 'invalid' || row.qty <= 0) return;
+      const priced = pricedByIndex[index] ?? deriveImportPrices(row.unitPrice || 0, priceRole, marginPct);
+      cost += row.qty * priced.cost;
+      pvp += row.qty * priced.pvp;
+    });
+    return { totalCost: cost, totalPvp: pvp };
+  }, [preview, pricedByIndex, priceRole, marginPct]);
   const createLabel = kind === 'sale' ? 'Crear pedido' : 'Crear compra';
+  const valueLabel = priceRole === 'cost' ? 'Costo' : 'PVP';
 
   const reset = () => {
     setFilter('all');
@@ -133,6 +161,12 @@ export function ImportDialog({
     setStatus('idle');
     setFileError('');
     setError('');
+  };
+
+  const patchRow = (index: number, patch: Partial<Row>) => {
+    if (!preview) return;
+    const rows = preview.rows.map((item, i) => (i === index ? { ...item, ...patch } : item));
+    setPreview({ ...preview, rows });
   };
 
   const fail = (message: string) => {
@@ -194,6 +228,7 @@ export function ImportDialog({
     setBusy(true);
     setError('');
     try {
+      storePricing(priceRole, marginPct);
       const res = await api.commitImport({
         kind,
         partyName: preview.partyName,
@@ -201,6 +236,8 @@ export function ImportDialog({
         partyAddress: preview.partyAddress,
         docNumber: preview.docNumber,
         issueDate: preview.issueDate,
+        priceRole,
+        marginPct,
         rows,
       });
       applyResponse(res);
@@ -310,6 +347,39 @@ export function ImportDialog({
 
       {preview ? (
         <>
+          <div className="import-pricing" role="group" aria-label="Precio y margen">
+            <div className="field">
+              <label htmlFor="import-price-role">El valor del archivo es</label>
+              <select
+                id="import-price-role"
+                value={priceRole}
+                onChange={(event) => setPriceRole(event.target.value as ImportPriceRole)}
+              >
+                <option value="cost">Costo</option>
+                <option value="pvp">PVP (venta)</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="import-margin">Margen sobre costo (%)</label>
+              <input
+                id="import-margin"
+                type="number"
+                min={0}
+                max={1000}
+                step={0.1}
+                value={marginPct}
+                onChange={(event) => setMarginPct(Number(event.target.value) || 0)}
+              />
+            </div>
+            <p className="import-pricing-hint">
+              {marginPct <= 0
+                ? 'Sin margen: el valor del archivo se registra igual en costo y PVP. Puedes editar cada producto.'
+                : priceRole === 'cost'
+                  ? `Con ${marginPct}% el PVP = costo × ${(1 + marginPct / 100).toFixed(2)}. Puedes editar el valor de cada producto.`
+                  : `Con ${marginPct}% el costo = PVP ÷ ${(1 + marginPct / 100).toFixed(2)}. Puedes editar el valor de cada producto.`}
+            </p>
+          </div>
+
           <div className="import-summary">
             <span>
               <b>{num(importable.length)}</b> {importable.length === 1 ? 'línea' : 'líneas'}
@@ -317,9 +387,14 @@ export function ImportDialog({
             <span>
               <b>{num(units)}</b> u.
             </span>
-            {total > 0 ? (
+            {totalCost > 0 ? (
               <span>
-                Total <b>{money(total)}</b>
+                Costo <b>{money(totalCost)}</b>
+              </span>
+            ) : null}
+            {totalPvp > 0 ? (
+              <span>
+                PVP <b>{money(totalPvp)}</b>
               </span>
             ) : null}
             {errCount || infoCount ? (
@@ -349,6 +424,9 @@ export function ImportDialog({
                 <col className="c-product" />
                 <col className="c-qty" />
                 <col className="c-pack" />
+                <col className="c-price" />
+                <col className="c-price" />
+                <col className="c-price" />
                 <col className="c-date" />
                 <col className="c-status" />
               </colgroup>
@@ -358,6 +436,11 @@ export function ImportDialog({
                   <th>Cantidad</th>
                   <th>Empaque</th>
                   <th>
+                    {valueLabel} <small>editable</small>
+                  </th>
+                  <th>Costo</th>
+                  <th>PVP</th>
+                  <th>
                     Caducidad <small>opcional</small>
                   </th>
                   <th>Estado</th>
@@ -366,6 +449,7 @@ export function ImportDialog({
               <tbody>
                 {preview.rows.map((row, index) => {
                   const view = views[index];
+                  const priced = pricedByIndex[index] ?? deriveImportPrices(row.unitPrice || 0, priceRole, marginPct);
                   const hidden =
                     filter !== 'all' && !(filter === 'err' ? view.tone === 'err' : view.tone === 'info');
                   return (
@@ -376,17 +460,45 @@ export function ImportDialog({
                       </td>
                       <td className="import-qty">{num(row.qty)}</td>
                       <td className="import-pack">{row.packCode}</td>
+                      <td className="import-price">
+                        <input
+                          aria-label={`${valueLabel} de ${row.code}`}
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={Number.isFinite(row.unitPrice) ? row.unitPrice : 0}
+                          disabled={row.status === 'invalid'}
+                          onChange={(event) =>
+                            patchRow(index, { unitPrice: Math.max(0, Number(event.target.value) || 0) })
+                          }
+                        />
+                      </td>
+                      <td
+                        className="import-money"
+                        title={
+                          marginPct <= 0 || priceRole === 'cost'
+                            ? 'Igual al valor del archivo'
+                            : 'Calculado con el margen'
+                        }
+                      >
+                        {money(priced.cost)}
+                      </td>
+                      <td
+                        className="import-money"
+                        title={
+                          marginPct <= 0 || priceRole === 'pvp'
+                            ? 'Igual al valor del archivo'
+                            : 'Calculado con el margen'
+                        }
+                      >
+                        {money(priced.pvp)}
+                      </td>
                       <td className="import-date">
                         <input
                           aria-label={`Caducidad de ${row.code} (opcional)`}
                           type="date"
                           value={row.expiry}
-                          onChange={(event) => {
-                            const rows = preview.rows.map((item, i) =>
-                              i === index ? { ...item, expiry: event.target.value } : item,
-                            );
-                            setPreview({ ...preview, rows });
-                          }}
+                          onChange={(event) => patchRow(index, { expiry: event.target.value })}
                         />
                       </td>
                       <td className="import-state">
