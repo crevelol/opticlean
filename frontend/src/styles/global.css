@@ -3480,3 +3480,149 @@ td .sub {
     flex: 1;
   }
 }
+
+/* ── Wizard (shared/components/Wizard.tsx) ─────────────────────────── */
+.ui-wizard-steps {
+  margin-bottom: 18px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.ui-wizard-steps.in-dialog {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0 20px;
+  border-width: 0 0 1px;
+  border-radius: 0;
+}
+.ui-wizard-steps ol {
+  display: grid;
+  grid-template-columns: repeat(var(--wizard-cols), minmax(0, 1fr));
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ui-wizard-step {
+  min-width: 0;
+}
+.ui-wizard-step button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 4px;
+  border: 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: none;
+  text-align: left;
+  color: var(--color-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+.ui-wizard-step button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.ui-wizard-step.is-current button {
+  cursor: default;
+}
+.ui-wizard-step button:focus-visible {
+  outline: 0;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--color-primary) 35%, transparent);
+}
+.ui-wizard-dot {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 50%;
+  background: var(--color-surface);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  transition:
+    background var(--duration-base) var(--ease-in-out),
+    border-color var(--duration-base) var(--ease-in-out),
+    color var(--duration-base) var(--ease-in-out);
+}
+.ui-wizard-dot .icon {
+  width: 13px;
+  height: 13px;
+}
+.ui-wizard-step.is-current .ui-wizard-dot {
+  border-color: var(--color-primary);
+  background: linear-gradient(135deg, var(--blue-600), var(--blue-500));
+  color: var(--color-text-inverse);
+  box-shadow: 0 4px 10px -4px color-mix(in srgb, var(--blue-600) 70%, transparent);
+}
+.ui-wizard-step.is-done .ui-wizard-dot {
+  border-color: var(--color-success-border);
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+.ui-wizard-step.has-error .ui-wizard-dot {
+  border-color: var(--color-danger);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+.ui-wizard-text {
+  display: grid;
+  min-width: 0;
+}
+.ui-wizard-text strong,
+.ui-wizard-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-wizard-text strong {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+.ui-wizard-text small {
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+}
+.ui-wizard-step.is-current .ui-wizard-text strong {
+  color: var(--color-text);
+}
+.ui-wizard-line {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(90deg, var(--blue-600), var(--blue-400));
+}
+.ui-wizard-footer {
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+@media (max-width: 760px) {
+  .ui-wizard-steps {
+    padding: 0 8px;
+  }
+  .ui-wizard-step button {
+    justify-content: center;
+  }
+  /* En pantallas estrechas solo el paso actual muestra su nombre. */
+  .ui-wizard-step:not(.is-current) .ui-wizard-text {
+    display: none;
+  }
+  .ui-wizard-steps ol {
+    display: flex;
+    justify-content: space-between;
+  }
+  .ui-wizard-step.is-current {
+    flex: 1;
+  }
+  .ui-wizard-text small {
+    display: none;
+  }
+}

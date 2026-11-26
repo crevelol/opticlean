@@ -18,6 +18,7 @@ import { useAuth } from '../../shared/hooks/AuthProvider';
 import { packsOf, pendingUnits, purchaseIncludes } from '../../shared/lib/wholesale';
 import '../../styles/warehouse-positioning.css';
 import '../../styles/reception.css';
+import { WizardFooter, WizardSteps, useDiscardGuard, useStepFocus } from '../../shared/components/Wizard';
 import { Checkbox } from '../../shared/components/Checkbox';
 import { Input } from '../../shared/components/Input';
 
@@ -78,7 +79,7 @@ export function ReceptionNewPage() {
   const [mapOpen, setMapOpen] = useState(false);
   const [mapPick, setMapPick] = useState('');
   const saveLock = useRef(false);
-  const headingRef = useRef<HTMLHeadingElement>(null);
+  const headingRef = useStepFocus(step);
 
   const warehouseId = state ? activeWarehouseId(state) : '';
   const warehouse = state?.warehouses.find((item) => item.id === warehouseId);
@@ -155,9 +156,10 @@ export function ReceptionNewPage() {
     };
   }, [productId, stockQty, prefillLoc, validQty, currentKey, attempt, state?.lots]);
 
-  useEffect(() => {
-    headingRef.current?.focus({ preventScroll: true });
-  }, [step]);
+  // Hay trabajo que perder en cuanto se avanza o se escribe algo propio de este ingreso.
+  const discard = useDiscardGuard(
+    !saving && (step > 0 || !!batch.trim() || !!expiry || !!reason),
+  );
 
   if (!state) return null;
 
@@ -270,37 +272,20 @@ export function ReceptionNewPage() {
         title="Registrar recepción"
         desc="Completa los pasos y confirma el ingreso a bodega."
         actions={
-          <Btn icon="arrow" onClick={() => navigate('/recepcion')}>
+          <Btn icon="arrow" onClick={() => discard.guard(() => navigate('/recepcion'))}>
             Ver recepciones
           </Btn>
         }
       />
 
-      <nav className="panel reception-stepper" aria-label="Pasos de la recepción">
-        <ol>
-          {steps.map((item, index) => {
-            const status = index === step ? 'current' : index < step ? 'done' : 'todo';
-            return (
-              <li key={item.title} className={`reception-step is-${status}`}>
-                <button
-                  type="button"
-                  onClick={() => goTo(index)}
-                  disabled={saving || index > maxReachable}
-                  aria-current={index === step ? 'step' : undefined}
-                >
-                  <span className="reception-step-dot" aria-hidden="true">
-                    {status === 'done' ? <Icon name="check" /> : index + 1}
-                  </span>
-                  <span className="reception-step-text">
-                    <strong>{item.title}</strong>
-                    <small>{item.subtitle}</small>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
+      <WizardSteps
+        label="Pasos de la recepción"
+        steps={steps}
+        current={step}
+        onSelect={goTo}
+        canSelect={(index) => index <= maxReachable}
+        disabled={saving}
+      />
 
       <form className="reception-layout" id="receive-form" onSubmit={onSubmit} noValidate>
         <div className="panel reception-form">
@@ -620,27 +605,6 @@ export function ReceptionNewPage() {
               ) : null}
             </div>
 
-            <div className="reception-step-actions">
-              {step > 0 ? (
-                <Btn icon="back" onClick={() => setStep(step - 1)}>
-                  Anterior
-                </Btn>
-              ) : (
-                <Btn variant="ghost" onClick={() => navigate('/recepcion')}>
-                  Cancelar
-                </Btn>
-              )}
-              {step < steps.length - 1 ? (
-                <Button variant="primary" type="submit" disabled={!stepValid[step]}>
-                  Siguiente
-                </Button>
-              ) : (
-                <Button variant="primary" type="submit" disabled={!canSubmit}>
-                  <Icon name="check" />
-                  {saving ? 'Registrando…' : 'Confirmar recepción'}
-                </Button>
-              )}
-            </div>
           </fieldset>
         </div>
 
@@ -731,6 +695,23 @@ export function ReceptionNewPage() {
           </section>
         </aside>
       </form>
+
+      <WizardFooter
+        step={step}
+        total={steps.length}
+        onBack={() => setStep(step - 1)}
+        onCancel={() => discard.guard(() => navigate('/recepcion'))}
+        primary={{
+          type: 'submit',
+          form: 'receive-form',
+          label: step < steps.length - 1 ? 'Siguiente' : 'Confirmar recepción',
+          icon: step < steps.length - 1 ? 'arrow' : 'check',
+          disabled: step < steps.length - 1 ? !stepValid[step] : !canSubmit,
+          busy: saving,
+          busyLabel: 'Registrando…',
+        }}
+      />
+      {discard.dialog}
 
       {mapOpen ? (
         <Modal
