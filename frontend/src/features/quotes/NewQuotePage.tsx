@@ -9,6 +9,7 @@ import { Modal, ModalActions } from '../../shared/components/Modal';
 import { Select } from '../../shared/components/Select';
 import type { SalesChannel } from '../../shared/types';
 import { clientHasMargin, effectiveQuoteMargin, quoteUnitPrice } from './quotePricing';
+import { ActionBar } from '../../shared/components/ActionBar';
 import '../../styles/quotes.css';
 
 const IVA_DEFAULT = 0.15;
@@ -261,15 +262,13 @@ export function NewQuotePage() {
   };
 
   return (
-    <div className="page nq-page">
-      <div className="nq-head">
-        <PageHead
-          eyebrow="Cotizaciones"
-          title="Nueva cotización"
-          desc="Selecciona el cliente y agrega los productos."
-        />
-        <span className="nq-badge">Borrador</span>
-      </div>
+    <div className="nq-page">
+      <PageHead
+        eyebrow="Cotizaciones"
+        title="Nueva cotización"
+        desc="Selecciona el cliente y agrega los productos."
+        actions={<span className="nq-badge">Borrador</span>}
+      />
 
       {error ? <div className="form-error visible">{error}</div> : null}
 
@@ -600,18 +599,23 @@ export function NewQuotePage() {
         </aside>
       </div>
 
-      <div className="nq-actions">
+      <ActionBar
+        info={
+          lines.length
+            ? `${totals.count} ${totals.count === 1 ? 'producto' : 'productos'} · ${money(totals.total)}`
+            : 'Agrega productos para guardar la cotización'
+        }
+      >
         <Btn type="button" onClick={() => navigate('/cotizaciones')}>
           Cancelar
         </Btn>
-        <span className="spacer" />
         <Btn type="button" icon="file" disabled={!lines.length} onClick={() => setPreviewOpen(true)}>
           Vista previa
         </Btn>
         <Btn type="button" variant="primary" icon="check" disabled={busy} onClick={() => void save()}>
           {busy ? 'Guardando…' : 'Guardar cotización'}
         </Btn>
-      </div>
+      </ActionBar>
 
       {previewOpen ? (
         <Modal

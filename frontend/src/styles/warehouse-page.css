@@ -100,17 +100,6 @@
   border-bottom: 1px solid var(--slate-150);
   flex-wrap: wrap;
 }
-.wh-toolbar .segmented {
-  background: var(--slate-100);
-}
-.wh-toolbar .segmented button {
-  min-height: 34px;
-  font-size: var(--text-sm);
-  padding: 7px 12px;
-}
-.wh-toolbar .segmented button.active {
-  color: var(--teal-600);
-}
 .wh-toolbar-search {
   flex: 1;
   min-width: 200px;
@@ -201,9 +190,6 @@
 .wh-page .positioning-rack {
   background: white;
 }
-.wh-page .positioning-filters button.is-free:not(.active) span { color: var(--green-600); opacity: 1; }
-.wh-page .positioning-filters button.is-occupied:not(.active) span { color: var(--blue-600); opacity: 1; }
-.wh-page .positioning-filters button.is-full:not(.active) span { color: var(--amber-600); opacity: 1; }
 
 .level-pager {
   display: flex;
@@ -221,8 +207,7 @@
   flex: 1;
   overflow-x: auto;
 }
-.level-pager-pages button,
-.level-pager-arrow {
+.level-pager-pages button {
   position: relative;
   min-width: 38px;
   min-height: 32px;
@@ -236,18 +221,19 @@
   cursor: pointer;
 }
 .level-pager-arrow {
+  position: relative;
+  min-width: 38px;
+}
+.level-pager-arrow {
   display: grid;
   place-items: center;
   min-width: 32px;
-  background: white;
-  border-color: var(--slate-200);
 }
 .level-pager-arrow .icon {
   width: 15px;
   height: 15px;
 }
-.level-pager-pages button:hover:not(:disabled),
-.level-pager-arrow:hover:not(:disabled) {
+.level-pager-pages button:hover:not(:disabled) {
   background: white;
   border-color: var(--slate-250);
 }
@@ -770,15 +756,6 @@
   .wh-pager {
     padding-left: 12px;
     padding-right: 12px;
-  }
-  .wh-toolbar .segmented {
-    width: 100%;
-    overflow-x: auto;
-  }
-  .wh-toolbar .segmented button {
-    flex: 1;
-    font-size: var(--text-xs);
-    padding: 7px 9px;
   }
   .wh-search-strip {
     flex-direction: column;

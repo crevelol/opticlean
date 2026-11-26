@@ -5,7 +5,7 @@ import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
 import { activeWarehouseId, product, qtyAt } from '../../shared/lib/inventory';
 import { buildWarehouseGeometry, faceLabel, normalizeLayout } from '../../shared/lib/warehouseLayout';
-import { Btn, PageHead, cx } from '../../shared/components/ui';
+import { Btn, PageHead, cx, Button } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal } from '../../shared/components/Modal';
 import { WarehouseEmbed } from '../warehouse/WarehouseEmbed';
@@ -15,6 +15,9 @@ import { packsOf, purchaseLines } from '../../shared/lib/wholesale';
 import '../../styles/warehouse-positioning.css';
 import '../../styles/reception.css';
 import '../../styles/reception-rows.css';
+import { WizardFooter, WizardSteps, useDiscardGuard, useStepFocus } from '../../shared/components/Wizard';
+import { Checkbox } from '../../shared/components/Checkbox';
+import { Input } from '../../shared/components/Input';
 
 const steps = [
   { title: 'Origen', subtitle: 'Con o sin orden de compra' },
@@ -121,7 +124,7 @@ export function ReceptionNewPage() {
   const [mapKey, setMapKey] = useState('');
   const [mapPick, setMapPick] = useState('');
   const saveLock = useRef(false);
-  const headingRef = useRef<HTMLHeadingElement>(null);
+  const headingRef = useStepFocus(step);
 
   const warehouseId = state ? activeWarehouseId(state) : '';
   const warehouse = state?.warehouses.find((item) => item.id === warehouseId);
@@ -209,9 +212,10 @@ export function ReceptionNewPage() {
     if (name) setSupplier(name);
   }, [mode, rows, supplier, state]);
 
-  useEffect(() => {
-    headingRef.current?.focus({ preventScroll: true });
-  }, [step]);
+  // Hay trabajo que perder en cuanto se avanza o se escribe algo propio de este ingreso.
+  const discard = useDiscardGuard(
+    !saving && (step > 0 || !!reason || rows.some((row) => !!row.batch.trim() || !!row.expiry)),
+  );
 
   if (!state) return null;
 
@@ -355,37 +359,20 @@ export function ReceptionNewPage() {
         title="Registrar recepción"
         desc="Recibe una orden de compra completa o uno o varios productos que llegan sin orden."
         actions={
-          <Btn icon="arrow" onClick={() => navigate('/recepcion')}>
+          <Btn icon="arrow" onClick={() => discard.guard(() => navigate('/recepcion'))}>
             Ver recepciones
           </Btn>
         }
       />
 
-      <nav className="panel reception-stepper" aria-label="Pasos de la recepción">
-        <ol>
-          {steps.map((item, index) => {
-            const status = index === step ? 'current' : index < step ? 'done' : 'todo';
-            return (
-              <li key={item.title} className={`reception-step is-${status}`}>
-                <button
-                  type="button"
-                  onClick={() => goTo(index)}
-                  disabled={saving || index > maxReachable}
-                  aria-current={index === step ? 'step' : undefined}
-                >
-                  <span className="reception-step-dot" aria-hidden="true">
-                    {status === 'done' ? <Icon name="check" /> : index + 1}
-                  </span>
-                  <span className="reception-step-text">
-                    <strong>{item.title}</strong>
-                    <small>{item.subtitle}</small>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
+      <WizardSteps
+        label="Pasos de la recepción"
+        steps={steps}
+        current={step}
+        onSelect={goTo}
+        canSelect={(index) => index <= maxReachable}
+        disabled={saving}
+      />
 
       <form className="reception-layout" id="receive-form" onSubmit={onSubmit} noValidate>
         <div className="panel reception-form">
@@ -478,7 +465,7 @@ export function ReceptionNewPage() {
                       </div>
                       <div className="field">
                         <label htmlFor="rec-supplier">Proveedor</label>
-                        <input id="rec-supplier" value={supplier} onChange={(e) => setSupplier(e.target.value)} required />
+                        <Input id="rec-supplier" value={supplier} onChange={(e) => setSupplier(e.target.value)} required />
                       </div>
                     </div>
                   )}
@@ -506,10 +493,10 @@ export function ReceptionNewPage() {
                         <div className="rec-prod">
                           {mode === 'po' ? (
                             <label className="rec-check">
-                              <input
-                                type="checkbox"
+                              <Checkbox
                                 checked={row.include}
-                                onChange={(e) => patch(row.key, { include: e.target.checked })}
+                                onCheckedChange={(checked) => patch(row.key, { include: checked })}
+                                aria-label={`Incluir ${nameOf(row.productId)}`}
                               />
                               <span>
                                 <strong>{nameOf(row.productId)}</strong>
@@ -550,7 +537,7 @@ export function ReceptionNewPage() {
                           </Select>
                         </div>
                         <div className="field">
-                          <input
+                          <Input
                             aria-label={`Cantidad de empaques ${index + 1}`}
                             type="number"
                             min={1}
@@ -631,7 +618,7 @@ export function ReceptionNewPage() {
                         <div className="form-grid">
                           <div className="field">
                             <label htmlFor={`rec-batch-${index}`}>Lote</label>
-                            <input
+                            <Input
                               id={`rec-batch-${index}`}
                               value={row.batch}
                               onChange={(e) => patch(row.key, { batch: e.target.value })}
@@ -640,7 +627,7 @@ export function ReceptionNewPage() {
                           </div>
                           <div className="field">
                             <label htmlFor={`rec-expiry-${index}`}>{expires ? 'Vencimiento' : 'Vencimiento (no caduca)'}</label>
-                            <input
+                            <Input
                               id={`rec-expiry-${index}`}
                               type="date"
                               value={row.expiry}
@@ -685,11 +672,10 @@ export function ReceptionNewPage() {
                           </div>
                           <div className="field">
                             <label htmlFor={`rec-inspect-${index}`} className="rec-inspect">
-                              <input
+                              <Checkbox
                                 id={`rec-inspect-${index}`}
-                                type="checkbox"
                                 checked={row.inspect}
-                                onChange={(e) => patch(row.key, { inspect: e.target.checked })}
+                                onCheckedChange={(checked) => patch(row.key, { inspect: checked })}
                               />
                               Recibir a inspección de calidad
                             </label>
@@ -710,9 +696,9 @@ export function ReceptionNewPage() {
                       <dt>Origen</dt>
                       <dd>
                         <span>{mode === 'po' ? `Orden ${purchaseId} · ${purchaseSupplier}` : `Sin orden de compra · ${reason}`}</span>
-                        <button type="button" className="reception-edit" onClick={() => setStep(0)}>
+                        <Button variant="link" className="reception-edit" onClick={() => setStep(0)}>
                           Editar
-                        </button>
+                        </Button>
                       </dd>
                     </div>
                     {mode === 'free' ? (
@@ -720,9 +706,9 @@ export function ReceptionNewPage() {
                         <dt>Proveedor</dt>
                         <dd>
                           <span>{supplier}</span>
-                          <button type="button" className="reception-edit" onClick={() => setStep(0)}>
+                          <Button variant="link" className="reception-edit" onClick={() => setStep(0)}>
                             Editar
-                          </button>
+                          </Button>
                         </dd>
                       </div>
                     ) : null}
@@ -754,9 +740,9 @@ export function ReceptionNewPage() {
                       );
                     })}
                   </div>
-                  <button type="button" className="reception-edit" onClick={() => setStep(1)}>
+                  <Button variant="link" className="reception-edit" onClick={() => setStep(1)}>
                     Editar productos
-                  </button>
+                  </Button>
                 </>
               ) : null}
 
@@ -765,28 +751,6 @@ export function ReceptionNewPage() {
                   {error}
                 </div>
               ) : null}
-            </div>
-
-            <div className="reception-step-actions">
-              {step > 0 ? (
-                <Btn icon="back" onClick={() => setStep(step - 1)}>
-                  Anterior
-                </Btn>
-              ) : (
-                <Btn variant="ghost" onClick={() => navigate('/recepcion')}>
-                  Cancelar
-                </Btn>
-              )}
-              {step < steps.length - 1 ? (
-                <button type="submit" className="btn primary" disabled={!stepValid[step]}>
-                  Siguiente
-                </button>
-              ) : (
-                <button type="submit" className="btn primary" disabled={!canSubmit}>
-                  <Icon name="check" />
-                  {saving ? 'Registrando…' : 'Confirmar recepción'}
-                </button>
-              )}
             </div>
           </fieldset>
         </div>
@@ -851,6 +815,23 @@ export function ReceptionNewPage() {
           </section>
         </aside>
       </form>
+
+      <WizardFooter
+        step={step}
+        total={steps.length}
+        onBack={() => setStep(step - 1)}
+        onCancel={() => discard.guard(() => navigate('/recepcion'))}
+        primary={{
+          type: 'submit',
+          form: 'receive-form',
+          label: step < steps.length - 1 ? 'Siguiente' : 'Confirmar recepción',
+          icon: step < steps.length - 1 ? 'arrow' : 'check',
+          disabled: step < steps.length - 1 ? !stepValid[step] : !canSubmit,
+          busy: saving,
+          busyLabel: 'Registrando…',
+        }}
+      />
+      {discard.dialog}
 
       {mapRow ? (
         <Modal

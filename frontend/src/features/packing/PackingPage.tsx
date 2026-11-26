@@ -58,7 +58,7 @@ export function PackingPage() {
   };
 
   return (
-    <div className="page">
+    <div>
       <PageHead
         eyebrow="Logística"
         title="Empaque y carga"

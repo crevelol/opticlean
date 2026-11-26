@@ -4,7 +4,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
 import { client, orderWeight, product } from '../../shared/lib/inventory';
-import { Badge, Btn, PageHead } from '../../shared/components/ui';
+import { Badge, Btn, Empty, PageHead, Button } from '../../shared/components/ui';
+import { SegmentedControl } from '../../shared/components/Tabs';
 import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import { RouteMap } from './RouteMap';
@@ -20,12 +21,15 @@ import {
   type Truck,
 } from './fleet';
 import '../../styles/logistics.css';
+import { Checkbox } from '../../shared/components/Checkbox';
+import { Input, Textarea } from '../../shared/components/Input';
 
 export function RoutesPage() {
   const { state, applyResponse, toast } = useAppState();
   const navigate = useNavigate();
   const location = useLocation();
   const [fleet, setFleet] = useState<Truck[]>([]);
+  const [fleetReady, setFleetReady] = useState(false);
   const initialTruck =
     (location.state as { truckId?: string } | null)?.truckId ??
     new URLSearchParams(location.search).get('truck') ??
@@ -44,7 +48,8 @@ export function RoutesPage() {
       })
       .catch(() => {
         setFleet([]);
-      });
+      })
+      .finally(() => setFleetReady(true));
   }, []);
 
   const [stopId, setStopId] = useState<string | null>(null);
@@ -63,14 +68,46 @@ export function RoutesPage() {
     [state, truck, today],
   );
 
-  if (!state || !truck) return null;
+  if (!state) return null;
+
+  if (fleetReady && !fleet.length) {
+    return (
+      <div className="log-page log-routes-page">
+        <PageHead
+          eyebrow="Operativo"
+          title="Mi ruta"
+          desc="Paradas del día, mapa y confirmación real de entregas."
+          actions={
+            <Btn icon="truck" onClick={() => navigate('/logistica')}>
+              Distribución
+            </Btn>
+          }
+        />
+        <Empty
+          title="Sin vehículos en flota"
+          desc="Agrega al menos un camión en Logística → Gestión de flota para ver y operar la ruta del día."
+          action={
+            <Btn variant="primary" icon="plus" onClick={() => navigate('/logistica')}>
+              Ir a flota
+            </Btn>
+          }
+        />
+      </div>
+    );
+  }
+
+  if (!truck) {
+    return (
+      <div className="log-page log-routes-page">
+        <PageHead eyebrow="Operativo" title="Mi ruta" desc="Cargando vehículos…" />
+        <p className="log-empty">Cargando flota…</p>
+      </div>
+    );
+  }
 
   const stops = [...pendingStops, ...doneStops];
   const allActive = activeOrders(state);
-  const current =
-    pendingStops.find((o) => o.id === stopId) ??
-    pendingStops[0] ??
-    null;
+  const current = pendingStops.find((o) => o.id === stopId) ?? pendingStops[0] ?? null;
   const load = truckLoad(state, truck, allActive);
   const done = doneStops.length;
   const pending = pendingStops.length;
@@ -141,31 +178,25 @@ export function RoutesPage() {
         }
       />
 
-      <div className="log-route-tabs" role="tablist" aria-label="Vehículos">
-        {fleet.map((t) => {
+      <SegmentedControl
+        label="Vehículos"
+        value={truck.id}
+        onValueChange={(id) => {
+          setTruckId(id);
+          setStopId(null);
+          setChecked({});
+        }}
+        items={fleet.map((t) => {
           const n = routeOrders(state, t.plate).length;
           const d = deliveredToday(state, t.plate, today).length;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={truck.id === t.id}
-              className={truck.id === t.id ? 'is-active' : ''}
-              onClick={() => {
-                setTruckId(t.id);
-                setStopId(null);
-                setChecked({});
-              }}
-            >
-              {t.label} · {t.city}
-              {n ? <span className="log-tab-pill">{n}</span> : null}
-              {!n && d ? <span className="log-tab-badge">Hecho</span> : null}
-              {!n && !d ? <span className="log-tab-badge">Libre</span> : null}
-            </button>
-          );
+          return {
+            value: t.id,
+            label: `${t.label} · ${t.city}`,
+            count: n ? n : d ? 'Hecho' : 'Libre',
+          };
         })}
-      </div>
+        className="log-route-filter"
+      />
 
       <div className="log-route-statusbar">
         <Badge
@@ -309,13 +340,7 @@ export function RoutesPage() {
                   const p = product(state, l.productId);
                   return (
                     <label key={key} className="log-check-item">
-                      <input
-                        type="checkbox"
-                        checked={!!checked[key]}
-                        onChange={() =>
-                          setChecked((prev) => ({ ...prev, [key]: !prev[key] }))
-                        }
-                      />
+                      <Checkbox checked={!!checked[key]} onCheckedChange={() => setChecked((prev) => ({ ...prev, [key]: !prev[key] }))} />
                       <span>
                         {p?.name ?? l.productId} × {l.qty}
                         <small>
@@ -381,9 +406,9 @@ export function RoutesPage() {
 
       <p className="log-route-footnote">
         Las entregas e incidencias se guardan en el servidor y alimentan el{' '}
-        <button type="button" className="linkish" onClick={() => navigate('/logistica/historial')}>
+        <Button variant="link" className="linkish" onClick={() => navigate('/logistica/historial')}>
           Historial de rutas
-        </button>{' '}
+        </Button>{' '}
         y la trazabilidad.
       </p>
 
@@ -404,7 +429,7 @@ export function RoutesPage() {
           <form id="route-delivery-form" onSubmit={submitDelivery}>
             <div className="field">
               <label htmlFor="route-person">Quien recibe</label>
-              <input
+              <Input
                 id="route-person"
                 name="person"
                 required
@@ -426,7 +451,7 @@ export function RoutesPage() {
             ) : null}
             <div className="field">
               <label htmlFor="route-notes">Observaciones</label>
-              <textarea id="route-notes" name="notes" />
+              <Textarea id="route-notes" name="notes" />
             </div>
             {error ? <div className="form-error visible">{error}</div> : null}
           </form>
@@ -463,7 +488,7 @@ export function RoutesPage() {
             </div>
             <div className="field">
               <label htmlFor="route-inc-notes">Detalle</label>
-              <textarea id="route-inc-notes" name="notes" />
+              <Textarea id="route-inc-notes" name="notes" />
             </div>
             {error ? <div className="form-error visible">{error}</div> : null}
           </form>

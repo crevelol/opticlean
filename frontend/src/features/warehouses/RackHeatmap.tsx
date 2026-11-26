@@ -1,5 +1,6 @@
 import type { WarehouseLayout } from '../../shared/types';
 import { pct, type RackFill } from './warehouseRows';
+import { Tooltip } from '../../shared/components/Tooltip';
 
 const heat = (qty: number, cap: number) => (qty <= 0 ? 0 : Math.min(5, 1 + Math.floor((qty / cap) * 4.999)));
 
@@ -31,7 +32,7 @@ export function RackDetail({ rack, layout }: { rack: RackFill; layout: Warehouse
     <div className="whx-rd-grid">{levels.map((level) => <div key={level} className="whx-rd-row">
       <span>N{String(level).padStart(2, '0')}</span>
       <div className="whx-rd-cells" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
-        {rack.cells.filter((c) => c.level === level).sort((a, b) => (a.face === 'T' ? 1 : 0) - (b.face === 'T' ? 1 : 0) || a.pos - b.pos).map((cell) => <span key={cell.id} className="whx-cell" data-h={heat(cell.qty, layout.capacityPerCell)} title={`${cell.id}: ${cell.qty} / ${layout.capacityPerCell} u.`} />)}
+        {rack.cells.filter((c) => c.level === level).sort((a, b) => (a.face === 'T' ? 1 : 0) - (b.face === 'T' ? 1 : 0) || a.pos - b.pos).map((cell) => <Tooltip key={cell.id} content={`${cell.id}: ${cell.qty} / ${layout.capacityPerCell} u.`}><span className="whx-cell" data-h={heat(cell.qty, layout.capacityPerCell)} /></Tooltip>)}
       </div>
     </div>)}</div>
   </div>;
@@ -40,6 +41,6 @@ export function RackDetail({ rack, layout }: { rack: RackFill; layout: Warehouse
 /** Una barra vertical por rack, para comparar de un vistazo. */
 export function RackBars({ racks, warn }: { racks: RackFill[]; warn: number }) {
   return <div className="whx-bars" role="img" aria-label={racks.map((r) => `Rack ${r.id} ${pct(r.pct)}%`).join(', ')}>
-    {racks.map((rack) => <span key={rack.id} title={`Rack ${rack.id}: ${pct(rack.pct)}%`}><i className={rack.pct >= warn ? 'is-hot' : ''} style={{ height: `${rack.pct > 0 ? Math.max(6, pct(rack.pct)) : 0}%` }} /></span>)}
+    {racks.map((rack) => <Tooltip key={rack.id} content={`Rack ${rack.id}: ${pct(rack.pct)}%`}><span><i className={rack.pct >= warn ? 'is-hot' : ''} style={{ height: `${rack.pct > 0 ? Math.max(6, pct(rack.pct)) : 0}%` }} /></span></Tooltip>)}
   </div>;
 }

@@ -16,6 +16,7 @@ import { dateShort, money, num } from '../../shared/lib/inventory';
 import { Icon } from '../../shared/components/Icon';
 import { ReceivePurchaseDialog } from './ReceivePurchaseDialog';
 import '../../styles/forecast.css';
+import { Input, Textarea } from '../../shared/components/Input';
 
 const confidenceLabel: Record<ConfidenceLevel, string> = {
   low: 'Aprendiendo',
@@ -499,7 +500,7 @@ export function PurchasesPage() {
         >
           <div className="field full">
             <label htmlFor="po-close-reason">Motivo</label>
-            <input
+            <Input
               id="po-close-reason"
               value={closing.reason}
               placeholder="Ej.: el proveedor no tiene más stock"
@@ -640,7 +641,7 @@ export function PurchasesPage() {
                       </button>
                     </div>
                     <div className="field">
-                      <input
+                      <Input
                         aria-label={`Precio ${index + 1}`}
                         type="number"
                         min={0}
@@ -667,16 +668,16 @@ export function PurchasesPage() {
             <div className="po-dates">
               <div className="field">
                 <label htmlFor="pur-date">Fecha</label>
-                <input id="pur-date" name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
+                <Input id="pur-date" name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
               </div>
               <div className="field">
                 <label htmlFor="pur-expected">Llegada esperada</label>
-                <input id="pur-expected" name="expectedDate" type="date" />
+                <Input id="pur-expected" name="expectedDate" type="date" />
               </div>
             </div>
             <div className="field">
               <label htmlFor="pur-notes">Observaciones</label>
-              <textarea
+              <Textarea
                 id="pur-notes"
                 name="notes"
                 maxLength={300}
@@ -710,31 +711,31 @@ export function PurchasesPage() {
             <div className="form-grid">
               <div className="field full">
                 <label htmlFor="sup-name">Nombre</label>
-                <input id="sup-name" name="name" required />
+                <Input id="sup-name" name="name" required />
               </div>
               <div className="field">
                 <label htmlFor="sup-tax">RUC</label>
-                <input id="sup-tax" name="taxId" inputMode="numeric" pattern="\d{13}" minLength={13} maxLength={13} required />
+                <Input id="sup-tax" name="taxId" inputMode="numeric" pattern="\d{13}" minLength={13} maxLength={13} required />
               </div>
               <div className="field">
                 <label htmlFor="sup-lead">Días de entrega</label>
-                <input id="sup-lead" name="leadTimeDays" type="number" min={0} defaultValue={7} />
+                <Input id="sup-lead" name="leadTimeDays" type="number" min={0} defaultValue={7} />
               </div>
               <div className="field">
                 <label htmlFor="sup-contact">Contacto</label>
-                <input id="sup-contact" name="contact" />
+                <Input id="sup-contact" name="contact" />
               </div>
               <div className="field">
                 <label htmlFor="sup-phone">Teléfono</label>
-                <input id="sup-phone" name="phone" />
+                <Input id="sup-phone" name="phone" />
               </div>
               <div className="field full">
                 <label htmlFor="sup-email">Correo</label>
-                <input id="sup-email" name="email" type="email" />
+                <Input id="sup-email" name="email" type="email" />
               </div>
               <div className="field full">
                 <label htmlFor="sup-terms">Condiciones</label>
-                <input id="sup-terms" name="terms" placeholder="Crédito 30 días, pedido mínimo…" />
+                <Input id="sup-terms" name="terms" placeholder="Crédito 30 días, pedido mínimo…" />
               </div>
             </div>
           </form>

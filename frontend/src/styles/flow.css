@@ -70,17 +70,6 @@
   color: var(--color-primary);
   flex: none;
 }
-.fx-link {
-  background: none;
-  border: 0;
-  padding: 0;
-  color: var(--color-primary);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-.fx-link:hover { text-decoration: underline; }
-.fx-link:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: 2px; }
 .fx-muted { color: var(--color-text-muted); }
 
 /* Tabla de entradas por producto */
@@ -118,8 +107,8 @@
 .fx-dialog footer { border-top: 1px solid var(--color-border); }
 .fx-dialog h2 { margin: 0; font-size: 17px; }
 .fx-dialog .fx-body { padding: 14px 18px; display: grid; gap: 12px; min-width: 0; }
-.fx-dialog input,
 .fx-dialog select { font: inherit; padding: 5px 7px; border: 1px solid var(--color-border-input); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); min-width: 0; }
+.fx-dialog input { min-width: 0; }
 .fx-dialog .fx-table td { vertical-align: middle; }
 .fx-dialog .fx-qty { width: 76px; }
 .fx-dialog .fx-batch { width: 110px; }

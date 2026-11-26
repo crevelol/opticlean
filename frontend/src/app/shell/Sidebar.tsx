@@ -4,6 +4,8 @@ import { Icon, Logo } from '../../shared/components/Icon';
 import { cx } from '../../shared/components/ui';
 import { spring } from '../../shared/motion/presets';
 import type { MenuSection } from '../navigation';
+import { Tooltip } from '../../shared/components/Tooltip';
+import { IconButton } from '../../shared/components/IconButton';
 
 type Props = {
   sections: MenuSection[];
@@ -52,13 +54,11 @@ export function Sidebar({
                 const count = counters[item.path];
                 const pill = count ? String(count) : item.badge;
                 return (
-                  <NavLink
-                    key={item.id}
+                  <Tooltip key={item.id} content={collapsed ? item.label : undefined} side="right"><NavLink
                     to={item.path}
                     end={item.path === '/'}
                     onClick={onNavigate}
-                    title={collapsed ? item.label : undefined}
-                    className={({ isActive }) => cx('nav-item', isActive && 'active')}
+                    className="nav-item"
                   >
                     {({ isActive }) => (
                       <>
@@ -77,7 +77,7 @@ export function Sidebar({
                         ) : null}
                       </>
                     )}
-                  </NavLink>
+                  </NavLink></Tooltip>
                 );
               })}
             </nav>
@@ -86,11 +86,10 @@ export function Sidebar({
       </div>
 
       <div className="sidebar-foot">
-        <button
+        <Tooltip content={collapsed ? 'Asistente operativo' : undefined} side="right"><button
           type="button"
           className="assistant-trigger"
           onClick={onAssistant}
-          title={collapsed ? 'Asistente operativo' : undefined}
         >
           <span className="assistant-trigger-icon">
             <Icon name="spark" />
@@ -99,25 +98,17 @@ export function Sidebar({
             <strong>Asistente operativo</strong>
             <small>Consulta stock, espacio y prioridades</small>
           </span>
-        </button>
+        </button></Tooltip>
 
         <div className="sidebar-user">
-          <div className="avatar" title={user.name}>
+          <Tooltip content={user.name} side="right"><div className="avatar">
             {user.initials}
-          </div>
-          <div className="sidebar-user-text" title={user.email || undefined}>
+          </div></Tooltip>
+          <Tooltip content={user.email || undefined} side="right"><div className="sidebar-user-text">
             <strong>{user.name}</strong>
             <span>{user.role}</span>
-          </div>
-          <button
-            type="button"
-            className="icon-btn sidebar-logout"
-            onClick={onLogout}
-            aria-label="Cerrar sesión"
-            title="Cerrar sesión"
-          >
-            <Icon name="logout" />
-          </button>
+          </div></Tooltip>
+          <IconButton tooltipSide="right" icon="logout" label="Cerrar sesión" className="sidebar-logout" onClick={onLogout} />
         </div>
       </div>
     </aside>

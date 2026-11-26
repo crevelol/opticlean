@@ -89,20 +89,6 @@
   border-radius: 50%;
   background: var(--slate-350);
 }
-.invd-rel {
-  border: 0;
-  background: none;
-  padding: 0;
-  font: inherit;
-  font-weight: var(--weight-semibold);
-  color: var(--color-link);
-  white-space: normal;
-  text-align: left;
-  cursor: pointer;
-}
-.invd-rel:hover {
-  text-decoration: underline;
-}
 
 /* ── Cuerpo ──────────────────────────────────────────────────────── */
 .modal-body.invd-body {
@@ -240,50 +226,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
 }
-.modal.inv-detail .invd-action {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-width: 0;
-  min-height: 36px;
-  padding: 7px 8px;
-  border: 1px solid var(--slate-250);
-  border-radius: var(--radius-md);
-  background: var(--slate-0);
-  color: var(--slate-800);
-  font-size: var(--text-md);
-  font-weight: var(--weight-semibold);
-  line-height: 1.2;
-  text-align: center;
-  white-space: normal;
-  cursor: pointer;
-}
-.invd-action .icon {
-  width: 15px;
-  height: 15px;
-}
-.modal.inv-detail .invd-action:hover:not(:disabled) {
-  border-color: var(--blue-300);
-}
-.modal.inv-detail .invd-action:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.modal.inv-detail .invd-action-primary {
-  grid-column: 1 / -1;
-  border-color: var(--blue-600);
-  background: var(--blue-600);
-  color: var(--slate-0);
-}
-.modal.inv-detail .invd-action-primary:hover:not(:disabled) {
-  border-color: var(--blue-700);
-  background: var(--blue-700);
-}
 /* Si no hay «Solicitar compra», «Ver en bodega» ocupa toda la fila. */
-.invd-action-primary + .invd-action:last-child {
-  grid-column: 1 / -1;
-}
 
 /* Valores */
 .invd-values {
@@ -322,46 +265,6 @@
 }
 
 /* ── Pestañas ────────────────────────────────────────────────────── */
-.invd-tabs {
-  display: flex;
-  gap: 20px;
-  padding: 0 24px;
-  border-bottom: 1px solid var(--slate-150);
-  overflow-x: auto;
-  flex: none;
-}
-.invd-tabs > button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 12px 0 10px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--slate-600);
-  font-size: var(--text-base);
-  font-weight: var(--weight-medium);
-  white-space: nowrap;
-  cursor: pointer;
-}
-.invd-tabs > button[aria-selected='true'] {
-  color: var(--blue-700);
-  border-bottom-color: var(--blue-600);
-  font-weight: var(--weight-semibold);
-}
-.invd-tabs > button > span {
-  padding: 1px 6px;
-  border-radius: var(--radius-xs);
-  background: var(--slate-100);
-  color: var(--slate-650);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-}
-.invd-tabs > button[aria-selected='true'] > span {
-  background: var(--blue-50);
-  color: var(--blue-700);
-}
 .invd-tab-content {
   flex: 1;
   min-height: 0;
@@ -587,29 +490,12 @@
   align-items: center;
   gap: 4px;
 }
-.modal.inv-detail .invd-footer button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 10px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--slate-700);
-  font-size: var(--text-md);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-}
-.modal.inv-detail .invd-footer button:hover {
-  background: var(--slate-100);
-}
 .invd-footer .icon {
   width: 15px;
   height: 15px;
 }
 .modal.inv-detail .invd-footer .invd-delete {
   margin-left: auto;
-  color: var(--red-600);
 }
 
 /* ── Móvil: pantalla completa, columnas apiladas ─────────────────── */
@@ -631,10 +517,6 @@
     padding: 16px;
     overflow: visible;
   }
-  .invd-tabs {
-    padding: 0 16px;
-    gap: 16px;
-  }
   .invd-tab-content {
     overflow: visible;
     padding: 10px 16px 16px;
@@ -648,4 +530,23 @@
   .invd-lot {
     flex-wrap: wrap;
   }
+}
+
+/* Acciones y pestañas con los componentes compartidos (Button, Tabs): solo layout. */
+.invd-actions .invd-action-primary {
+  grid-column: 1 / -1;
+}
+.invd-actions .invd-action-primary + .btn:last-child {
+  grid-column: 1 / -1;
+}
+.invd-tabset {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.invd-tabset > .ui-tabs-list {
+  flex-shrink: 0;
+  margin-bottom: 0;
+  padding: 0 20px;
 }

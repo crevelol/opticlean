@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Select } from '../../shared/components/Select';
 import { api } from '../../shared/api/client';
 import { Modal } from '../../shared/components/Modal';
-import { Btn } from '../../shared/components/ui';
+import { Btn, Button } from '../../shared/components/ui';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { ensureShippingTemplates } from '../../shared/lib/businessRules';
 import type { Truck, VehicleKind } from './fleet';
@@ -14,6 +14,8 @@ import {
   sectorsOf as catalogSectors,
   zonePathOf,
 } from '../../shared/lib/zones';
+import { ChipGroup, RemovableChip } from '../../shared/components/Chip';
+import { Input } from '../../shared/components/Input';
 
 type VehicleRow = {
   id: string;
@@ -57,7 +59,7 @@ const emptyForm = {
   allowedSectors: [] as string[],
 };
 
-function zonesOfVehicle(v: VehicleRow) {
+function vehicleSectors(v: VehicleRow) {
   if (v.allowed_sectors_list?.length) return v.allowed_sectors_list;
   if (!v.allowed_sectors) return [];
   try {
@@ -254,7 +256,7 @@ export function FleetConfigModal({
             </label>
             <label>
               Placa
-              <input
+              <Input
                 value={form.plate}
                 onChange={(e) => setForm({ ...form, plate: e.target.value })}
                 placeholder="GBA-2041"
@@ -263,7 +265,7 @@ export function FleetConfigModal({
             </label>
             <label>
               Nombre
-              <input
+              <Input
                 value={form.label}
                 onChange={(e) => setForm({ ...form, label: e.target.value })}
                 placeholder="Camión 01"
@@ -272,7 +274,7 @@ export function FleetConfigModal({
             </label>
             <label>
               Ciudad
-              <input
+              <Input
                 value={form.city}
                 onChange={(e) => setForm({ ...form, city: e.target.value })}
                 placeholder="Quito"
@@ -280,14 +282,14 @@ export function FleetConfigModal({
             </label>
             <label>
               Conductor
-              <input
+              <Input
                 value={form.driver}
                 onChange={(e) => setForm({ ...form, driver: e.target.value })}
               />
             </label>
             <label>
               Capacidad kg
-              <input
+              <Input
                 type="number"
                 value={form.maxKg}
                 onChange={(e) => setForm({ ...form, maxKg: Number(e.target.value) })}
@@ -295,7 +297,7 @@ export function FleetConfigModal({
             </label>
             <label>
               Capacidad m³
-              <input
+              <Input
                 type="number"
                 step="0.1"
                 value={form.maxM3}
@@ -304,7 +306,7 @@ export function FleetConfigModal({
             </label>
             <label>
               Costo / km
-              <input
+              <Input
                 type="number"
                 step="0.01"
                 value={form.costPerKm}
@@ -335,19 +337,14 @@ export function FleetConfigModal({
             </p>
             <div className="fleet-sector-chips">
               {form.allowedSectors.map((s) => (
-                <button
+                <RemovableChip
                   key={s}
-                  type="button"
-                  className="fleet-chip is-on"
-                  onClick={() =>
-                    setForm({
-                      ...form,
-                      allowedSectors: form.allowedSectors.filter((x) => x !== s),
-                    })
+                  onRemove={() =>
+                    setForm({ ...form, allowedSectors: form.allowedSectors.filter((x) => x !== s) })
                   }
                 >
-                  {s} ×
-                </button>
+                  {s}
+                </RemovableChip>
               ))}
             </div>
             <div className="fleet-zone-builder">
@@ -393,22 +390,18 @@ export function FleetConfigModal({
                   </option>
                 ))}
               </Select>
-              <button
-                type="button"
-                disabled={!zonePreview}
-                onClick={() => {
+              <Button size="small" disabled={!zonePreview} onClick={() => {
                   addZonePath(zonePreview);
                   setZoneSector('');
-                }}
-              >
+                }}>
                 Agregar zona
-              </button>
+              </Button>
             </div>
             {zonePreview ? (
               <p className="muted">Se agregará: <strong>{zonePreview}</strong></p>
             ) : null}
             <div className="fleet-sector-add">
-              <input
+              <Input
                 value={sectorDraft}
                 onChange={(e) => setSectorDraft(e.target.value)}
                 placeholder="O escribe libre: Pichincha / Quito / Carcelén"
@@ -420,39 +413,32 @@ export function FleetConfigModal({
                   }
                 }}
               />
-              <button
-                type="button"
-                onClick={() => {
+              <Button size="small" onClick={() => {
                   addZonePath(sectorDraft);
                   setSectorDraft('');
-                }}
-              >
+                }}>
                 Agregar
-              </button>
+              </Button>
             </div>
             {knownSectors.length ? (
-              <div className="fleet-sector-chips">
-                {knownSectors.map((s) => {
-                  const on = form.allowedSectors.some((x) => x.toLowerCase() === s.toLowerCase());
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      className={`fleet-chip ${on ? 'is-on' : ''}`}
-                      onClick={() =>
-                        setForm({
-                          ...form,
-                          allowedSectors: on
-                            ? form.allowedSectors.filter((x) => x.toLowerCase() !== s.toLowerCase())
-                            : addSector(s, form.allowedSectors),
-                        })
-                      }
-                    >
-                      {s}
-                    </button>
+              <ChipGroup
+                type="multiple"
+                label="Sectores conocidos"
+                className="fleet-sector-chips"
+                value={knownSectors.filter((s) => form.allowedSectors.some((x) => x.toLowerCase() === s.toLowerCase()))}
+                onValueChange={(next) => {
+                  const current = knownSectors.filter((s) =>
+                    form.allowedSectors.some((x) => x.toLowerCase() === s.toLowerCase()),
                   );
-                })}
-              </div>
+                  const removed = current.filter((s) => !next.includes(s));
+                  let list = form.allowedSectors.filter(
+                    (x) => !removed.some((r) => r.toLowerCase() === x.toLowerCase()),
+                  );
+                  for (const s of next.filter((s) => !current.includes(s))) list = addSector(s, list);
+                  setForm({ ...form, allowedSectors: list });
+                }}
+                items={knownSectors.map((s) => ({ value: s, label: s }))}
+              />
             ) : null}
           </div>
 
@@ -479,7 +465,7 @@ export function FleetConfigModal({
               </thead>
               <tbody>
                 {vehicles.map((v) => {
-                  const sectors = zonesOfVehicle(v);
+                  const sectors = vehicleSectors(v);
                   return (
                     <tr key={v.id} className={v.active ? '' : 'is-off'}>
                       <td>
@@ -505,19 +491,13 @@ export function FleetConfigModal({
                         <div className="fleet-sector-chips">
                           {sectors.length ? (
                             sectors.map((s) => (
-                              <button
+                              <RemovableChip
                                 key={s}
-                                type="button"
-                                className="fleet-chip is-on"
                                 disabled={busy}
-                                onClick={() =>
-                                  void patch(v.id, {
-                                    allowedSectors: sectors.filter((x) => x !== s),
-                                  })
-                                }
+                                onRemove={() => void patch(v.id, { allowedSectors: sectors.filter((x) => x !== s) })}
                               >
-                                {s} ×
-                              </button>
+                                {s}
+                              </RemovableChip>
                             ))
                           ) : (
                             <em className="muted">Sin restricción</em>
@@ -547,19 +527,15 @@ export function FleetConfigModal({
                       </td>
                       <td>{v.active ? 'Activo' : 'Inactivo'}</td>
                       <td className="fleet-config-actions">
-                        <button type="button" disabled={busy || !v.active} onClick={() => setCostVehicleId(v.id)}>
+                        <Button size="small" disabled={busy || !v.active} onClick={() => setCostVehicleId(v.id)}>
                           Costo real
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => void patch(v.id, { active: !v.active })}
-                        >
+                        </Button>
+                        <Button size="small" disabled={busy} onClick={() => void patch(v.id, { active: !v.active })}>
                           {v.active ? 'Desactivar' : 'Activar'}
-                        </button>
-                        <button type="button" disabled={busy} onClick={() => void remove(v)}>
+                        </Button>
+                        <Button variant="danger" size="small" disabled={busy} onClick={() => void remove(v)}>
                           Eliminar
-                        </button>
+                        </Button>
                       </td>
                     </tr>
                   );

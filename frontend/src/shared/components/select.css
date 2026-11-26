@@ -136,8 +136,11 @@
 }
 
 .ui-select-menu {
-  position: fixed;
+  /* Posicionado por Radix Popover; su wrapper copia este z-index (sobre modales: 100). */
   z-index: 240;
+  transform-origin: var(--radix-popover-content-transform-origin);
+  /* Espejo de la salida (exitParts.popover): misma duración y curva. */
+  animation: ui-popover-in var(--duration-base) var(--ease-in-out);
   display: flex;
   flex-direction: column;
   width: max-content;
@@ -239,4 +242,8 @@
   padding: 12px 10px;
   color: var(--slate-500);
   font-size: var(--text-sm);
+}
+
+.ui-select-menu[data-side='top'] {
+  animation-name: ui-popover-in-up;
 }
