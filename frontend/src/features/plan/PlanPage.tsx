@@ -43,7 +43,7 @@ export function PlanPage() {
   const done = plan?.actions.filter((action) => action.status !== 'sugerida') ?? [];
 
   return (
-    <div className="page">
+    <div>
       <PageHead
         eyebrow="Abastecimiento"
         title="Plan de mañana"

@@ -114,7 +114,7 @@ export function CommercialPage() {
   };
 
   return (
-    <div className="page commercial-page">
+    <div className="commercial-page">
       <PageHead
         eyebrow="Gestión"
         title="Comercial"

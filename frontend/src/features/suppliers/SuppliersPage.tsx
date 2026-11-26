@@ -91,7 +91,7 @@ export function SuppliersPage() {
   const formSupplier = editing;
 
   return (
-    <div className="page">
+    <div>
       <PageHead
         eyebrow="Abastecimiento"
         title="Proveedores"
