@@ -1,34 +1,169 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Select } from '../../shared/components/Select';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import { api } from '../../shared/api/client';
 import {
   creditAvailable,
   creditUsed,
+  invoiceBalance,
   money,
   orderValue,
+  outstandingReceivable,
   statusColor,
 } from '../../shared/lib/inventory';
 import { Badge, Btn, PageHead, Button } from '../../shared/components/ui';
-import { Menu, MoreButton } from '../../shared/components/Menu';
-import { TabPanel, Tabs, SegmentedControl } from '../../shared/components/Tabs';
 import { resolveBusinessRules } from '../../shared/lib/businessRules';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import type { Client, Order } from '../../shared/types';
 import '../../styles/clients.css';
-import { Pagination } from '../../shared/components/Pagination';
 import { IconButton } from '../../shared/components/IconButton';
 import { Input } from '../../shared/components/Input';
 import { SearchInput } from '../../shared/components/SearchInput';
+import { SegmentedControl, TabPanel, Tabs } from '../../shared/components/Tabs';
+import { Menu, MoreButton } from '../../shared/components/Menu';
+import { Pagination } from '../../shared/components/Pagination';
 
 type CreditFilter = 'all' | 'ok' | 'tight' | 'full';
 type ViewMode = 'list' | 'cards';
-type DetailTab = 'resumen' | 'pedidos' | 'credito';
+type DetailTab = 'resumen' | 'pedidos' | 'credito' | 'cuenta';
 type SortMode = 'name' | 'orders' | 'credit';
 
 const PAGE_SIZE = 8;
+const CLIENT_TYPES = [
+  'Corporativo',
+  'Hotelería',
+  'Salud',
+  'Restauración',
+  'Institucional',
+  'Retail',
+  'Industrial',
+  'Mayorista',
+];
+
+function ClientFields({
+  client,
+  isAdmin,
+  idPrefix,
+  creditDefault = 0,
+}: {
+  client?: Client;
+  isAdmin: boolean;
+  idPrefix: string;
+  creditDefault?: number;
+}) {
+  return (
+    <div className="form-grid">
+      <div className="field full">
+        <label htmlFor={`${idPrefix}-name`}>Nombre</label>
+        <Input id={`${idPrefix}-name`} name="name" defaultValue={client?.name} required />
+      </div>
+      <div className="field">
+        <label htmlFor={`${idPrefix}-tax`}>RUC</label>
+        <Input
+          id={`${idPrefix}-tax`}
+          name="taxId"
+          inputMode="numeric"
+          pattern="\d{13}"
+          minLength={13}
+          maxLength={13}
+          defaultValue={client?.taxId}
+          required
+        />
+      </div>
+      <div className="field">
+        <label htmlFor={`${idPrefix}-person`}>Contacto</label>
+        <Input id={`${idPrefix}-person`} name="contact" defaultValue={client?.contact} required />
+      </div>
+      <div className="field">
+        <label htmlFor={`${idPrefix}-phone`}>Teléfono</label>
+        <Input id={`${idPrefix}-phone`} name="phone" defaultValue={client?.phone} />
+      </div>
+      <div className="field">
+        <label htmlFor={`${idPrefix}-type`}>Tipo de cliente</label>
+        <Select id={`${idPrefix}-type`} name="type" defaultValue={client?.type || 'Corporativo'}>
+          {(client?.type && !CLIENT_TYPES.includes(client.type)
+            ? [client.type, ...CLIENT_TYPES]
+            : CLIENT_TYPES
+          ).map((type) => (
+            <option key={type}>{type}</option>
+          ))}
+        </Select>
+      </div>
+      <div className="field">
+        <label htmlFor={`${idPrefix}-city`}>Ciudad de entrega</label>
+        <Input id={`${idPrefix}-city`} name="city" defaultValue={client?.city} />
+      </div>
+      <div className="field full">
+        <label htmlFor={`${idPrefix}-address`}>Dirección</label>
+        <Input id={`${idPrefix}-address`} name="address" defaultValue={client?.address} required />
+      </div>
+      <div className="field">
+        <label htmlFor={`${idPrefix}-email`}>Correo</label>
+        <Input
+          id={`${idPrefix}-email`}
+          name="email"
+          type="email"
+          defaultValue={client?.email}
+          required
+        />
+      </div>
+      <div className="field">
+        <label htmlFor={`${idPrefix}-cadence`}>Reposición cada (días)</label>
+        <Input
+          id={`${idPrefix}-cadence`}
+          name="reorderEveryDays"
+          type="number"
+          min={1}
+          step={1}
+          defaultValue={client?.reorderEveryDays ?? ''}
+        />
+      </div>
+      <div className="field">
+        <label htmlFor={`${idPrefix}-margin`}>Margen de cotización (%)</label>
+        <Input
+          id={`${idPrefix}-margin`}
+          name="marginPct"
+          type="number"
+          min={0}
+          max={1000}
+          step={0.1}
+          defaultValue={client?.marginPct ?? ''}
+          placeholder="Vacío = usar PVP del producto"
+        />
+      </div>
+      {isAdmin ? (
+        <>
+          <div className="field">
+            <label htmlFor={`${idPrefix}-credit`}>Límite de crédito (USD)</label>
+            <Input
+              id={`${idPrefix}-credit`}
+              name="creditLimit"
+              type="number"
+              min={0}
+              step={50}
+              defaultValue={client?.creditLimit ?? creditDefault}
+              required
+            />
+          </div>
+          <div className="field">
+            <label htmlFor={`${idPrefix}-terms`}>Plazo de pago (días)</label>
+            <Input
+              id={`${idPrefix}-terms`}
+              name="paymentTermsDays"
+              type="number"
+              min={0}
+              step={1}
+              defaultValue={client?.paymentTermsDays ?? 30}
+              required
+            />
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
 
 function initials(name: string) {
   return name
@@ -51,10 +186,12 @@ export function ClientsPage() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [profileId, setProfileId] = useState<string | null>(null);
   const [creditDraft, setCreditDraft] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [query, setQuery] = useState('');
+  const [params] = useSearchParams();
+  const [query, setQuery] = useState(() => params.get('q') ?? '');
   const [sector, setSector] = useState('all');
   const [creditFilter, setCreditFilter] = useState<CreditFilter>('all');
   const [view, setView] = useState<ViewMode>('list');
@@ -96,7 +233,7 @@ export function ClientsPage() {
           return false;
         if (creditFilter === 'full' && pct < creditRules.creditTightMaxPct) return false;
         if (!q) return true;
-        return [c.name, c.contact, c.email, c.address, c.id, c.sector]
+        return [c.name, c.contact, c.email, c.address, c.id, c.sector, c.city, c.phone, c.taxId]
           .join(' ')
           .toLowerCase()
           .includes(q);
@@ -176,6 +313,40 @@ export function ClientsPage() {
   };
 
   const editing = editId ? state.clients.find((c) => c.id === editId) : null;
+  const profiling = profileId ? state.clients.find((c) => c.id === profileId) : null;
+
+  const saveProfile = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!profileId || busy) return;
+    setBusy(true);
+    setError('');
+    const data = Object.fromEntries(new FormData(event.currentTarget));
+    const body: Record<string, unknown> = {
+      name: data.name,
+      taxId: data.taxId,
+      contact: data.contact,
+      phone: data.phone,
+      type: data.type,
+      city: data.city,
+      address: data.address,
+      email: data.email,
+      reorderEveryDays: data.reorderEveryDays ? Number(data.reorderEveryDays) : undefined,
+      marginPct: String(data.marginPct ?? '').trim() === '' ? null : Number(data.marginPct),
+    };
+    if (isAdmin) {
+      body.creditLimit = Number(data.creditLimit);
+      body.paymentTermsDays = Number(data.paymentTermsDays);
+    }
+    try {
+      applyResponse(await api.updateClient(profileId, body));
+      toast('Cliente actualizado.');
+      setProfileId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo actualizar el cliente.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const openCredit = (c: Client) => {
     setEditId(c.id);
@@ -276,6 +447,7 @@ export function ClientsPage() {
                             <span>
                               <strong>{c.name}</strong>
                               <small>
+                                {c.taxId ? `${c.taxId} · ` : ''}
                                 {c.type}
                                 {c.contact ? ` · ${c.contact}` : ''}
                               </small>
@@ -314,11 +486,7 @@ export function ClientsPage() {
                                     setTab('resumen');
                                   },
                                 },
-                                isAdmin && {
-                                  label: 'Editar crédito',
-                                  icon: 'edit',
-                                  onSelect: () => openCredit(c),
-                                },
+                                isAdmin && { label: 'Editar crédito', icon: 'edit', onSelect: () => openCredit(c) },
                               ]}
                             />
                           </div>
@@ -401,137 +569,236 @@ export function ClientsPage() {
               items={[
                 { value: 'resumen', label: 'Resumen' },
                 { value: 'pedidos', label: 'Pedidos', count: selected.orders.length },
+                { value: 'cuenta', label: 'Estado de cuenta' },
                 { value: 'credito', label: 'Crédito' },
               ]}
             >
-              <TabPanel value="resumen">
-                <div className="cli-detail-body">
-                  <dl className="cli-info">
-                    <div>
-                      <dt>Contacto</dt>
-                      <dd>{selected.client.contact}</dd>
-                    </div>
-                    <div>
-                      <dt>Correo</dt>
-                      <dd>{selected.client.email}</dd>
-                    </div>
-                    <div>
-                      <dt>Dirección</dt>
-                      <dd>{selected.client.address}</dd>
-                    </div>
-                  </dl>
 
-                  <div className="cli-credit-box">
-                    <div className="cli-credit-box-head">
-                      <strong>Cupo de crédito</strong>
-                      {isAdmin ? (
-                        <Button variant="link" onClick={() => openCredit(selected.client)}>
-                          Editar
-                        </Button>
-                      ) : null}
-                    </div>
-                    <div className="cli-credit-stats">
-                      <div>
-                        <span>Límite</span>
-                        <strong>{money(selected.limit)}</strong>
-                      </div>
-                      <div>
-                        <span>Comprometido</span>
-                        <strong>{money(selected.used)}</strong>
-                      </div>
-                      <div>
-                        <span>Disponible</span>
-                        <strong className="is-ok">{money(selected.available)}</strong>
-                      </div>
-                    </div>
-                    <div className="cli-credit-bar">
-                      <span style={{ width: `${selected.pct}%` }} />
-                    </div>
-                    <Button variant="link" className="cli-text-link" onClick={() => setTab('pedidos')}>
-                      Ver pedidos que usan el cupo
-                    </Button>
+            <TabPanel value="resumen">
+              <div className="cli-detail-body">
+                <dl className="cli-info">
+                  <div>
+                    <dt>RUC</dt>
+                    <dd>{selected.client.taxId || 'Sin RUC'}</dd>
                   </div>
-
-                  <div className="cli-orders-summary">
-                    <strong>{selected.orders.length} pedidos</strong>
-                    <span>
-                      {money(selected.orders.reduce((n, o) => n + orderValue(state, o), 0))}
-                    </span>
+                  <div>
+                    <dt>Contacto</dt>
+                    <dd>{selected.client.contact}</dd>
                   </div>
-                </div>
-              </TabPanel>
-
-              <TabPanel value="pedidos">
-                <div className="cli-detail-body">
-                  {selected.orders.length ? (
-                    <ul className="cli-order-list">
-                      {selected.orders
-                        .slice()
-                        .sort((a, b) => b.date.localeCompare(a.date))
-                        .map((o) => (
-                          <li key={o.id}>
-                            <div>
-                              <strong>{o.id}</strong>
-                              <small>
-                                {o.date} · {o.status}
-                              </small>
-                            </div>
-                            <div className="cli-order-meta">
-                              <Badge text={o.status} color={statusColor(o.status)} />
-                              <em>{money(orderValue(state, o))}</em>
-                            </div>
-                          </li>
-                        ))}
-                    </ul>
-                  ) : (
-                    <p className="cli-empty">Sin pedidos registrados.</p>
-                  )}
-                </div>
-              </TabPanel>
-
-              <TabPanel value="credito">
-                <div className="cli-detail-body">
-                  <div className="cli-credit-box">
-                    <div className="cli-credit-stats">
-                      <div>
-                        <span>Límite</span>
-                        <strong>{money(selected.limit)}</strong>
-                      </div>
-                      <div>
-                        <span>Comprometido</span>
-                        <strong>{money(selected.used)}</strong>
-                      </div>
-                      <div>
-                        <span>Disponible</span>
-                        <strong className="is-ok">{money(selected.available)}</strong>
-                      </div>
-                    </div>
-                    <div className="cli-credit-bar">
-                      <span
-                        style={{ width: `${selected.pct}%` }}
-                        className={
-                          selected.pct >= rules.creditTightMaxPct
-                            ? 'is-red'
-                            : selected.pct >= rules.creditOkMaxPct
-                              ? 'is-amber'
-                              : ''
-                        }
-                      />
-                    </div>
-                    <p className="cli-credit-note">
-                      El cupo comprometido corresponde a pedidos abiertos (por preparar, en ruta,
-                      etc.).
-                    </p>
-                    <Btn
-                      variant="primary"
-                      disabled={!isAdmin}
-                      onClick={() => openCredit(selected.client)}
-                    >
-                      Ajustar límite
-                    </Btn>
+                  <div>
+                    <dt>Correo</dt>
+                    <dd>{selected.client.email}</dd>
                   </div>
+                  <div>
+                    <dt>Teléfono</dt>
+                    <dd>{selected.client.phone || 'Sin teléfono'}</dd>
+                  </div>
+                  <div>
+                    <dt>Ciudad</dt>
+                    <dd>{selected.client.city || 'Sin ciudad'}</dd>
+                  </div>
+                  <div>
+                    <dt>Dirección</dt>
+                    <dd>{selected.client.address}</dd>
+                  </div>
+                  <div>
+                    <dt>Plazo</dt>
+                    <dd>{selected.client.paymentTermsDays ?? 30} días</dd>
+                  </div>
+                  <div>
+                    <dt>Margen cotización</dt>
+                    <dd>
+                      {selected.client.marginPct != null
+                        ? `${selected.client.marginPct}% sobre costo`
+                        : 'Sin margen · usa PVP'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Reposición</dt>
+                    <dd>
+                      {selected.client.reorderEveryDays
+                        ? `cada ${selected.client.reorderEveryDays} días`
+                        : 'Sin cadencia'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Por cobrar</dt>
+                    <dd>{money(outstandingReceivable(state, selected.client.id))}</dd>
+                  </div>
+                </dl>
+
+                <div className="cli-credit-box">
+                  <div className="cli-credit-box-head">
+                    <strong>Cupo de crédito</strong>
+                    {isAdmin ? (
+                      <Button variant="link" onClick={() => openCredit(selected.client)}>
+                        Editar
+                      </Button>
+                    ) : null}
+                  </div>
+                  <div className="cli-credit-stats">
+                    <div>
+                      <span>Límite</span>
+                      <strong>{money(selected.limit)}</strong>
+                    </div>
+                    <div>
+                      <span>Comprometido</span>
+                      <strong>{money(selected.used)}</strong>
+                    </div>
+                    <div>
+                      <span>Disponible</span>
+                      <strong className="is-ok">{money(selected.available)}</strong>
+                    </div>
+                  </div>
+                  <div className="cli-credit-bar">
+                    <span style={{ width: `${selected.pct}%` }} />
+                  </div>
+                  <Button variant="link" className="cli-text-link" onClick={() => setTab('pedidos')}>
+                    Ver pedidos que usan el cupo
+                  </Button>
                 </div>
-              </TabPanel>
+
+                <div className="cli-orders-summary">
+                  <strong>{selected.orders.length} pedidos</strong>
+                  <span>
+                    {money(selected.orders.reduce((n, o) => n + orderValue(state, o), 0))}
+                  </span>
+                </div>
+              </div>
+</TabPanel>
+
+            <TabPanel value="cuenta">
+              <div className="cli-detail-body">
+                <div className="cli-orders-summary">
+                  <strong>Saldo por cobrar</strong>
+                  <span>{money(outstandingReceivable(state, selected.client.id))}</span>
+                </div>
+                <ul className="cli-order-list">
+                  {(state.invoices ?? [])
+                    .filter(
+                      (invoice) =>
+                        invoice.clientId === selected.client.id && invoice.status === 'Emitida',
+                    )
+                    .map((invoice) => (
+                      <li key={invoice.id}>
+                        <div>
+                          <strong>{invoice.number}</strong>
+                          <small>
+                            {invoice.date} · {invoice.orderId}
+                          </small>
+                        </div>
+                        <div className="cli-order-meta">
+                          <span>{money(invoice.total)}</span>
+                          <small>saldo {money(invoiceBalance(state, invoice.id))}</small>
+                        </div>
+                      </li>
+                    ))}
+                  {(state.creditNotes ?? [])
+                    .filter(
+                      (note) => note.clientId === selected.client.id && note.status === 'Emitida',
+                    )
+                    .map((note) => (
+                      <li key={note.id}>
+                        <div>
+                          <strong>{note.number}</strong>
+                          <small>{note.date} · nota de crédito</small>
+                        </div>
+                        <span>-{money(note.total)}</span>
+                      </li>
+                    ))}
+                  {(state.customerPayments ?? [])
+                    .filter((payment) => payment.clientId === selected.client.id)
+                    .map((payment) => (
+                      <li key={payment.id}>
+                        <div>
+                          <strong>{payment.reference}</strong>
+                          <small>
+                            {payment.date} · {payment.method}
+                          </small>
+                        </div>
+                        <span>-{money(payment.amount)}</span>
+                      </li>
+                    ))}
+                </ul>
+                {(state.invoices ?? []).some(
+                  (invoice) => invoice.clientId === selected.client.id,
+                ) ? null : (
+                  <p className="cli-credit-note">Todavía no hay facturas para este cliente.</p>
+                )}
+              </div>
+</TabPanel>
+
+            <TabPanel value="pedidos">
+              <div className="cli-detail-body">
+                {selected.orders.length ? (
+                  <ul className="cli-order-list">
+                    {selected.orders
+                      .slice()
+                      .sort((a, b) => b.date.localeCompare(a.date))
+                      .map((o) => (
+                        <li key={o.id}>
+                          <div>
+                            <strong>{o.id}</strong>
+                            <small>
+                              {o.date} · {o.status}
+                            </small>
+                          </div>
+                          <div className="cli-order-meta">
+                            <Badge text={o.status} color={statusColor(o.status)} />
+                            <em>{money(orderValue(state, o))}</em>
+                          </div>
+                        </li>
+                      ))}
+                  </ul>
+                ) : (
+                  <p className="cli-empty">Sin pedidos registrados.</p>
+                )}
+              </div>
+</TabPanel>
+
+            <TabPanel value="credito">
+              <div className="cli-detail-body">
+                <div className="cli-credit-box">
+                  <div className="cli-credit-stats">
+                    <div>
+                      <span>Límite</span>
+                      <strong>{money(selected.limit)}</strong>
+                    </div>
+                    <div>
+                      <span>Comprometido</span>
+                      <strong>{money(selected.used)}</strong>
+                    </div>
+                    <div>
+                      <span>Disponible</span>
+                      <strong className="is-ok">{money(selected.available)}</strong>
+                    </div>
+                  </div>
+                  <div className="cli-credit-bar">
+                    <span
+                      style={{ width: `${selected.pct}%` }}
+                      className={
+                        selected.pct >= rules.creditTightMaxPct
+                          ? 'is-red'
+                          : selected.pct >= rules.creditOkMaxPct
+                            ? 'is-amber'
+                            : ''
+                      }
+                    />
+                  </div>
+                  <p className="cli-credit-note">
+                    El cupo comprometido corresponde a pedidos abiertos (por preparar, en ruta,
+                    etc.).
+                  </p>
+                  <Btn
+                    variant="primary"
+                    disabled={!isAdmin}
+                    onClick={() => openCredit(selected.client)}
+                  >
+                    Ajustar límite
+                  </Btn>
+                </div>
+              </div>
+</TabPanel>
             </Tabs>
 
             <footer className="cli-detail-foot">
@@ -544,7 +811,10 @@ export function ClientsPage() {
               >
                 Crear pedido
               </Btn>
-              <Button variant="link" className="cli-text-link" onClick={() => openCredit(selected.client)}>
+              <Button variant="link" className="cli-text-link" onClick={() => {
+                  setProfileId(selected.client.id);
+                  setError('');
+                }}>
                 Editar cliente
               </Button>
             </footer>
@@ -567,52 +837,33 @@ export function ClientsPage() {
           }
         >
           <form id="client-form" onSubmit={submit}>
-            <div className="form-grid">
-              <div className="field full">
-                <label htmlFor="cl-name">Nombre</label>
-                <Input id="cl-name" name="name" required />
-              </div>
-              <div className="field">
-                <label htmlFor="cl-person">Contacto</label>
-                <Input id="cl-person" name="contact" required />
-              </div>
-              <div className="field">
-                <label htmlFor="cl-type">Sector</label>
-                <Select id="cl-type" name="type">
-                  <option>Corporativo</option>
-                  <option>Hotelería</option>
-                  <option>Salud</option>
-                  <option>Restauración</option>
-                  <option>Industrial</option>
-                </Select>
-              </div>
-              <div className="field full">
-                <label htmlFor="cl-address">Dirección</label>
-                <Input id="cl-address" name="address" required />
-              </div>
-              <div className="field">
-                <label htmlFor="cl-email">Correo</label>
-                <Input id="cl-email" name="email" type="email" required />
-              </div>
-              <div className="field">
-                <label htmlFor="cl-credit">Límite de crédito (USD)</label>
-                <Input
-                  id="cl-credit"
-                  name="creditLimit"
-                  type="number"
-                  min={0}
-                  step={50}
-                  defaultValue={rules.defaultCreditLimit}
-                  readOnly={!isAdmin}
-                  required
-                />
-                {!isAdmin ? (
-                  <small>
-                    Se asigna el cupo por defecto. Administración puede ajustarlo después.
-                  </small>
-                ) : null}
-              </div>
-            </div>
+            <ClientFields
+              idPrefix="cl"
+              isAdmin={isAdmin}
+              creditDefault={rules.defaultCreditLimit}
+            />
+            {!isAdmin ? <small>El cupo y el plazo los asigna administración.</small> : null}
+            {error ? <div className="form-error visible">{error}</div> : null}
+          </form>
+        </Modal>
+      ) : null}
+
+      {profiling ? (
+        <Modal
+          title={`Editar · ${profiling.name}`}
+          subtitle="RUC, entrega, contacto y, si eres administración, cupo y plazo."
+          onClose={() => setProfileId(null)}
+          footer={
+            <ModalActions
+              onCancel={() => setProfileId(null)}
+              submitLabel={busy ? 'Guardando…' : 'Guardar'}
+              formId="client-edit-form"
+              icon="save"
+            />
+          }
+        >
+          <form id="client-edit-form" onSubmit={(event) => void saveProfile(event)}>
+            <ClientFields key={profiling.id} idPrefix="edit" client={profiling} isAdmin={isAdmin} />
             {error ? <div className="form-error visible">{error}</div> : null}
           </form>
         </Modal>

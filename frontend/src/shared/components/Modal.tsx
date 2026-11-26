@@ -15,9 +15,12 @@ export function Modal({
   wide,
   fill,
   busy,
+  header,
+  className,
+  bodyClassName,
   onClose,
 }: {
-  title: ReactNode;
+  title: string;
   subtitle?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
@@ -26,6 +29,10 @@ export function Modal({
   fill?: boolean;
   /** Bloquea el cierre mientras se guarda. */
   busy?: boolean;
+  /** Reemplaza el título y subtítulo por un encabezado propio; `title` queda como nombre accesible. */
+  header?: ReactNode;
+  className?: string;
+  bodyClassName?: string;
   onClose: () => void;
 }) {
   return (
@@ -35,6 +42,9 @@ export function Modal({
       footer={footer}
       size={fill ? 'fill' : wide ? 'wide' : 'default'}
       busy={busy}
+      header={header}
+      className={className}
+      bodyClassName={bodyClassName}
       onClose={onClose}
     >
       {children}

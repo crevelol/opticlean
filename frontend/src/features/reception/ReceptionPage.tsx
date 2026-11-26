@@ -4,7 +4,11 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
 import { activeWarehouseId, available, product, qtyAt, stock } from '../../shared/lib/inventory';
-import { buildWarehouseGeometry, faceLabel, normalizeLayout } from '../../shared/lib/warehouseLayout';
+import {
+  buildWarehouseGeometry,
+  faceLabel,
+  normalizeLayout,
+} from '../../shared/lib/warehouseLayout';
 import { Btn, PageHead, cx, Button } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal } from '../../shared/components/Modal';
@@ -26,7 +30,11 @@ const steps = [
 
 const expiryLabel = (d: string) =>
   d
-    ? new Date(`${d}T12:00:00`).toLocaleDateString('es-EC', { day: '2-digit', month: 'short', year: 'numeric' })
+    ? new Date(`${d}T12:00:00`).toLocaleDateString('es-EC', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
     : 'Sin fecha';
 
 /** Registro de una recepción en cuatro pasos, con resumen lateral. */
@@ -35,7 +43,12 @@ export function ReceptionNewPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const routeState =
-    (location.state as { loc?: string; productId?: string; purchaseId?: string; qty?: number } | null) ?? {};
+    (location.state as {
+      loc?: string;
+      productId?: string;
+      purchaseId?: string;
+      qty?: number;
+    } | null) ?? {};
   const prefillLoc = routeState.loc;
   const [step, setStep] = useState(0);
   const [productId, setProductId] = useState(routeState.productId ?? state?.products[0]?.id ?? '');
@@ -43,7 +56,9 @@ export function ReceptionNewPage() {
   const [packCode, setPackCode] = useState('unidad');
   const [purchaseId, setPurchaseId] = useState(routeState.purchaseId ?? '');
   const openPurchases = (state?.purchases ?? []).filter(
-    (p) => purchaseIncludes(p, productId) && (!p.status || p.status === 'Abierta' || p.status === 'Parcial'),
+    (p) =>
+      purchaseIncludes(p, productId) &&
+      (!p.status || p.status === 'Abierta' || p.status === 'Parcial'),
   );
   const [supplier, setSupplier] = useState('');
   const { user } = useAuth();
@@ -79,7 +94,12 @@ export function ReceptionNewPage() {
   const packs = packsOf(selectedProduct);
   const pack = packs.find((item) => item.code === packCode) ?? packs[0];
   const stockQty = Math.round(qty * (pack?.units ?? 1));
-  const validQty = Number.isInteger(qty) && qty > 0 && Number.isInteger(stockQty) && stockQty > 0 && stockQty <= capacity;
+  const validQty =
+    Number.isInteger(qty) &&
+    qty > 0 &&
+    Number.isInteger(stockQty) &&
+    stockQty > 0 &&
+    stockQty <= capacity;
   const [suggestionKey, setSuggestionKey] = useState('');
   const currentKey = `${warehouseId}:${productId}:${stockQty}`;
   const ready = !loading && suggestionKey === currentKey && validQty;
@@ -126,7 +146,9 @@ export function ReceptionNewPage() {
         if (cancelled) return;
         setSuggestions([]);
         setLoading(false);
-        setLookupError(err instanceof Error ? err.message : 'No se pudieron consultar las ubicaciones.');
+        setLookupError(
+          err instanceof Error ? err.message : 'No se pudieron consultar las ubicaciones.',
+        );
       });
     return () => {
       cancelled = true;
@@ -143,12 +165,15 @@ export function ReceptionNewPage() {
   const occupiedAfter = selected ? occupiedNow + stockQty : 0;
   const freeNow = selected ? selected.capacity - occupiedNow : 0;
   const fillNow = selected ? Math.min(100, Math.round((occupiedNow / selected.capacity) * 100)) : 0;
-  const fillAfter = selected ? Math.min(100, Math.round((occupiedAfter / selected.capacity) * 100)) : 0;
+  const fillAfter = selected
+    ? Math.min(100, Math.round((occupiedAfter / selected.capacity) * 100))
+    : 0;
   const todayIso = new Date().toISOString().slice(0, 10);
 
+  const expires = selectedProduct?.perishable !== false;
   const stepValid = [
     !!productId && supplier.trim().length > 0 && (!!purchaseId || (isAdmin && !!reason)),
-    validQty && batch.trim().length > 0 && !!expiry && expiry >= todayIso,
+    validQty && batch.trim().length > 0 && (!expires || (!!expiry && expiry >= todayIso)),
     ready && !!selected && !lookupError && freeNow >= stockQty,
     true,
   ];
@@ -203,14 +228,22 @@ export function ReceptionNewPage() {
 
   const checks = [
     { label: 'Producto y proveedor', ok: stepValid[0] },
-    { label: 'Cantidad, lote y vencimiento', ok: stepValid[1] },
+    { label: expires ? 'Cantidad, lote y vencimiento' : 'Cantidad y lote', ok: stepValid[1] },
     { label: 'Ubicación con espacio', ok: step >= 2 && stepValid[2] },
   ];
 
   const review: Array<{ k: string; v: React.ReactNode; step: number }> = [
     { k: 'Producto', v: `${productId} · ${selectedProduct?.name ?? ''}`, step: 0 },
-    { k: 'Orden de compra', v: purchaseId || `Sin orden de compra · ${reason || 'falta motivo'}`, step: 0 },
-    { k: 'Inspección', v: inspect ? 'Queda retenido hasta liberarlo' : 'Disponible al registrar', step: 1 },
+    {
+      k: 'Orden de compra',
+      v: purchaseId || `Sin orden de compra · ${reason || 'falta motivo'}`,
+      step: 0,
+    },
+    {
+      k: 'Inspección',
+      v: inspect ? 'Queda retenido hasta liberarlo' : 'Disponible al registrar',
+      step: 1,
+    },
     { k: 'Proveedor', v: supplier, step: 0 },
     {
       k: 'Cantidad',
@@ -275,12 +308,21 @@ export function ReceptionNewPage() {
             <div className="form-section reception-step-panel" key={step}>
               <h3 ref={headingRef} tabIndex={-1}>
                 <Icon name={['box', 'receive', 'pin', 'check'][step]} />
-                {['¿Qué producto llega?', 'Cantidad recibida', 'Elige dónde se guarda', 'Revisa antes de registrar'][step]}
+                {
+                  [
+                    '¿Qué producto llega?',
+                    'Cantidad recibida',
+                    'Elige dónde se guarda',
+                    'Revisa antes de registrar',
+                  ][step]
+                }
               </h3>
 
               {step === 0 ? (
                 <>
-                  <p className="section-note">Si llega con orden de compra, elígela y se completa el proveedor.</p>
+                  <p className="section-note">
+                    Si llega con orden de compra, elígela y se completa el proveedor.
+                  </p>
                   <div className="form-grid">
                     <div className="field full">
                       <label htmlFor="rec-product">Producto</label>
@@ -302,7 +344,11 @@ export function ReceptionNewPage() {
                     </div>
                     <div className="field">
                       <label htmlFor="rec-po">Orden de compra</label>
-                      <Select id="rec-po" value={purchaseId} onChange={(e) => setPurchaseId(e.target.value)}>
+                      <Select
+                        id="rec-po"
+                        value={purchaseId}
+                        onChange={(e) => setPurchaseId(e.target.value)}
+                      >
                         <option value="">Sin orden de compra</option>
                         {openPurchases.map((p) => (
                           <option key={p.id} value={p.id}>
@@ -310,12 +356,19 @@ export function ReceptionNewPage() {
                           </option>
                         ))}
                       </Select>
-                      {!openPurchases.length ? <small>No hay órdenes abiertas para este producto.</small> : null}
+                      {!openPurchases.length ? (
+                        <small>No hay órdenes abiertas para este producto.</small>
+                      ) : null}
                     </div>
                     {!purchaseId ? (
                       <div className="field">
                         <label htmlFor="rec-reason">Motivo del ingreso sin orden</label>
-                        <Select id="rec-reason" value={reason} disabled={!isAdmin} onChange={(e) => setReason(e.target.value)}>
+                        <Select
+                          id="rec-reason"
+                          value={reason}
+                          disabled={!isAdmin}
+                          onChange={(e) => setReason(e.target.value)}
+                        >
                           <option value="">Elegir motivo…</option>
                           {RECEIPT_REASONS.map((r) => (
                             <option key={r} value={r}>
@@ -345,7 +398,9 @@ export function ReceptionNewPage() {
 
               {step === 1 ? (
                 <>
-                  <p className="section-note">Cuenta los empaques físicos. Las unidades de stock se calculan solas.</p>
+                  <p className="section-note">
+                    Cuenta los empaques físicos. Las unidades de stock se calculan solas.
+                  </p>
                   <div className="form-grid">
                     <div className="field">
                       <label htmlFor="rec-pack">Empaque recibido</label>
@@ -388,8 +443,8 @@ export function ReceptionNewPage() {
                         </>
                       ) : stockQty > capacity ? (
                         <span>
-                          {stockQty} u. supera la capacidad de una casilla ({capacity} u.). Registra la recepción en
-                          partes.
+                          {stockQty} u. supera la capacidad de una casilla ({capacity} u.). Registra
+                          la recepción en partes.
                         </span>
                       ) : (
                         <span>Ingresa una cantidad entera mayor a cero.</span>
@@ -407,23 +462,38 @@ export function ReceptionNewPage() {
                       <small>Tal como aparece en la etiqueta del proveedor.</small>
                     </div>
                     <div className="field">
-                      <label htmlFor="rec-expiry">Vencimiento</label>
+                      <label htmlFor="rec-expiry">
+                        {expires ? 'Vencimiento' : 'Vencimiento (no caduca)'}
+                      </label>
                       <Input
                         id="rec-expiry"
                         type="date"
                         value={expiry}
                         onChange={(e) => setExpiry(e.target.value)}
                         min={todayIso}
-                        required
+                        required={expires}
                       />
-                      <small>Se despacha primero lo que vence antes.</small>
+                      <small>
+                        {expires
+                          ? 'Se despacha primero lo que vence antes.'
+                          : 'Este producto no caduca. La fecha queda vacía.'}
+                      </small>
                     </div>
                     <div className="field">
-                      <label htmlFor="rec-inspect" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <Checkbox id="rec-inspect" checked={inspect} onCheckedChange={(checked) => setInspect(checked)} />
+                      <label
+                        htmlFor="rec-inspect"
+                        style={{ display: 'flex', gap: 8, alignItems: 'center' }}
+                      >
+                        <Checkbox
+                          id="rec-inspect"
+                          checked={inspect}
+                          onCheckedChange={(checked) => setInspect(checked)}
+                        />
                         Recibir a inspección de calidad
                       </label>
-                      <small>El lote queda retenido y no se vende hasta que administración lo libere.</small>
+                      <small>
+                        El lote queda retenido y no se vende hasta que administración lo libere.
+                      </small>
                     </div>
                   </div>
                 </>
@@ -441,12 +511,14 @@ export function ReceptionNewPage() {
 
                   {ready && prefillLoc && !suggestions.some((item) => item.id === prefillLoc) ? (
                     <p className="wh-notice" role="status">
-                      La ubicación {prefillLoc} no admite este producto o cantidad. Elige otra opción.
+                      La ubicación {prefillLoc} no admite este producto o cantidad. Elige otra
+                      opción.
                     </p>
                   ) : null}
                   {lookupError ? (
                     <div className="wh-error" role="alert">
-                      {lookupError} <Btn onClick={() => setAttempt((value) => value + 1)}>Reintentar</Btn>
+                      {lookupError}{' '}
+                      <Btn onClick={() => setAttempt((value) => value + 1)}>Reintentar</Btn>
                     </div>
                   ) : null}
                   {ready && !suggestions.length && !lookupError ? (
@@ -456,7 +528,11 @@ export function ReceptionNewPage() {
                   ) : null}
 
                   {ready && visibleSuggestions.length ? (
-                    <div className="reception-loc-list" role="radiogroup" aria-label="Ubicaciones compatibles">
+                    <div
+                      className="reception-loc-list"
+                      role="radiogroup"
+                      aria-label="Ubicaciones compatibles"
+                    >
                       {visibleSuggestions.map((l, index) => {
                         const used = qtyAt(state, l.id);
                         const free = l.capacity - used;
@@ -514,14 +590,20 @@ export function ReceptionNewPage() {
 
               {step === 3 ? (
                 <>
-                  <p className="section-note">Al confirmar se suma al inventario y queda la trazabilidad del lote.</p>
+                  <p className="section-note">
+                    Al confirmar se suma al inventario y queda la trazabilidad del lote.
+                  </p>
                   <dl className="reception-review">
                     {review.map((row) => (
                       <div key={row.k}>
                         <dt>{row.k}</dt>
                         <dd>
                           <span>{row.v}</span>
-                          <Button variant="link" className="reception-edit" onClick={() => setStep(row.step)}>
+                          <Button
+                            variant="link"
+                            className="reception-edit"
+                            onClick={() => setStep(row.step)}
+                          >
                             Editar
                           </Button>
                         </dd>
@@ -607,7 +689,9 @@ export function ReceptionNewPage() {
                     <span>Rack {selected.rack}</span>
                     <span>Nivel {selected.level}</span>
                     <span>Pos {selected.pos}</span>
-                    {selected.face ? <span className="face">{faceLabel(selected.face)}</span> : null}
+                    {selected.face ? (
+                      <span className="face">{faceLabel(selected.face)}</span>
+                    ) : null}
                   </div>
                   <div className="reception-fill">
                     <div className="reception-fill-head">
@@ -640,8 +724,8 @@ export function ReceptionNewPage() {
               </ul>
 
               <p className="reception-hint">
-                {warehouse ? `${warehouse.name} · ${warehouse.city}` : 'Bodega activa'} · se actualiza inventario y
-                trazabilidad
+                {warehouse ? `${warehouse.name} · ${warehouse.city}` : 'Bodega activa'} · se
+                actualiza inventario y trazabilidad
               </p>
             </div>
           </section>
@@ -683,7 +767,9 @@ export function ReceptionNewPage() {
             />
             <p className="reception-map-selected">
               Seleccionada: <strong>{mapFocus}</strong>
-              {suggestions.some((s) => s.id === mapFocus) ? <em> · sugerida para este ingreso</em> : null}
+              {suggestions.some((s) => s.id === mapFocus) ? (
+                <em> · sugerida para este ingreso</em>
+              ) : null}
             </p>
           </div>
         </Modal>

@@ -4,13 +4,14 @@ import { api } from '../../shared/api/client';
 import { Modal } from '../../shared/components/Modal';
 import { Btn, Button } from '../../shared/components/ui';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
+import { ensureShippingTemplates } from '../../shared/lib/businessRules';
 import type { Truck, VehicleKind } from './fleet';
 import { VehicleCostRulesModal } from './VehicleCostRulesModal';
 import {
   citiesOf,
   formatZonePath,
   provinces,
-  sectorsOf,
+  sectorsOf as catalogSectors,
   zonePathOf,
 } from '../../shared/lib/zones';
 import { ChipGroup, RemovableChip } from '../../shared/components/Chip';
@@ -30,6 +31,7 @@ type VehicleRow = {
   route_km: number;
   allowed_sectors?: string;
   allowed_sectors_list?: string[];
+  shipping_template_id?: string;
   active: number;
 };
 
@@ -53,6 +55,7 @@ const emptyForm = {
   costPerKm: 0.8,
   etaHours: 3.5,
   routeKm: 50,
+  shippingTemplateId: '',
   allowedSectors: [] as string[],
 };
 
@@ -75,6 +78,7 @@ export function FleetConfigModal({
   onFleetChange: (trucks: Truck[]) => void;
 }) {
   const { state } = useAppState();
+  const shippingTpl = useMemo(() => ensureShippingTemplates(state?.settings), [state?.settings]);
   const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [sectorDraft, setSectorDraft] = useState('');
@@ -101,7 +105,7 @@ export function FleetConfigModal({
   const provinceOptions = provinces();
   const cityOptions = zoneProvince ? citiesOf(zoneProvince) : [];
   const sectorOptions =
-    zoneProvince && zoneCity ? sectorsOf(zoneProvince, zoneCity) : [];
+    zoneProvince && zoneCity ? catalogSectors(zoneProvince, zoneCity) : [];
 
   const addZonePath = (raw: string) => {
     const path = raw.trim();
@@ -150,6 +154,7 @@ export function FleetConfigModal({
         costPerKm: Number(form.costPerKm),
         etaHours: Number(form.etaHours),
         routeKm: Number(form.routeKm),
+        shippingTemplateId: form.shippingTemplateId || null,
         allowedSectors: form.allowedSectors,
       });
       setForm(emptyForm);
@@ -307,6 +312,20 @@ export function FleetConfigModal({
                 value={form.costPerKm}
                 onChange={(e) => setForm({ ...form, costPerKm: Number(e.target.value) })}
               />
+            </label>
+            <label>
+              Plantilla costo de envío
+              <Select
+                value={form.shippingTemplateId || shippingTpl.defaultId}
+                onChange={(e) => setForm({ ...form, shippingTemplateId: e.target.value })}
+              >
+                {shippingTpl.templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                    {t.id === shippingTpl.defaultId ? ' (default)' : ''}
+                  </option>
+                ))}
+              </Select>
             </label>
           </div>
 

@@ -11,6 +11,9 @@ import { createSupplier, findSupplier } from './suppliers.service.js';
 
 export type ImportKind = 'purchase' | 'sale';
 
+/** El valor del archivo/edición se interpreta como costo de compra o como PVP. */
+export type ImportPriceRole = 'cost' | 'pvp';
+
 export type ImportRow = {
   code: string;
   name: string;
@@ -23,6 +26,25 @@ export type ImportRow = {
   status: 'matched' | 'new' | 'invalid';
   message: string;
 };
+
+function roundMoney(n: number) {
+  return Math.round(Math.max(0, n) * 100) / 100;
+}
+
+/** Margen sobre costo: PVP = costo × (1 + margen%). */
+export function deriveImportPrices(
+  unitValue: number,
+  role: ImportPriceRole,
+  marginPct: number,
+): { cost: number; pvp: number; marginPct: number } {
+  const value = roundMoney(unitValue);
+  const margin = Number.isFinite(marginPct) ? Math.max(0, Math.min(1000, marginPct)) : 0;
+  if (role === 'cost') {
+    return { cost: value, pvp: roundMoney(value * (1 + margin / 100)), marginPct: margin };
+  }
+  const cost = margin <= 0 ? value : roundMoney(value / (1 + margin / 100));
+  return { cost, pvp: value, marginPct: margin };
+}
 
 export type ImportPreview = {
   kind: ImportKind;
@@ -67,6 +89,9 @@ const HEADER_ALIASES: Record<string, string> = {
   precio: 'price',
   preciounitario: 'price',
   price: 'price',
+  pvp: 'price',
+  costo: 'price',
+  cost: 'price',
   lote: 'batch',
   batch: 'batch',
   caducidad: 'expiry',
@@ -327,20 +352,36 @@ export function previewXml(s: AppState, xml: string, kind: ImportKind): ImportPr
   return previewFromInvoice(s, parseFacturaXmlHeuristic(xml), kind, 'xml');
 }
 
-function ensureImportedProduct(s: AppState, row: ImportCommitRow, supplierName: string) {
+function ensureImportedProduct(
+  s: AppState,
+  row: ImportCommitRow,
+  supplierName: string,
+  pricing: { role: ImportPriceRole; marginPct: number },
+) {
   const code = row.code.trim().toUpperCase();
   const existing =
     (row.productId ? product(s, row.productId) : undefined) ??
     product(s, code) ??
     s.products.find((item) => item.sku.toUpperCase() === code);
-  if (existing) return existing;
+  const raw = Number(row.unitPrice ?? 0);
+  const { cost, pvp } = deriveImportPrices(
+    Number.isFinite(raw) ? raw : 0,
+    pricing.role,
+    pricing.marginPct,
+  );
+  if (existing) {
+    if (pvp > 0) existing.price = pvp;
+    if (cost > 0) existing.avgCost = cost;
+    return existing;
+  }
   return upsertProduct(s, {
     id: code,
     sku: code,
     name: row.name || code,
     category: 'Importado',
     supplier: supplierName || 'Importado',
-    price: row.unitPrice || 1,
+    price: pvp > 0 ? pvp : 1,
+    avgCost: cost > 0 ? cost : undefined,
     min: 1,
     weight: 1,
     volume: 1,
@@ -359,6 +400,10 @@ export function commitImport(
     partyAddress?: string;
     docNumber?: string;
     issueDate?: string;
+    /** Interpreta `unitPrice` de cada fila como costo o como PVP. */
+    priceRole?: ImportPriceRole;
+    /** Margen % sobre costo para derivar el otro valor. */
+    marginPct?: number;
     rows: ImportCommitRow[];
   },
 ) {
@@ -366,6 +411,15 @@ export function commitImport(
   if (!rows.length) throw new Error('No hay líneas válidas para importar.');
   const missingExpiry = rows.filter((row) => row.expiry && !normalizeDate(row.expiry));
   if (missingExpiry.length) throw new Error('Hay una caducidad con formato inválido. Usa AAAA-MM-DD.');
+
+  const priceRole: ImportPriceRole = body.priceRole === 'cost' || body.priceRole === 'pvp'
+    ? body.priceRole
+    : body.kind === 'purchase'
+      ? 'cost'
+      : 'pvp';
+  // Sin margen enviado: el valor del archivo queda igual en costo y PVP.
+  const marginPct = Number.isFinite(Number(body.marginPct)) ? Number(body.marginPct) : 0;
+  const pricing = { role: priceRole, marginPct };
 
   if (body.kind === 'purchase') {
     const name = body.partyName?.trim();
@@ -379,14 +433,15 @@ export function commitImport(
       date: normalizeDate(body.issueDate) || new Date().toISOString().slice(0, 10),
       notes: body.docNumber ? `Importado ${body.docNumber}` : 'Importado desde archivo',
       lines: rows.map((row) => {
-        const item = ensureImportedProduct(s, row, supplier.name);
+        const item = ensureImportedProduct(s, row, supplier.name, pricing);
         const wanted = row.packCode || 'unidad';
         const packCode = packsOf(item).some((pack) => pack.code === wanted) ? wanted : 'unidad';
+        const { cost } = deriveImportPrices(Number(row.unitPrice ?? 0), pricing.role, pricing.marginPct);
         return {
           productId: item.id,
           qty: row.qty,
           packCode,
-          unitPrice: row.unitPrice ?? 0,
+          unitPrice: cost,
           batch: row.batch,
           expiry: normalizeDate(row.expiry),
         };
@@ -397,25 +452,31 @@ export function commitImport(
 
   const clientName = body.partyName?.trim();
   if (!clientName) throw new Error('Indica el cliente del documento.');
+  const tax = (body.partyTaxId ?? '').replace(/\D/g, '');
+  const taxOk = /^\d{13}$/.test(tax);
   let client = s.clients.find((item) => item.name.toLowerCase() === clientName.toLowerCase());
-  if (!client && body.partyTaxId) {
-    const tax = body.partyTaxId.replace(/\D/g, '');
-    client = s.clients.find((item) => item.contact.replace(/\D/g, '') === tax || item.id.includes(tax));
+  if (!client && tax) {
+    client = s.clients.find(
+      (item) => item.taxId === tax || item.contact.replace(/\D/g, '') === tax || item.id.includes(tax),
+    );
   }
   if (!client) {
     client = {
-      id: body.partyTaxId ? `CL-${body.partyTaxId.replace(/\D/g, '')}` : `CL-${Date.now().toString(36)}`,
+      id: tax ? `CL-${tax}` : `CL-${Date.now().toString(36)}`,
       name: clientName,
       contact: body.partyTaxId || clientName,
       address: body.partyAddress || 'Sin dirección',
       email: 'importado@cliente.local',
       type: 'Mayorista',
       creditLimit: 3000,
+      ...(taxOk ? { taxId: tax } : {}),
     };
     s.clients.push(client);
+  } else if (taxOk && !client.taxId && !s.clients.some((item) => item.taxId === tax)) {
+    client.taxId = tax;
   }
   const lines = rows.map((row) => {
-    const item = ensureImportedProduct(s, row, 'Importado');
+    const item = ensureImportedProduct(s, row, 'Importado', pricing);
     return { productId: item.id, qty: row.qty };
   });
   const order = createOrder(s, {

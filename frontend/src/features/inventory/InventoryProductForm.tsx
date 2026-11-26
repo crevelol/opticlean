@@ -16,7 +16,7 @@ import './inventory-product-form.css';
 import { Switch } from '../../shared/components/Checkbox';
 import { Button } from '../../shared/components/ui';
 import { IconButton } from '../../shared/components/IconButton';
-import { Input } from '../../shared/components/Input';
+import { Input, Textarea } from '../../shared/components/Input';
 
 type ProductFormProps = {
   product?: Product;
@@ -30,21 +30,52 @@ type FieldName = 'id' | 'category' | 'name' | 'supplier' | 'price' | 'min' | 'we
 type FormValues = Record<FieldName, string>;
 type FormErrors = Partial<Record<FieldName | 'components', string>>;
 
-const fieldOrder: FieldName[] = ['id', 'category', 'name', 'supplier', 'price', 'min', 'weight', 'volume'];
+const fieldOrder: FieldName[] = [
+  'id',
+  'category',
+  'name',
+  'supplier',
+  'price',
+  'min',
+  'weight',
+  'volume',
+];
 const numericFields: FieldName[] = ['price', 'min', 'weight', 'volume'];
 
 type StepKey = 'identity' | 'stock' | 'logistics' | 'bom';
 type StepDef = { key: StepKey; title: string; subtitle: string; fields: FieldName[] };
 
 const STEPS: StepDef[] = [
-  { key: 'identity', title: 'Identidad', subtitle: 'Tipo, código y nombre', fields: ['id', 'category', 'name', 'supplier'] },
-  { key: 'stock', title: 'Inventario', subtitle: 'Precio, mínimo y seguridad', fields: ['price', 'min'] },
-  { key: 'logistics', title: 'Empaque', subtitle: 'Peso, volumen y presentaciones', fields: ['weight', 'volume'] },
+  {
+    key: 'identity',
+    title: 'Identidad',
+    subtitle: 'Tipo, código y nombre',
+    fields: ['id', 'category', 'name', 'supplier'],
+  },
+  {
+    key: 'stock',
+    title: 'Inventario',
+    subtitle: 'Precio, mínimo y seguridad',
+    fields: ['price', 'min'],
+  },
+  {
+    key: 'logistics',
+    title: 'Empaque',
+    subtitle: 'Peso, volumen y presentaciones',
+    fields: ['weight', 'volume'],
+  },
   { key: 'bom', title: 'Insumos', subtitle: 'Estructura padre → hijo', fields: [] },
 ];
 
-export function InventoryProductForm({ product, categories, products, onClose, onSaved }: ProductFormProps) {
-  const { applyResponse, toast } = useAppState();
+export function InventoryProductForm({
+  product,
+  categories,
+  products,
+  onClose,
+  onSaved,
+}: ProductFormProps) {
+  const { state, applyResponse, toast } = useAppState();
+  const families = state?.families ?? [];
   const uniqueId = useId();
   const formId = `${uniqueId}-product-form`;
   const formRef = useRef<HTMLFormElement>(null);
@@ -58,23 +89,36 @@ export function InventoryProductForm({ product, categories, products, onClose, o
   const isAdmin = user?.role === 'admin';
   /** Precio, costo e IVA de un producto existente: solo administración. */
   const lockMoney = !!product && !isAdmin;
-  const [avgCostDraft, setAvgCostDraft] = useState(product?.avgCost != null ? String(product.avgCost) : '');
+  const [avgCostDraft, setAvgCostDraft] = useState(
+    product?.avgCost != null ? String(product.avgCost) : '',
+  );
   const [errors, setErrors] = useState<FormErrors>({});
   const [serverError, setServerError] = useState('');
   const [kind, setKind] = useState<ProductKind>(product?.kind === 'raw' ? 'raw' : 'finished');
   const [hazardClass, setHazardClass] = useState<HazardClass>(product?.hazardClass ?? 'none');
   const [minShelfLifeDays, setMinShelfLifeDays] = useState(product?.minShelfLifeDays ?? 0);
-  const [sanitaryRegistration, setSanitaryRegistration] = useState(product?.sanitaryRegistration ?? '');
+  const [sanitaryRegistration, setSanitaryRegistration] = useState(
+    product?.sanitaryRegistration ?? '',
+  );
   const [sanitaryExpires, setSanitaryExpires] = useState(product?.sanitaryExpires ?? '');
-  const [ivaRate, setIvaRate] = useState(product?.ivaRate != null ? String(product.ivaRate) : '0.15');
+  const [ivaRate, setIvaRate] = useState(
+    product?.ivaRate != null ? String(product.ivaRate) : '0.15',
+  );
   const [inspectOnReceipt, setInspectOnReceipt] = useState(!!product?.inspectOnReceipt);
+  const [perishable, setPerishable] = useState(product?.perishable !== false);
+  const [requiresSanitary, setRequiresSanitary] = useState(!!product?.requiresSanitary);
+  const [familyId, setFamilyId] = useState(product?.familyId ?? '');
+  const [fragile, setFragile] = useState(!!product?.fragile);
+  const [labelText, setLabelText] = useState('');
+  const [attributes, setAttributes] = useState(product?.attributes ?? []);
+  const [presentations, setPresentations] = useState((product?.presentations ?? []).join(', '));
   const [packUnits, setPackUnits] = useState({
     paquete: product?.packs?.find((pack) => pack.code === 'paquete')?.units ?? 6,
     caja: product?.packs?.find((pack) => pack.code === 'caja')?.units ?? 12,
     bulto: product?.packs?.find((pack) => pack.code === 'bulto')?.units ?? 48,
   });
-  const [components, setComponents] = useState<ProductComponent[]>(
-    () => (product?.components ?? []).map((c) => ({ productId: c.productId, qty: c.qty })),
+  const [components, setComponents] = useState<ProductComponent[]>(() =>
+    (product?.components ?? []).map((c) => ({ productId: c.productId, qty: c.qty })),
   );
   const [step, setStep] = useState(0);
   const [maxReached, setMaxReached] = useState(product ? STEPS.length - 1 : 0);
@@ -90,8 +134,12 @@ export function InventoryProductForm({ product, categories, products, onClose, o
     weight: String(product?.weight ?? 1),
     volume: String(product?.volume ?? 1),
   }));
-  const categoryOptions = [...new Set([...categories, ...(product?.category ? [product.category] : []), 'Insumos'])];
-  const supplierOptions = [...new Set(products.map((item) => item.supplier).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+  const categoryOptions = [
+    ...new Set([...categories, ...(product?.category ? [product.category] : []), 'Insumos']),
+  ];
+  const supplierOptions = [...new Set(products.map((item) => item.supplier).filter(Boolean))].sort(
+    (a, b) => a.localeCompare(b, 'es'),
+  );
   const steps = kind === 'raw' ? STEPS.filter((item) => item.key !== 'bom') : STEPS;
   const currentStep = steps[Math.min(step, steps.length - 1)];
   const isLastStep = step >= steps.length - 1;
@@ -131,9 +179,12 @@ export function InventoryProductForm({ product, categories, products, onClose, o
     if (!target) return;
     focusOnStepRef.current = null;
     const named = target !== 'first' ? formRef.current?.elements.namedItem(target) : null;
-    const element = named instanceof HTMLElement
-      ? named
-      : stepPanelRef.current?.querySelector<HTMLElement>('input:not([readonly]), select, button[aria-haspopup], .inv-kind-card');
+    const element =
+      named instanceof HTMLElement
+        ? named
+        : stepPanelRef.current?.querySelector<HTMLElement>(
+            'input:not([readonly]), select, button[aria-haspopup], .inv-kind-card',
+          );
     element?.focus();
   }, [step]);
 
@@ -157,13 +208,19 @@ export function InventoryProductForm({ product, categories, products, onClose, o
       };
       return requiredMessages[name];
     }
-    if (name === 'id' && products.some((item) => item.id !== product?.id && item.id.trim().toUpperCase() === trimmed.toUpperCase())) {
+    if (
+      name === 'id' &&
+      products.some(
+        (item) => item.id !== product?.id && item.id.trim().toUpperCase() === trimmed.toUpperCase(),
+      )
+    ) {
       return 'Este código ya pertenece a otro producto. Usa uno diferente.';
     }
     if (numericFields.includes(name)) {
       const number = Number(trimmed);
       if (!Number.isFinite(number) || number < 0) return 'Ingresa un número igual o mayor que 0.';
-      if (name === 'min' && !Number.isInteger(number)) return 'El stock mínimo debe ser un número entero.';
+      if (name === 'min' && !Number.isInteger(number))
+        return 'El stock mínimo debe ser un número entero.';
     }
     return '';
   };
@@ -173,7 +230,8 @@ export function InventoryProductForm({ product, categories, products, onClose, o
     const seen = new Set<string>();
     for (const row of components) {
       if (!row.productId) return 'Selecciona el insumo en cada fila de componentes.';
-      if (!Number.isFinite(row.qty) || row.qty <= 0) return 'La cantidad de cada componente debe ser mayor que 0.';
+      if (!Number.isFinite(row.qty) || row.qty <= 0)
+        return 'La cantidad de cada componente debe ser mayor que 0.';
       if (seen.has(row.productId)) return 'No repitas el mismo insumo en la estructura.';
       seen.add(row.productId);
     }
@@ -198,12 +256,24 @@ export function InventoryProductForm({ product, categories, products, onClose, o
     required: true,
     value: values[name],
     'aria-invalid': !!errors[name],
-    'aria-describedby': [errors[name] ? `${fieldId(name)}-error` : '', ['id', 'min', 'weight', 'volume'].includes(name) ? `${fieldId(name)}-hint` : ''].filter(Boolean).join(' ') || undefined,
-    onChange: (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => updateField(name, event.target.value),
+    'aria-describedby':
+      [
+        errors[name] ? `${fieldId(name)}-error` : '',
+        ['id', 'min', 'weight', 'volume'].includes(name) ? `${fieldId(name)}-hint` : '',
+      ]
+        .filter(Boolean)
+        .join(' ') || undefined,
+    onChange: (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      updateField(name, event.target.value),
     onBlur: () => checkField(name),
   });
 
-  const fieldError = (name: FieldName) => errors[name] ? <span id={`${fieldId(name)}-error`} className="inv-product-field-error">{errors[name]}</span> : null;
+  const fieldError = (name: FieldName) =>
+    errors[name] ? (
+      <span id={`${fieldId(name)}-error`} className="inv-product-field-error">
+        {errors[name]}
+      </span>
+    ) : null;
 
   const addComponent = () => {
     setComponents((current) => [...current, { productId: '', qty: 1 }]);
@@ -231,7 +301,10 @@ export function InventoryProductForm({ product, categories, products, onClose, o
         const error = validateField(name, values[name]);
         if (error) {
           nextErrors[name] = error;
-          if (firstInvalid === -1) { firstInvalid = index; firstField = name; }
+          if (firstInvalid === -1) {
+            firstInvalid = index;
+            firstField = name;
+          }
         }
       }
       if (def.key === 'bom') {
@@ -242,7 +315,15 @@ export function InventoryProductForm({ product, categories, products, onClose, o
         }
       }
     }
-    setErrors((current) => ({ ...current, ...Object.fromEntries(indexes.flatMap((i) => [...steps[i].fields, ...(steps[i].key === 'bom' ? ['components'] : [])]).map((name) => [name, undefined])), ...nextErrors }));
+    setErrors((current) => ({
+      ...current,
+      ...Object.fromEntries(
+        indexes
+          .flatMap((i) => [...steps[i].fields, ...(steps[i].key === 'bom' ? ['components'] : [])])
+          .map((name) => [name, undefined]),
+      ),
+      ...nextErrors,
+    }));
     if (firstInvalid !== -1) {
       if (firstInvalid !== step) {
         focusOnStepRef.current = firstField ?? 'first';
@@ -277,6 +358,12 @@ export function InventoryProductForm({ product, categories, products, onClose, o
       return;
     }
     if (validateSteps(steps.map((_, i) => i)) !== -1) return;
+    if (requiresSanitary && !sanitaryRegistration.trim()) {
+      setServerError('Indica el registro sanitario.');
+      pendingRef.current = false;
+      setPending(false);
+      return;
+    }
     if (!event.currentTarget.reportValidity()) return;
 
     pendingRef.current = true;
@@ -298,10 +385,14 @@ export function InventoryProductForm({ product, categories, products, onClose, o
         kind,
         hazardClass,
         minShelfLifeDays: Number(minShelfLifeDays) || 0,
+        perishable,
+        requiresSanitary,
         sanitaryRegistration: sanitaryRegistration.trim() || undefined,
         sanitaryExpires: sanitaryExpires || undefined,
         ivaRate: Number(ivaRate),
         inspectOnReceipt,
+        familyId: familyId || undefined,
+        fragile,
         ...(isAdmin && avgCostDraft.trim() !== '' && Number.isFinite(Number(avgCostDraft))
           ? { avgCost: Number(avgCostDraft) }
           : {}),
@@ -312,16 +403,35 @@ export function InventoryProductForm({ product, categories, products, onClose, o
           { code: 'caja', label: 'Caja', units: Math.max(1, Number(packUnits.caja) || 1) },
           { code: 'bulto', label: 'Bulto', units: Math.max(1, Number(packUnits.bulto) || 1) },
         ],
-        components: kind === 'raw' ? [] : components.filter((c) => c.productId).map((c) => ({
-          productId: c.productId,
-          qty: Number(c.qty),
-        })),
+        components:
+          kind === 'raw'
+            ? []
+            : components
+                .filter((c) => c.productId)
+                .map((c) => ({
+                  productId: c.productId,
+                  qty: Number(c.qty),
+                })),
+        attributes,
+        presentations: presentations
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean),
       });
       applyResponse(response);
-      toast(product ? 'Producto actualizado.' : 'Producto creado. Registra una recepción para añadir existencias.');
+      toast(
+        product
+          ? 'Producto actualizado.'
+          : 'Producto creado. Registra una recepción para añadir existencias.',
+      );
       if (mountedRef.current) onSaved(productId);
     } catch (error) {
-      if (mountedRef.current) setServerError(error instanceof Error ? error.message : 'No pudimos guardar el producto. Inténtalo de nuevo.');
+      if (mountedRef.current)
+        setServerError(
+          error instanceof Error
+            ? error.message
+            : 'No pudimos guardar el producto. Inténtalo de nuevo.',
+        );
     } finally {
       pendingRef.current = false;
       if (mountedRef.current) setPending(false);
@@ -356,17 +466,25 @@ export function InventoryProductForm({ product, categories, products, onClose, o
         onPointerDownOutside={blockWhilePending}
       >
         <div className="modal-header inv-product-header">
-          <span className="inv-product-symbol" aria-hidden="true"><Icon name={kind === 'raw' ? 'flask' : 'box'} /></span>
+          <span className="inv-product-symbol" aria-hidden="true">
+            <Icon name={kind === 'raw' ? 'flask' : 'box'} />
+          </span>
           <div>
             <DialogTitle asChild>
               <h2>{product ? 'Editar ficha' : 'Crear producto'}</h2>
             </DialogTitle>
             <DialogDescription asChild>
-            <p>
-              {values.name.trim()
-                ? <>{values.id.trim().toUpperCase() || 'Sin código'} · {values.name.trim()}</>
-                : product ? 'Actualiza datos, tipo e insumos vinculados.' : 'Completa la ficha en pocos pasos.'}
-            </p>
+              <p>
+                {values.name.trim() ? (
+                  <>
+                    {values.id.trim().toUpperCase() || 'Sin código'} · {values.name.trim()}
+                  </>
+                ) : product ? (
+                  'Actualiza datos, tipo e insumos vinculados.'
+                ) : (
+                  'Completa la ficha en pocos pasos.'
+                )}
+              </p>
             </DialogDescription>
           </div>
           <IconButton icon="close" label="Cerrar formulario" onClick={close} disabled={pending} />
@@ -376,10 +494,15 @@ export function InventoryProductForm({ product, categories, products, onClose, o
           <ol style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}>
             {steps.map((item, index) => {
               const state = index === step ? 'current' : index <= maxReached ? 'done' : 'todo';
-              const hasError = item.fields.some((name) => errors[name]) || (item.key === 'bom' && !!errors.components);
+              const hasError =
+                item.fields.some((name) => errors[name]) ||
+                (item.key === 'bom' && !!errors.components);
               const reachable = !!product || index <= maxReached + 1;
               return (
-                <li key={item.key} className={`inv-step is-${state}${hasError ? ' has-error' : ''}`}>
+                <li
+                  key={item.key}
+                  className={`inv-step is-${state}${hasError ? ' has-error' : ''}`}
+                >
                   <button
                     type="button"
                     onClick={() => goToStep(index)}
@@ -411,19 +534,36 @@ export function InventoryProductForm({ product, categories, products, onClose, o
               const field = event.target as HTMLInputElement | HTMLSelectElement;
               const name = field.name as FieldName;
               if (!fieldOrder.includes(name)) return;
-              const error = validateField(name, field.value) || (field.validity.stepMismatch ? 'Usa hasta dos decimales.' : 'Revisa el valor de este campo.');
+              const error =
+                validateField(name, field.value) ||
+                (field.validity.stepMismatch
+                  ? 'Usa hasta dos decimales.'
+                  : 'Revisa el valor de este campo.');
               setErrors((current) => ({ ...current, [name]: error }));
             }}
           >
             <fieldset className="inv-product-fields" disabled={pending}>
-              <div ref={stepPanelRef} className="inv-step-panel" key={currentStep.key} role="group" aria-label={`Paso ${step + 1} de ${steps.length}: ${currentStep.title}`}>
+              <div
+                ref={stepPanelRef}
+                className="inv-step-panel"
+                key={currentStep.key}
+                role="group"
+                aria-label={`Paso ${step + 1} de ${steps.length}: ${currentStep.title}`}
+              >
                 {currentStep.key === 'identity' && (
                   <>
                     <div className="inv-kind-picker" role="radiogroup" aria-label="Tipo de ficha">
-                      {([
-                        ['finished', 'box', 'Producto terminado', 'Se vende y puede llevar insumos'],
-                        ['raw', 'flask', 'Materia prima', 'Insumo para fabricar otros productos'],
-                      ] as const).map(([value, icon, title, desc]) => (
+                      {(
+                        [
+                          [
+                            'finished',
+                            'box',
+                            'Producto terminado',
+                            'Se vende y puede llevar insumos',
+                          ],
+                          ['raw', 'flask', 'Materia prima', 'Insumo para fabricar otros productos'],
+                        ] as const
+                      ).map(([value, icon, title, desc]) => (
                         <button
                           key={value}
                           type="button"
@@ -432,7 +572,9 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                           className={`inv-kind-card${kind === value ? ' is-active' : ''}`}
                           onClick={() => selectKind(value)}
                         >
-                          <span className="inv-kind-icon" aria-hidden="true"><Icon name={icon} /></span>
+                          <span className="inv-kind-icon" aria-hidden="true">
+                            <Icon name={icon} />
+                          </span>
                           <span className="inv-kind-text">
                             <strong>{title}</strong>
                             <small>{desc}</small>
@@ -443,28 +585,80 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                     <div className="form-grid">
                       <div className="field">
                         <label htmlFor={fieldId('id')}>Código</label>
-                        <Input {...fieldProps('id')} readOnly={!!product} placeholder="Ej. P025" autoComplete="off" spellCheck={false} />
-                        <small id={`${fieldId('id')}-hint`}>{product ? 'No se puede editar.' : 'Único, se guarda en mayúsculas.'}</small>
+                        <Input
+                          {...fieldProps('id')}
+                          readOnly={!!product}
+                          placeholder="Ej. P025"
+                          autoComplete="off"
+                          spellCheck={false}
+                        />
+                        <small id={`${fieldId('id')}-hint`}>
+                          {product ? 'No se puede editar.' : 'Único, se guarda en mayúsculas.'}
+                        </small>
                         {fieldError('id')}
                       </div>
                       <div className="field">
                         <label htmlFor={fieldId('category')}>Línea</label>
                         <Select {...fieldProps('category')}>
-                          <option value="" disabled>Seleccionar línea</option>
-                          {categoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+                          <option value="" disabled>
+                            Seleccionar línea
+                          </option>
+                          {categoryOptions.map((category) => (
+                            <option key={category} value={category}>
+                              {category}
+                            </option>
+                          ))}
                         </Select>
                         {fieldError('category')}
                       </div>
                       <div className="field full">
                         <label htmlFor={fieldId('name')}>Nombre</label>
-                        <Input {...fieldProps('name')} placeholder="Ej. Limpiador multiusos 1 L" autoComplete="off" />
+                        <Input
+                          {...fieldProps('name')}
+                          placeholder="Ej. Limpiador multiusos 1 L"
+                          autoComplete="off"
+                        />
                         {fieldError('name')}
                       </div>
                       <div className="field full">
                         <label htmlFor={fieldId('supplier')}>Proveedor</label>
-                        <Input {...fieldProps('supplier')} list={`${uniqueId}-suppliers`} placeholder="Escribe o selecciona un proveedor" autoComplete="off" />
-                        <datalist id={`${uniqueId}-suppliers`}>{supplierOptions.map((supplier) => <option key={supplier} value={supplier} />)}</datalist>
+                        <Input
+                          {...fieldProps('supplier')}
+                          list={`${uniqueId}-suppliers`}
+                          placeholder="Escribe o selecciona un proveedor"
+                          autoComplete="off"
+                        />
+                        <datalist id={`${uniqueId}-suppliers`}>
+                          {supplierOptions.map((supplier) => (
+                            <option key={supplier} value={supplier} />
+                          ))}
+                        </datalist>
                         {fieldError('supplier')}
+                      </div>
+                      <div className="field">
+                        <label htmlFor={`${uniqueId}-family`}>Familia de bodega</label>
+                        <Select
+                          id={`${uniqueId}-family`}
+                          value={familyId}
+                          onChange={(e) => setFamilyId(e.target.value)}
+                        >
+                          <option value="">Sin familia (opcional)</option>
+                          {families.map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.name} ({f.code})
+                            </option>
+                          ))}
+                        </Select>
+                        <small>Opcional. Ayuda a sugerir racks al recibir.</small>
+                      </div>
+                      <div className="field">
+                        <label
+                          htmlFor={`${uniqueId}-fragile`}
+                          style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                        >
+                          <Switch id={`${uniqueId}-fragile`} checked={fragile} onCheckedChange={(checked) => setFragile(checked)} />
+                          Producto frágil
+                        </label>
                       </div>
                     </div>
                   </>
@@ -474,53 +668,200 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                   <div className="form-grid">
                     <div className="field">
                       <label htmlFor={fieldId('price')}>Precio por unidad</label>
-                      <Input {...fieldProps('price')} type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" readOnly={lockMoney} prefix="USD" />
+                      <Input
+                        {...fieldProps('price')}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputMode="decimal"
+                        placeholder="0.00"
+                        readOnly={lockMoney}
+                        prefix="USD"
+                      />
                       {fieldError('price')}
                       {lockMoney ? <small>Solo administración cambia el precio.</small> : null}
                     </div>
                     <div className="field">
                       <label htmlFor={fieldId('min')}>Stock mínimo</label>
-                      <Input {...fieldProps('min')} type="number" min="0" step="1" inputMode="numeric" suffix="u." />
-                      <small id={`${fieldId('min')}-hint`}>Te avisamos si el disponible baja de aquí.</small>
+                      <Input
+                        {...fieldProps('min')}
+                        type="number"
+                        min="0"
+                        step="1"
+                        inputMode="numeric"
+                        suffix="u."
+                      />
+                      <small id={`${fieldId('min')}-hint`}>
+                        Te avisamos si el disponible baja de aquí.
+                      </small>
                       {fieldError('min')}
                     </div>
                     <div className="field">
                       <label htmlFor={`${uniqueId}-hazard`}>Clase química</label>
-                      <Select id={`${uniqueId}-hazard`} value={hazardClass} onChange={(event) => setHazardClass(event.target.value as HazardClass)}>
+                      <Select
+                        id={`${uniqueId}-hazard`}
+                        value={hazardClass}
+                        onChange={(event) => setHazardClass(event.target.value as HazardClass)}
+                      >
                         {HAZARD_OPTIONS.map(([value, label]) => (
-                          <option key={value} value={value}>{label}</option>
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
                         ))}
                       </Select>
                       <small>Ácidos, clorados e inflamables no comparten rack.</small>
                     </div>
                     <div className="field">
                       <label htmlFor={`${uniqueId}-shelf`}>Vida útil mínima</label>
-                      <Input id={`${uniqueId}-shelf`} type="number" min={0} step={1} value={minShelfLifeDays} onChange={(event) => setMinShelfLifeDays(Number(event.target.value))} suffix="días" />
-                      <small>No se vende un lote que vence antes.</small>
+                      <Input
+                        id={`${uniqueId}-shelf`}
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={minShelfLifeDays}
+                        onChange={(event) => setMinShelfLifeDays(Number(event.target.value))}
+                        suffix="días"
+                      />
+                      <small>
+                        No se vende un lote que vence antes. Si el producto no caduca, desmarca la
+                        casilla.
+                      </small>
+                    </div>
+                    <div className="field full">
+                      <label htmlFor={`${uniqueId}-label`}>Texto de la etiqueta</label>
+                      <Textarea
+                        id={`${uniqueId}-label`}
+                        value={labelText}
+                        onChange={(event) => setLabelText(event.target.value)}
+                        placeholder="Pega nombre, presentación y advertencias"
+                      />
+                      <Button type="button" onClick={() => {
+                          void api
+                            .readLabel(labelText)
+                            .then((reading) => {
+                              if (reading.name)
+                                setValues((current) => ({ ...current, name: reading.name }));
+                              setPresentations(reading.presentations.join(', '));
+                              setAttributes(reading.attributes);
+                            })
+                            .catch((err) =>
+                              setServerError(
+                                err instanceof Error ? err.message : 'No se pudo leer la etiqueta.',
+                              ),
+                            );
+                        }}>
+                        Leer etiqueta
+                      </Button>
+                    </div>
+                    <div className="field">
+                      <label htmlFor={`${uniqueId}-presentations`}>Presentaciones</label>
+                      <Input
+                        id={`${uniqueId}-presentations`}
+                        value={presentations}
+                        onChange={(event) => setPresentations(event.target.value)}
+                        placeholder="Caja, Galón"
+                      />
+                    </div>
+                    <div className="field full">
+                      <label>Atributos</label>
+                      {attributes.map((attribute, index) => (
+                        <div key={`${attribute.name}-${index}`} className="form-grid">
+                          <Input
+                            aria-label={`Atributo ${index + 1}`}
+                            value={attribute.name}
+                            onChange={(event) =>
+                              setAttributes(
+                                attributes.map((item, i) =>
+                                  i === index ? { ...item, name: event.target.value } : item,
+                                ),
+                              )
+                            }
+                          />
+                          <Input
+                            aria-label={`Valor ${index + 1}`}
+                            value={attribute.value}
+                            onChange={(event) =>
+                              setAttributes(
+                                attributes.map((item, i) =>
+                                  i === index ? { ...item, value: event.target.value } : item,
+                                ),
+                              )
+                            }
+                          />
+                        </div>
+                      ))}
+                      <Button type="button" onClick={() => setAttributes([...attributes, { name: '', value: '' }])}>
+                        Atributo
+                      </Button>
+                    </div>
+                    <div className="field">
+                      <label
+                        htmlFor={`${uniqueId}-perishable`}
+                        style={{ display: 'flex', gap: 8, alignItems: 'center' }}
+                      >
+                        <Switch id={`${uniqueId}-perishable`} checked={perishable} onCheckedChange={(checked) => setPerishable(checked)} />
+                        Este producto caduca
+                      </label>
+                    </div>
+                    <div className="field">
+                      <label
+                        htmlFor={`${uniqueId}-requires-sanitary`}
+                        style={{ display: 'flex', gap: 8, alignItems: 'center' }}
+                      >
+                        <Switch id={`${uniqueId}-requires-sanitary`} checked={requiresSanitary} onCheckedChange={(checked) => setRequiresSanitary(checked)} />
+                        Exige registro sanitario
+                      </label>
                     </div>
                     <div className="field">
                       <label htmlFor={`${uniqueId}-sanitary`}>Registro sanitario</label>
-                      <Input id={`${uniqueId}-sanitary`} value={sanitaryRegistration} onChange={(event) => setSanitaryRegistration(event.target.value)} placeholder="Notificación ARCSA" />
+                      <Input
+                        id={`${uniqueId}-sanitary`}
+                        value={sanitaryRegistration}
+                        onChange={(event) => setSanitaryRegistration(event.target.value)}
+                        placeholder="Notificación ARCSA"
+                      />
                     </div>
                     <div className="field">
                       <label htmlFor={`${uniqueId}-sanitary-exp`}>Vence el registro</label>
-                      <Input id={`${uniqueId}-sanitary-exp`} type="date" value={sanitaryExpires} onChange={(event) => setSanitaryExpires(event.target.value)} />
+                      <Input
+                        id={`${uniqueId}-sanitary-exp`}
+                        type="date"
+                        value={sanitaryExpires}
+                        onChange={(event) => setSanitaryExpires(event.target.value)}
+                      />
                       <small>Si esta fecha ya pasó, el producto no se puede vender.</small>
                     </div>
                     <div className="field">
                       <label htmlFor={`${uniqueId}-iva`}>Tarifa de IVA</label>
-                      <Select id={`${uniqueId}-iva`} value={ivaRate} disabled={lockMoney} onChange={(event) => setIvaRate(event.target.value)}>
+                      <Select
+                        id={`${uniqueId}-iva`}
+                        value={ivaRate}
+                        disabled={lockMoney}
+                        onChange={(event) => setIvaRate(event.target.value)}
+                      >
                         <option value="0.15">15 %</option>
                         <option value="0">0 %</option>
                       </Select>
-                      <small>Se aplica en la factura de venta y al validar la factura del proveedor.</small>
+                      <small>
+                        Se aplica en la factura de venta y al validar la factura del proveedor.
+                      </small>
                     </div>
                     <div className="field">
-                      <label htmlFor={`${uniqueId}-inspect`} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <Switch id={`${uniqueId}-inspect`} checked={inspectOnReceipt} onCheckedChange={(checked) => setInspectOnReceipt(checked)} />
+                      <label
+                        htmlFor={`${uniqueId}-inspect`}
+                        style={{ display: 'flex', gap: 8, alignItems: 'center' }}
+                      >
+                        <Switch
+                          id={`${uniqueId}-inspect`}
+                          checked={inspectOnReceipt}
+                          onCheckedChange={(checked) => setInspectOnReceipt(checked)}
+                        />
                         Recibir siempre a inspección
                       </label>
-                      <small>Cada recepción queda retenida hasta que se revise etiqueta, sello y hoja de seguridad.</small>
+                      <small>
+                        Cada recepción queda retenida hasta que se revise etiqueta, sello y hoja de
+                        seguridad.
+                      </small>
                     </div>
                     {isAdmin || product?.avgCost != null ? (
                       <div className="field">
@@ -549,16 +890,34 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                     <div className="form-grid">
                       <div className="field">
                         <label htmlFor={fieldId('weight')}>Peso por unidad</label>
-                        <Input {...fieldProps('weight')} type="number" min="0" step="0.01" inputMode="decimal" suffix="kg" />
+                        <Input
+                          {...fieldProps('weight')}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          inputMode="decimal"
+                          suffix="kg"
+                        />
                         {fieldError('weight')}
                       </div>
                       <div className="field">
                         <label htmlFor={fieldId('volume')}>Volumen por unidad</label>
-                        <Input {...fieldProps('volume')} type="number" min="0" step="0.01" inputMode="decimal" suffix="L" />
+                        <Input
+                          {...fieldProps('volume')}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          inputMode="decimal"
+                          suffix="L"
+                        />
                         {fieldError('volume')}
                       </div>
                     </div>
-                    <div className="inv-pack-table" role="group" aria-labelledby={`${uniqueId}-packs`}>
+                    <div
+                      className="inv-pack-table"
+                      role="group"
+                      aria-labelledby={`${uniqueId}-packs`}
+                    >
                       <div className="inv-pack-head">
                         <span id={`${uniqueId}-packs`}>Presentación</span>
                         <span>Unidades</span>
@@ -575,7 +934,12 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                               min={1}
                               step={1}
                               value={packUnits[code]}
-                              onChange={(event) => setPackUnits((current) => ({ ...current, [code]: Number(event.target.value) }))}
+                              onChange={(event) =>
+                                setPackUnits((current) => ({
+                                  ...current,
+                                  [code]: Number(event.target.value),
+                                }))
+                              }
                             />
                             <span className="inv-pack-derived">
                               {formatQty(units * unitWeight)} kg · {formatQty(units * unitVolume)} L
@@ -589,7 +953,10 @@ export function InventoryProductForm({ product, categories, products, onClose, o
 
                 {currentStep.key === 'bom' && (
                   <>
-                    <p className="inv-bom-help">¿Qué insumos lleva cada unidad? Te avisaremos cuando la materia prima bloquee la reposición. <strong>Es opcional.</strong></p>
+                    <p className="inv-bom-help">
+                      ¿Qué insumos lleva cada unidad? Te avisaremos cuando la materia prima bloquee
+                      la reposición. <strong>Es opcional.</strong>
+                    </p>
                     <div className="inv-bom-editor">
                       {components.length ? (
                         <>
@@ -598,18 +965,24 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                             <span>Cant. / u.</span>
                           </div>
                           {components.map((row, index) => (
-                            <div className="inv-bom-editor-row" key={`${index}-${row.productId || 'new'}`}>
+                            <div
+                              className="inv-bom-editor-row"
+                              key={`${index}-${row.productId || 'new'}`}
+                            >
                               <label className="field">
                                 <span className="inv-sr-only">Insumo</span>
                                 <Select
                                   value={row.productId}
-                                  onChange={(event) => updateComponent(index, { productId: event.target.value })}
+                                  onChange={(event) =>
+                                    updateComponent(index, { productId: event.target.value })
+                                  }
                                   aria-label={`Insumo ${index + 1}`}
                                 >
                                   <option value="">Seleccionar insumo…</option>
                                   {componentOptions.map((item) => (
                                     <option key={item.id} value={item.id}>
-                                      {item.kind === 'raw' ? 'MP · ' : ''}{item.name} ({item.id})
+                                      {item.kind === 'raw' ? 'MP · ' : ''}
+                                      {item.name} ({item.id})
                                     </option>
                                   ))}
                                 </Select>
@@ -621,17 +994,25 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                                   min="0.01"
                                   step="0.01"
                                   value={row.qty}
-                                  onChange={(event) => updateComponent(index, { qty: Number(event.target.value) })}
+                                  onChange={(event) =>
+                                    updateComponent(index, { qty: Number(event.target.value) })
+                                  }
                                   aria-label={`Cantidad del insumo ${index + 1}`}
                                 />
                               </label>
-                              <IconButton icon="trash" label={`Quitar insumo ${index + 1}`} onClick={() => removeComponent(index)} />
+                              <IconButton
+                                icon="trash"
+                                label={`Quitar insumo ${index + 1}`}
+                                onClick={() => removeComponent(index)}
+                              />
                             </div>
                           ))}
                         </>
                       ) : (
                         <div className="inv-bom-empty">
-                          <span className="inv-bom-empty-icon" aria-hidden="true"><Icon name="layers" /></span>
+                          <span className="inv-bom-empty-icon" aria-hidden="true">
+                            <Icon name="layers" />
+                          </span>
                           <strong>Sin insumos vinculados</strong>
                           <small>Puedes añadirlos ahora o más adelante.</small>
                         </div>
@@ -639,28 +1020,45 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                       <Button className="inv-bom-add" type="button" onClick={addComponent}>
                         <Icon name="plus" /> Añadir insumo
                       </Button>
-                      {errors.components ? <span className="inv-product-field-error">{errors.components}</span> : null}
+                      {errors.components ? (
+                        <span className="inv-product-field-error">{errors.components}</span>
+                      ) : null}
                     </div>
                   </>
                 )}
               </div>
             </fieldset>
-            {serverError ? <div ref={errorRef} className="inv-product-save-error" role="alert" tabIndex={-1}><Icon name="alert" /><span>{serverError}</span></div> : null}
+            {serverError ? (
+              <div ref={errorRef} className="inv-product-save-error" role="alert" tabIndex={-1}>
+                <Icon name="alert" />
+                <span>{serverError}</span>
+              </div>
+            ) : null}
           </form>
         </div>
 
         <div className="modal-footer inv-product-footer">
           <span role="status" className="inv-product-status">
-            {pending
-              ? 'Guardando…'
-              : isLastStep && !product
-                ? <><Icon name="info" /> Crear la ficha no añade existencias.</>
-                : `Paso ${step + 1} de ${steps.length}`}
+            {pending ? (
+              'Guardando…'
+            ) : isLastStep && !product ? (
+              <>
+                <Icon name="info" /> Crear la ficha no añade existencias.
+              </>
+            ) : (
+              `Paso ${step + 1} de ${steps.length}`
+            )}
           </span>
           <div>
-            {step > 0
-              ? <Button type="button" onClick={() => goToStep(step - 1)} disabled={pending}><Icon name="chevron-left" /> Atrás</Button>
-              : <Button type="button" onClick={close} disabled={pending}>Cancelar</Button>}
+            {step > 0 ? (
+              <Button type="button" onClick={() => goToStep(step - 1)} disabled={pending}>
+                <Icon name="chevron-left" /> Atrás
+              </Button>
+            ) : (
+              <Button type="button" onClick={close} disabled={pending}>
+                Cancelar
+              </Button>
+            )}
             {product && !isLastStep ? (
               <Button type="button" onClick={() => goToStep(step + 1)} disabled={pending}>
                 Siguiente <Icon name="chevron" />
@@ -673,7 +1071,9 @@ export function InventoryProductForm({ product, categories, products, onClose, o
                   {pending ? 'Guardando…' : product ? 'Guardar cambios' : 'Crear ficha'}
                 </>
               ) : (
-                <>Siguiente <Icon name="chevron" /></>
+                <>
+                  Siguiente <Icon name="chevron" />
+                </>
               )}
             </Button>
           </div>

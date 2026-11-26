@@ -7,7 +7,6 @@ import { Badge, Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
 import { api } from '../../shared/api/client';
 import { RouteMap } from './RouteMap';
 import {
-  FLEET as DEFAULT_FLEET,
   buildRouteHistory,
   fmtHours,
   opsDate,
@@ -27,14 +26,16 @@ function shiftDays(base: string, delta: number) {
 export function RouteHistoryPage() {
   const { state } = useAppState();
   const navigate = useNavigate();
-  const [fleet, setFleet] = useState<Truck[]>(DEFAULT_FLEET);
+  const [fleet, setFleet] = useState<Truck[]>([]);
   useEffect(() => {
     void api
       .fleet()
       .then((r) => {
-        if (r.trucks?.length) setFleet(r.trucks);
+        setFleet(Array.isArray(r.trucks) ? r.trucks : []);
       })
-      .catch(() => {});
+      .catch(() => {
+        setFleet([]);
+      });
   }, []);
 
   const today = opsDate();

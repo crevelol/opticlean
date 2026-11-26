@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { Icon } from '../../shared/components/Icon';
 import { SearchInput } from '../../shared/components/SearchInput';
@@ -23,6 +23,7 @@ type Props = {
   onToggleSidebar: () => void;
   onOpenMobileMenu: () => void;
   onNotifications: () => void;
+  onSearch: (query: string) => void;
 };
 
 export function Topbar({
@@ -33,9 +34,8 @@ export function Topbar({
   onToggleSidebar,
   onOpenMobileMenu,
   onNotifications,
+  onSearch,
 }: Props) {
-  const navigate = useNavigate();
-
   return (
     <header className="topbar">
       <Tooltip content={collapsed ? 'Expandir menú' : 'Colapsar menú'} side="right"><button
@@ -96,7 +96,7 @@ export function Topbar({
           onSubmit={(e) => {
             e.preventDefault();
             const q = new FormData(e.currentTarget).get('query')?.toString().trim() ?? '';
-            navigate(`/inventario?q=${encodeURIComponent(q)}`);
+            onSearch(q);
           }}
         >
           <SearchInput

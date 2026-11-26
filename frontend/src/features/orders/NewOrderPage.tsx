@@ -50,6 +50,7 @@ export function NewOrderPage() {
   const [clientId, setClientId] = useState(routeClient ?? '');
   const [clientQuery, setClientQuery] = useState('');
   const [priority, setPriority] = useState('Normal');
+  const [channel, setChannel] = useState('ejecutivo');
   const [requestedDate, setRequestedDate] = useState('');
   const [lines, setLines] = useState<Line[]>([]);
   const [kits, setKits] = useState<KitLine[]>([]);
@@ -205,6 +206,7 @@ export function NewOrderPage() {
         lines,
         kits,
         priority,
+        channel,
         notes: noteParts.join(' · ') || undefined,
         backorder: shortages.length > 0,
       });
@@ -390,6 +392,14 @@ export function NewOrderPage() {
                   </div>
                 </div>
 
+                <div className="field">
+                  <label htmlFor="order-channel">Canal</label>
+                  <Select id="order-channel" value={channel} onChange={(event) => setChannel(event.target.value)}>
+                    <option value="ejecutivo">Ejecutivo</option>
+                    <option value="portal">Portal</option>
+                    <option value="reposicion">Reposición</option>
+                  </Select>
+                </div>
                 <div className="field">
                   <span>Prioridad</span>
                   <SegmentedControl

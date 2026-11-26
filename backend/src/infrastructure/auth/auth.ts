@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { NextFunction, Request, Response } from 'express';
+import { permissionsForRole } from './permissions.js';
 
 /** admin | ops=bodega | dispatch=despacho | driver=conductor */
 export type AuthRole = 'admin' | 'ops' | 'dispatch' | 'driver';
@@ -19,6 +20,8 @@ export type AuthUser = {
   passwordHash: string;
   /** false = no puede iniciar sesión */
   active?: boolean;
+  /** Administra la plataforma (todas las empresas). Nunca se concede por registro. */
+  platformAdmin?: boolean;
 };
 
 export type PublicUser = {
@@ -28,6 +31,12 @@ export type PublicUser = {
   role: AuthRole;
   companyId: string;
   truckPlate?: string;
+  /** Solo presente (true) para administradores de la plataforma. */
+  platformAdmin?: boolean;
+  /** Permisos efectivos embebidos en el JWT. */
+  permissions?: string[];
+  /** App emisora del token (multi-app). */
+  appId?: string;
 };
 
 export type ManagedUser = PublicUser & {
@@ -112,14 +121,25 @@ export function verifyPassword(password: string, stored: string) {
 function signToken(user: PublicUser) {
   const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const now = Math.floor(Date.now() / 1000);
+  const platformAdmin = Boolean(user.platformAdmin);
+  const permissions =
+    user.permissions?.length ? user.permissions : permissionsForRole(user.role, platformAdmin);
+  const appId = user.appId || 'opticlean';
   const payload = b64url(
     JSON.stringify({
       sub: user.id,
       email: user.email,
       name: user.name,
       role: user.role,
+      roles: [user.role],
+      appId,
+      aud: appId,
       companyId: user.companyId,
       truckPlate: user.truckPlate,
+      pa: platformAdmin ? 1 : undefined,
+      platformAdmin: platformAdmin || undefined,
+      permissions,
+      iss: process.env.AUTH_ISSUER || 'innovamf-auth',
       iat: now,
       exp: now + TOKEN_TTL_SEC,
     }),
@@ -145,9 +165,19 @@ export function verifyToken(token: string): PublicUser | null {
       role: AuthRole;
       companyId?: string;
       truckPlate?: string;
+      pa?: number;
+      platformAdmin?: boolean;
+      permissions?: string[];
+      appId?: string;
+      aud?: string;
       exp: number;
     };
     if (!body.exp || body.exp * 1000 < Date.now()) return null;
+    const platformAdmin = body.pa === 1 || body.platformAdmin === true;
+    const permissions =
+      Array.isArray(body.permissions) && body.permissions.length
+        ? body.permissions
+        : permissionsForRole(body.role, platformAdmin);
     return {
       id: body.sub,
       email: body.email,
@@ -155,6 +185,9 @@ export function verifyToken(token: string): PublicUser | null {
       role: body.role,
       companyId: body.companyId || 'co-innovamf',
       truckPlate: body.truckPlate,
+      appId: body.appId || body.aud || 'opticlean',
+      permissions,
+      ...(platformAdmin ? { platformAdmin: true } : {}),
     };
   } catch {
     return null;
@@ -162,6 +195,7 @@ export function verifyToken(token: string): PublicUser | null {
 }
 
 function toPublic(u: AuthUser): PublicUser {
+  const platformAdmin = isPlatformAdmin(u);
   return {
     id: u.id,
     email: u.email,
@@ -169,7 +203,24 @@ function toPublic(u: AuthUser): PublicUser {
     role: u.role,
     companyId: u.companyId || 'co-innovamf',
     truckPlate: u.truckPlate,
+    appId: 'opticlean',
+    permissions: permissionsForRole(u.role, platformAdmin),
+    ...(platformAdmin ? { platformAdmin: true } : {}),
   };
+}
+
+/** El administrador inicial (U-ADMIN) siempre es de plataforma; el resto solo con la bandera explícita. */
+function isPlatformAdmin(u: AuthUser) {
+  return u.role === 'admin' && (u.id === 'U-ADMIN' || u.platformAdmin === true);
+}
+
+/**
+ * Regla de empresa activa, inyectada desde la composición (server.ts) para que auth
+ * no dependa de la base de administración.
+ */
+let companyIsActive: (companyId: string) => boolean = () => true;
+export function setCompanyActiveCheck(fn: (companyId: string) => boolean) {
+  companyIsActive = fn;
 }
 
 function envPass(key: string, fallback: string) {
@@ -471,8 +522,64 @@ export function login(email: string, password: string) {
   if (!user || user.active === false || !verifyPassword(password, user.passwordHash)) {
     throw new Error('Correo o contraseña incorrectos');
   }
+  if (!isPlatformAdmin(user) && !companyIsActive(user.companyId || 'co-innovamf')) {
+    throw new Error('Tu empresa está desactivada. Contacta a soporte.');
+  }
   const publicUser = toPublic(user);
   return { token: signToken(publicUser), user: publicUser };
+}
+
+/** Cambia la contraseña del usuario autenticado (flujo local / fallback). */
+export function changePassword(userId: string, currentPassword: string, newPassword: string) {
+  const file = ensureUsers();
+  const user = file.users.find((u) => u.id === userId);
+  if (!user || user.active === false) throw new Error('Usuario no encontrado.');
+  if (!verifyPassword(currentPassword, user.passwordHash)) {
+    throw new Error('La contraseña actual no es correcta.');
+  }
+  if (String(newPassword || '').length < 8) {
+    throw new Error('La nueva contraseña debe tener al menos 8 caracteres.');
+  }
+  updateUser(userId, { password: newPassword });
+  return { ok: true as const, message: 'Contraseña actualizada.' };
+}
+
+type LocalReset = { token: string; userId: string; email: string; expiresAt: number };
+const localResets = new Map<string, LocalReset>();
+
+export function requestPasswordReset(email: string) {
+  const user = ensureUsers().users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+  const generic = {
+    ok: true as const,
+    message: 'Si el correo existe, enviaremos instrucciones para restablecer la contraseña.',
+  };
+  if (!user || user.active === false) return generic;
+  const token = randomBytes(32).toString('hex');
+  localResets.set(token, {
+    token,
+    userId: user.id,
+    email: user.email,
+    expiresAt: Date.now() + 30 * 60_000,
+  });
+  const base = process.env.AUTH_RESET_BASE_URL || 'https://opti.innovamf.com/restablecer';
+  const resetUrl = `${base}?app=opticlean&token=${encodeURIComponent(token)}`;
+  if (process.env.AUTH_EXPOSE_RESET_LINK !== '0') {
+    return { ...generic, resetUrl, expiresAt: new Date(Date.now() + 30 * 60_000).toISOString() };
+  }
+  return generic;
+}
+
+export function resetPasswordWithToken(token: string, newPassword: string) {
+  const row = localResets.get(String(token || ''));
+  if (!row || row.expiresAt < Date.now()) {
+    throw new Error('El enlace no es válido o expiró.');
+  }
+  if (String(newPassword || '').length < 8) {
+    throw new Error('La nueva contraseña debe tener al menos 8 caracteres.');
+  }
+  updateUser(row.userId, { password: newPassword });
+  localResets.delete(token);
+  return { ok: true as const, message: 'Contraseña restablecida. Ya puedes iniciar sesión.' };
 }
 
 export function authRequired(req: Request, res: Response, next: NextFunction) {
@@ -487,6 +594,10 @@ export function authRequired(req: Request, res: Response, next: NextFunction) {
     res.status(401).json({ error: 'Sesión expirada o inválida' });
     return;
   }
+  if (!user.platformAdmin && !companyIsActive(user.companyId)) {
+    res.status(403).json({ error: 'Tu empresa está desactivada. Contacta a soporte.' });
+    return;
+  }
   req.user = user;
   next();
 }
@@ -499,6 +610,27 @@ export function adminRequired(req: Request, res: Response, next: NextFunction) {
     }
     next();
   });
+}
+
+/** Solo administradores de la plataforma: gestión de empresas, módulos y menú global. */
+export function platformAdminRequired(req: Request, res: Response, next: NextFunction) {
+  authRequired(req, res, () => {
+    if (req.user?.role !== 'admin' || !req.user.platformAdmin) {
+      res.status(403).json({ error: 'Solo administración de la plataforma' });
+      return;
+    }
+    next();
+  });
+}
+
+/** Correo libre para registrar (sin crear nada). Lanza si no es válido o ya existe. */
+export function assertEmailAvailable(rawEmail: string) {
+  const email = String(rawEmail || '').trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Correo no válido.');
+  if (ensureUsers().users.some((u) => u.email.toLowerCase() === email)) {
+    throw new Error('Ya existe un usuario con ese correo.');
+  }
+  return email;
 }
 
 export function publicUserFromRequest(req: Request) {

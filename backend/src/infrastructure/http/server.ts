@@ -6,19 +6,37 @@ import { JsonStateRepository } from '../persistence/JsonStateRepository.js';
 import { OperationsUseCases } from '../../application/use-cases/OperationsUseCases.js';
 import { suggest, suggestPlacement } from '../../domain/placement.service.js';
 import { autoAssignLogistics, openaiConfigured } from '../../domain/logistics-ai.service.js';
+import { readLabel } from '../../domain/outbound.service.js';
+import { renderReport } from '../../domain/report-file.js';
 import {
   adminRequired,
+  assertEmailAvailable,
   authRequired,
+  changePassword,
   createUser,
   deactivateUser,
   getUserById,
   listUsers,
   login,
+  platformAdminRequired,
   prepareAuth,
   publicUserFromRequest,
+  requestPasswordReset,
+  resetPasswordWithToken,
+  setCompanyActiveCheck,
   updateUser,
   type AuthRole,
+  type PublicUser,
 } from '../auth/auth.js';
+import {
+  authServiceChange,
+  authServiceEnabled,
+  authServiceForgot,
+  authServiceLogin,
+  authServiceLogout,
+  authServiceRefresh,
+  authServiceReset,
+} from '../auth/auth-client.js';
 import {
   companyMobileRoleIds,
   companyModuleIds,
@@ -26,10 +44,12 @@ import {
   createCompany,
   createVehicle,
   createVehicleCostRule,
+  deleteCompany,
   deleteVehicle,
   deleteVehicleCostRule,
   duplicateVehicleCostRules,
   fleetForCompany,
+  getCompany,
   getVehicle,
   getVehicleCostPanel,
   listAllModules,
@@ -37,12 +57,17 @@ import {
   listMenuItems,
   listMobileRoles,
   listModules,
+  listVehicleKmLogs,
   listVehicles,
   menuForCompany,
   mobileConfigForCompany,
+  applyShippingTemplateToFleet,
   parseAllowedSectors,
+  recordDispatchKm,
+  recordVehicleKm,
   setCompanyMobileRoles,
   setCompanyModules,
+  setVehicleOdometer,
   updateCompany,
   updateMenuItem,
   updateVehicle,
@@ -58,6 +83,15 @@ import { scheduleAuthBackups } from '../persistence/auth-backup.js';
 const isProd = () => process.env.NODE_ENV === 'production';
 /** El reinicio a datos demo solo existe fuera de producción (o con permiso explícito). */
 const resetAllowed = () => !isProd() || process.env.OPTICLEAN_ALLOW_RESET === '1';
+/** Registro público de empresas: activo en desarrollo; en producción solo con OPTICLEAN_SIGNUP_ENABLED=1. */
+const signupEnabled = () =>
+  process.env.OPTICLEAN_SIGNUP_ENABLED === '1' || (!isProd() && process.env.OPTICLEAN_SIGNUP_ENABLED !== '0');
+
+// Usuarios de una empresa desactivada no pueden entrar ni usar sesiones abiertas.
+setCompanyActiveCheck((companyId) => {
+  const company = getCompany(companyId);
+  return !company || company.active === 1;
+});
 
 function companyIdOf(req: express.Request) {
   return String(req.user?.companyId || 'co-innovamf');
@@ -133,14 +167,26 @@ app.use(express.json({ limit: '15mb' }));
 
 function roleDenied(req: express.Request) {
   const role = req.user?.role;
+  const perms = req.user?.permissions ?? [];
   if (!role || role === 'admin') return null;
   if (req.method === 'GET' || req.method === 'HEAD') return null;
   const path = req.path;
-  const allow = (roles: AuthRole[]) =>
-    roles.includes(role) ? null : 'Tu rol no tiene permiso para esta acción.';
-  if (path === '/api/delivery' || path === '/api/incidents') return allow(['dispatch', 'driver', 'ops']);
-  if (path === '/api/dispatch' || path.startsWith('/api/logistics')) return allow(['dispatch']);
-  if (path.startsWith('/api/guides')) return allow(['dispatch', 'ops']);
+  const has = (...needed: string[]) => needed.some((p) => perms.includes(p) || perms.includes('*'));
+  const allow = (roles: AuthRole[], permission?: string) => {
+    if (roles.includes(role)) return null;
+    if (permission && has(permission)) return null;
+    return 'Tu rol no tiene permiso para esta acción.';
+  };
+  if (path === '/api/delivery' || path === '/api/incidents' || path === '/api/delivery/skip') {
+    return allow(['dispatch', 'driver', 'ops'], 'field');
+  }
+  if (path === '/api/packing' || path === '/api/loading/preview') {
+    return allow(['ops', 'dispatch'], 'packing');
+  }
+  if (path === '/api/dispatch' || path.startsWith('/api/logistics')) {
+    return allow(['dispatch'], 'dispatch');
+  }
+  if (path.startsWith('/api/guides')) return allow(['dispatch', 'ops'], 'orders');
   if (
     path.startsWith('/api/invoices') ||
     path.startsWith('/api/credit-notes') ||
@@ -172,13 +218,26 @@ function roleDenied(req: express.Request) {
       return 'Solo administración cambia el cupo o el plazo de crédito.';
     }
   }
-  if (role === 'ops') return null;
+  // Bodega (ops) o quien tenga permisos operativos de inventario/pedidos.
+  if (role === 'ops' || has('warehouse', 'inventory', 'reception', 'orders', 'purchases')) return null;
   return 'Tu rol no tiene permiso para esta acción.';
 }
 
+const PUBLIC_API_PATHS = new Set([
+  '/api/health',
+  '/api/auth/login',
+  '/api/auth/signup',
+  '/api/auth/password/forgot',
+  '/api/auth/password/reset',
+  '/api/auth/refresh',
+  '/api/auth/logout',
+  '/api/public/config',
+  '/api/public/delivery-code',
+]);
+
 app.use((req, res, next) => {
   if (!req.path.startsWith('/api/')) return next();
-  if (req.path === '/api/health' || req.path === '/api/auth/login') return next();
+  if (PUBLIC_API_PATHS.has(req.path)) return next();
   if (req.path.startsWith('/api/admin')) return next();
   authRequired(req, res, () => {
     if (res.headersSent) return;
@@ -205,7 +264,7 @@ app.use((req, res, next) => {
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   try {
     const email = String(req.body?.email ?? '');
     const password = String(req.body?.password ?? '');
@@ -223,7 +282,27 @@ app.post('/api/auth/login', (req, res) => {
       return;
     }
     try {
-      const result = login(email, password);
+      let result: { token: string; user: PublicUser } | null = null;
+      if (authServiceEnabled()) {
+        try {
+          const remote = await authServiceLogin(email, password, 'opticlean');
+          if (remote?.token && remote.user) {
+            res.json({
+              token: remote.accessToken || remote.token,
+              accessToken: remote.accessToken || remote.token,
+              refreshToken: remote.refreshToken,
+              expiresIn: remote.expiresIn,
+              refreshExpiresIn: remote.refreshExpiresIn,
+              user: remote.user as unknown as PublicUser,
+            });
+            registerLoginSuccess(ip, email);
+            return;
+          }
+        } catch {
+          /* fallback local si el microservicio falla */
+        }
+      }
+      result = login(email, password);
       registerLoginSuccess(ip, email);
       res.json(result);
     } catch (e) {
@@ -235,12 +314,183 @@ app.post('/api/auth/login', (req, res) => {
   }
 });
 
+app.get('/api/public/config', (_req, res) => {
+  res.json({ signupEnabled: signupEnabled() });
+});
+
+/**
+ * Registro de una empresa nueva: crea la empresa (tenant) y su primer administrador,
+ * y devuelve la sesión iniciada. El administrador creado es de su empresa, nunca de la plataforma.
+ */
+app.post('/api/auth/signup', (req, res) => {
+  const ip = req.ip || 'desconocida';
+  const email = String(req.body?.email ?? '');
+  try {
+    if (!signupEnabled()) {
+      res.status(403).json({ error: 'El registro de empresas no está disponible.' });
+      return;
+    }
+    const wait = loginBlockedFor(ip, `signup:${ip}`);
+    if (wait) {
+      res.set('Retry-After', String(wait));
+      res.status(429).json({ error: `Demasiados registros desde esta red. Espera ${Math.ceil(wait / 60)} minuto(s).` });
+      return;
+    }
+    // Cada intento cuenta: limita la creación masiva de empresas desde una misma IP.
+    registerLoginFailure(ip, `signup:${ip}`);
+
+    const companyName = String(req.body?.companyName ?? '').trim();
+    const name = String(req.body?.name ?? '').trim();
+    const password = String(req.body?.password ?? '');
+    if (companyName.length < 2 || companyName.length > 80) throw new Error('El nombre de la empresa debe tener entre 2 y 80 caracteres.');
+    if (!name) throw new Error('Tu nombre es obligatorio.');
+    if (password.length < 10) throw new Error('La contraseña debe tener al menos 10 caracteres.');
+    // Validar todo antes de crear la empresa para no dejar empresas huérfanas.
+    const cleanEmail = assertEmailAvailable(email);
+
+    const company = createCompany({ name: companyName, uniqueSlug: true });
+    try {
+      createUser({ email: cleanEmail, name, password, role: 'admin', companyId: company.id });
+    } catch (e) {
+      deleteCompany(company.id);
+      throw e;
+    }
+    res.status(201).json({ ...login(cleanEmail, password), company });
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : 'No se pudo completar el registro' });
+  }
+});
+
 app.get('/api/auth/me', authRequired, (req, res) => {
   res.json({ user: publicUserFromRequest(req) });
 });
 
+/** Renueva access JWT con refresh token (auth-service). */
+app.post('/api/auth/refresh', async (req, res) => {
+  try {
+    const refreshToken = String(req.body?.refreshToken ?? '');
+    if (!refreshToken) {
+      res.status(400).json({ error: 'Falta refreshToken' });
+      return;
+    }
+    if (!authServiceEnabled()) {
+      res.status(503).json({ error: 'Refresh token no disponible sin auth-service.' });
+      return;
+    }
+    const remote = await authServiceRefresh(refreshToken);
+    if (!remote) {
+      res.status(503).json({ error: 'Auth service no disponible' });
+      return;
+    }
+    res.json({
+      token: remote.accessToken || remote.token,
+      accessToken: remote.accessToken || remote.token,
+      refreshToken: remote.refreshToken,
+      expiresIn: remote.expiresIn,
+      refreshExpiresIn: remote.refreshExpiresIn,
+      user: remote.user,
+    });
+  } catch (e) {
+    res.status(401).json({ error: e instanceof Error ? e.message : 'No se pudo renovar la sesión' });
+  }
+});
+
+/** Revoca refresh / cierra sesión en auth-service. */
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    const header = req.headers.authorization || '';
+    const accessToken = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+    const refreshToken = req.body?.refreshToken ? String(req.body.refreshToken) : undefined;
+    if (authServiceEnabled()) {
+      await authServiceLogout({ refreshToken, accessToken: accessToken || undefined });
+    }
+    res.json({ ok: true });
+  } catch {
+    res.json({ ok: true });
+  }
+});
+
+/** Cambio de contraseña (sesión activa). Prefiere auth-service. */
+app.post('/api/auth/password/change', authRequired, async (req, res) => {
+  try {
+    const currentPassword = String(req.body?.currentPassword ?? '');
+    const newPassword = String(req.body?.newPassword ?? '');
+    if (authServiceEnabled()) {
+      try {
+        const header = req.headers.authorization || '';
+        const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+        const remote = await authServiceChange(token, currentPassword, newPassword);
+        if (remote) {
+          res.json(remote);
+          return;
+        }
+      } catch (e) {
+        res.status(400).json({ error: e instanceof Error ? e.message : 'No se pudo cambiar' });
+        return;
+      }
+    }
+    res.json(changePassword(req.user!.id, currentPassword, newPassword));
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : 'No se pudo cambiar' });
+  }
+});
+
+/** Olvidé mi contraseña. */
+app.post('/api/auth/password/forgot', async (req, res) => {
+  try {
+    const email = String(req.body?.email ?? '');
+    if (!email) {
+      res.status(400).json({ error: 'Indica tu correo' });
+      return;
+    }
+    if (authServiceEnabled()) {
+      try {
+        const remote = await authServiceForgot(email, 'opticlean');
+        if (remote) {
+          res.json(remote);
+          return;
+        }
+      } catch {
+        /* fallback local */
+      }
+    }
+    res.json(requestPasswordReset(email));
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : 'No se pudo procesar' });
+  }
+});
+
+/** Restablecer con token del enlace. */
+app.post('/api/auth/password/reset', async (req, res) => {
+  try {
+    const token = String(req.body?.token ?? '');
+    const newPassword = String(req.body?.newPassword ?? '');
+    if (authServiceEnabled()) {
+      try {
+        const remote = await authServiceReset(token, newPassword, 'opticlean');
+        if (remote) {
+          res.json(remote);
+          return;
+        }
+      } catch (e) {
+        // Si el token es del flujo local, intentar localmente.
+        try {
+          res.json(resetPasswordWithToken(token, newPassword));
+          return;
+        } catch {
+          res.status(400).json({ error: e instanceof Error ? e.message : 'No se pudo restablecer' });
+          return;
+        }
+      }
+    }
+    res.json(resetPasswordWithToken(token, newPassword));
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : 'No se pudo restablecer' });
+  }
+});
+
 app.use('/api', (req, res, next) => {
-  if (req.path === '/health' || req.path === '/auth/login') return next();
+  if (PUBLIC_API_PATHS.has(`/api${req.path}`)) return next();
   return authRequired(req, res, next);
 });
 
@@ -534,15 +784,32 @@ app.post('/api/dispatch', async (req, res, next) => {
   try {
     const { orderIds, vehicle } = req.body as { orderIds: string[]; vehicle?: string };
     const plate = String(vehicle || 'GBA-2041').trim().toUpperCase();
-    const truck = fleetForCompany(companyIdOf(req)).find(
-      (t) => t.plate.toUpperCase() === plate,
-    );
+    const companyId = companyIdOf(req);
+    const truck = fleetForCompany(companyId).find((t) => t.plate.toUpperCase() === plate);
+    const ids = Array.isArray(orderIds) ? orderIds.map(String) : [];
     const state = await ops.confirmDispatch(
-      orderIds,
+      ids,
       plate,
       truck ? { maxKg: truck.maxKg, maxM3: truck.maxM3 } : undefined,
     );
-    res.json({ state, metrics: ops.metricsSnapshot(state) });
+    let kmLog = null;
+    try {
+      kmLog = recordDispatchKm(companyId, plate, ids.length, ids, state.settings);
+    } catch {
+      /* el despacho ya quedó; el odómetro no debe tumbar la operación */
+    }
+    res.json({
+      state,
+      metrics: ops.metricsSnapshot(state),
+      km: kmLog
+        ? {
+            added: kmLog.log.km,
+            odometerKm: kmLog.log.odometerAfter,
+            plate: kmLog.log.plate,
+          }
+        : null,
+      trucks: fleetForCompany(companyId),
+    });
   } catch (e) {
     next(e);
   }
@@ -587,9 +854,26 @@ app.get('/api/logistics/ai-status', authRequired, (_req, res) => {
 
 app.post('/api/delivery', async (req, res, next) => {
   try {
-    const { orderId, person, notes } = req.body;
-    const state = await ops.delivery(orderId, person, notes);
+    const { orderId, person, notes, code } = req.body;
+    const state = await ops.delivery(orderId, person, notes, code);
     res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/delivery/skip', async (req, res, next) => {
+  try {
+    const state = await ops.skipStop(String(req.body?.orderId ?? ''));
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/public/delivery-code', async (req, res, next) => {
+  try {
+    res.json(await ops.deliveryCode(String(req.query.orderId ?? ''), String(req.query.k ?? '')));
   } catch (e) {
     next(e);
   }
@@ -860,11 +1144,30 @@ app.post('/api/fleet', authRequired, (req, res, next) => {
       etaHours: typeof req.body?.etaHours === 'number' ? req.body.etaHours : undefined,
       routeKm: typeof req.body?.routeKm === 'number' ? req.body.routeKm : undefined,
       allowedSectors: sectorsFromBody(req.body),
+      shippingTemplateId:
+        req.body?.shippingTemplateId !== undefined
+          ? req.body.shippingTemplateId
+            ? String(req.body.shippingTemplateId)
+            : ''
+          : undefined,
     });
     res.status(201).json({
       vehicle: vehicleDto(vehicle),
       trucks: fleetForCompany(companyIdOf(req)),
     });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/fleet/shipping-template', authRequired, (req, res, next) => {
+  try {
+    const templateId = String(req.body?.templateId ?? '').trim();
+    const vehicleIds = Array.isArray(req.body?.vehicleIds)
+      ? req.body.vehicleIds.map(String)
+      : undefined;
+    const result = applyShippingTemplateToFleet(companyIdOf(req), templateId, vehicleIds);
+    res.json(result);
   } catch (e) {
     next(e);
   }
@@ -885,6 +1188,12 @@ app.patch('/api/fleet/:id', authRequired, (req, res, next) => {
       etaHours: typeof req.body?.etaHours === 'number' ? req.body.etaHours : undefined,
       routeKm: typeof req.body?.routeKm === 'number' ? req.body.routeKm : undefined,
       allowedSectors: sectorsFromBody(req.body),
+      shippingTemplateId:
+        req.body?.shippingTemplateId !== undefined
+          ? req.body.shippingTemplateId
+            ? String(req.body.shippingTemplateId)
+            : ''
+          : undefined,
       active: typeof req.body?.active === 'boolean' ? req.body.active : undefined,
     });
     res.json({ vehicle: vehicleDto(vehicle), trucks: fleetForCompany(companyIdOf(req)) });
@@ -988,17 +1297,68 @@ app.post('/api/fleet/:id/cost-rules/defaults', authRequired, (req, res, next) =>
   }
 });
 
-/** Roles móviles habilitados para la empresa */
-app.get('/api/mobile/config', authRequired, (req, res, next) => {
+/** Historial y registro de kilómetros del vehículo */
+app.get('/api/fleet/:id/km', authRequired, (req, res, next) => {
   try {
-    const companyId = String(req.query.companyId || req.user?.companyId || companyIdOf(req));
-    res.json(mobileConfigForCompany(companyId));
+    const companyId = companyIdOf(req);
+    const vehicle = assertVehicleOfCompany(req.params.id, companyId);
+    res.json({
+      vehicleId: vehicle.id,
+      plate: vehicle.plate,
+      odometerKm: Number(vehicle.odometer_km) || 0,
+      logs: listVehicleKmLogs(companyId, vehicle.id, Number(req.query.limit) || 50),
+    });
   } catch (e) {
     next(e);
   }
 });
 
-app.get('/api/admin/companies', adminRequired, (_req, res, next) => {
+app.post('/api/fleet/:id/km', authRequired, (req, res, next) => {
+  try {
+    const companyId = companyIdOf(req);
+    assertVehicleOfCompany(req.params.id, companyId);
+    const result = recordVehicleKm(companyId, {
+      vehicleId: req.params.id,
+      km: Number(req.body?.km),
+      stops: req.body?.stops !== undefined ? Number(req.body.stops) : undefined,
+      source: 'manual',
+      note: req.body?.note ? String(req.body.note) : 'Registro manual de km',
+    });
+    res.status(201).json(result);
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/fleet/:id/odometer', authRequired, (req, res, next) => {
+  try {
+    const companyId = companyIdOf(req);
+    assertVehicleOfCompany(req.params.id, companyId);
+    res.json(
+      setVehicleOdometer(
+        companyId,
+        req.params.id,
+        Number(req.body?.odometerKm),
+        req.body?.note ? String(req.body.note) : '',
+      ),
+    );
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Roles móviles habilitados para la empresa */
+app.get('/api/mobile/config', authRequired, (req, res, next) => {
+  try {
+    // Solo la plataforma puede consultar la configuración de otra empresa.
+    const requested = req.user?.platformAdmin && req.query.companyId ? String(req.query.companyId) : '';
+    res.json(mobileConfigForCompany(requested || companyIdOf(req)));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/admin/companies', platformAdminRequired, (_req, res, next) => {
   try {
     res.json({ companies: listCompanies() });
   } catch (e) {
@@ -1006,7 +1366,7 @@ app.get('/api/admin/companies', adminRequired, (_req, res, next) => {
   }
 });
 
-app.post('/api/admin/companies', adminRequired, (req, res, next) => {
+app.post('/api/admin/companies', platformAdminRequired, (req, res, next) => {
   try {
     const company = createCompany({
       name: String(req.body?.name ?? ''),
@@ -1018,7 +1378,7 @@ app.post('/api/admin/companies', adminRequired, (req, res, next) => {
   }
 });
 
-app.patch('/api/admin/companies/:id', adminRequired, (req, res, next) => {
+app.patch('/api/admin/companies/:id', platformAdminRequired, (req, res, next) => {
   try {
     const company = updateCompany(req.params.id, {
       name: req.body?.name ? String(req.body.name) : undefined,
@@ -1030,7 +1390,7 @@ app.patch('/api/admin/companies/:id', adminRequired, (req, res, next) => {
   }
 });
 
-app.get('/api/admin/companies/:id/modules', adminRequired, (req, res, next) => {
+app.get('/api/admin/companies/:id/modules', platformAdminRequired, (req, res, next) => {
   try {
     res.json({
       moduleIds: companyModuleIds(req.params.id),
@@ -1041,7 +1401,7 @@ app.get('/api/admin/companies/:id/modules', adminRequired, (req, res, next) => {
   }
 });
 
-app.put('/api/admin/companies/:id/modules', adminRequired, (req, res, next) => {
+app.put('/api/admin/companies/:id/modules', platformAdminRequired, (req, res, next) => {
   try {
     const moduleIds = Array.isArray(req.body?.moduleIds)
       ? req.body.moduleIds.map((x: unknown) => String(x))
@@ -1053,7 +1413,7 @@ app.put('/api/admin/companies/:id/modules', adminRequired, (req, res, next) => {
   }
 });
 
-app.get('/api/admin/companies/:id/mobile-roles', adminRequired, (req, res, next) => {
+app.get('/api/admin/companies/:id/mobile-roles', platformAdminRequired, (req, res, next) => {
   try {
     res.json({
       roleIds: companyMobileRoleIds(req.params.id),
@@ -1064,7 +1424,7 @@ app.get('/api/admin/companies/:id/mobile-roles', adminRequired, (req, res, next)
   }
 });
 
-app.put('/api/admin/companies/:id/mobile-roles', adminRequired, (req, res, next) => {
+app.put('/api/admin/companies/:id/mobile-roles', platformAdminRequired, (req, res, next) => {
   try {
     const roleIds = Array.isArray(req.body?.roleIds)
       ? req.body.roleIds.map((x: unknown) => String(x))
@@ -1076,7 +1436,7 @@ app.put('/api/admin/companies/:id/mobile-roles', adminRequired, (req, res, next)
   }
 });
 
-app.get('/api/admin/companies/:id/vehicles', adminRequired, (req, res, next) => {
+app.get('/api/admin/companies/:id/vehicles', platformAdminRequired, (req, res, next) => {
   try {
     res.json({ vehicles: listVehicles(req.params.id).map((v) => vehicleDto(v)) });
   } catch (e) {
@@ -1084,7 +1444,7 @@ app.get('/api/admin/companies/:id/vehicles', adminRequired, (req, res, next) => 
   }
 });
 
-app.post('/api/admin/companies/:id/vehicles', adminRequired, (req, res, next) => {
+app.post('/api/admin/companies/:id/vehicles', platformAdminRequired, (req, res, next) => {
   try {
     const vehicle = createVehicle(req.params.id, {
       plate: String(req.body?.plate ?? ''),
@@ -1105,7 +1465,7 @@ app.post('/api/admin/companies/:id/vehicles', adminRequired, (req, res, next) =>
   }
 });
 
-app.patch('/api/admin/vehicles/:id', adminRequired, (req, res, next) => {
+app.patch('/api/admin/vehicles/:id', platformAdminRequired, (req, res, next) => {
   try {
     const vehicle = updateVehicle(req.params.id, {
       plate: req.body?.plate ? String(req.body.plate) : undefined,
@@ -1127,7 +1487,7 @@ app.patch('/api/admin/vehicles/:id', adminRequired, (req, res, next) => {
   }
 });
 
-app.delete('/api/admin/vehicles/:id', adminRequired, (req, res, next) => {
+app.delete('/api/admin/vehicles/:id', platformAdminRequired, (req, res, next) => {
   try {
     res.json(deleteVehicle(req.params.id));
   } catch (e) {
@@ -1135,7 +1495,7 @@ app.delete('/api/admin/vehicles/:id', adminRequired, (req, res, next) => {
   }
 });
 
-app.get('/api/admin/modules', adminRequired, (_req, res, next) => {
+app.get('/api/admin/modules', platformAdminRequired, (_req, res, next) => {
   try {
     res.json({ modules: listModules() });
   } catch (e) {
@@ -1143,7 +1503,7 @@ app.get('/api/admin/modules', adminRequired, (_req, res, next) => {
   }
 });
 
-app.get('/api/admin/mobile-roles', adminRequired, (_req, res, next) => {
+app.get('/api/admin/mobile-roles', platformAdminRequired, (_req, res, next) => {
   try {
     res.json({ roles: listMobileRoles() });
   } catch (e) {
@@ -1151,7 +1511,7 @@ app.get('/api/admin/mobile-roles', adminRequired, (_req, res, next) => {
   }
 });
 
-app.get('/api/admin/menu', adminRequired, (_req, res, next) => {
+app.get('/api/admin/menu', platformAdminRequired, (_req, res, next) => {
   try {
     res.json({ items: listMenuItems() });
   } catch (e) {
@@ -1159,7 +1519,7 @@ app.get('/api/admin/menu', adminRequired, (_req, res, next) => {
   }
 });
 
-app.patch('/api/admin/menu/:id', adminRequired, (req, res, next) => {
+app.patch('/api/admin/menu/:id', platformAdminRequired, (req, res, next) => {
   try {
     const item = updateMenuItem(req.params.id, {
       label: req.body?.label ? String(req.body.label) : undefined,
@@ -1311,6 +1671,120 @@ app.get('/api/replenishment', async (_req, res, next) => {
 app.post('/api/replenishment', async (_req, res, next) => {
   try {
     stateJson(res, await ops.createReplenishment());
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/plan', async (_req, res, next) => {
+  try {
+    res.json(await ops.plan());
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/plan/:id/approve', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.approvePlan(req.params.id));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/plan/:id/discard', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.discardPlan(req.params.id, req.body?.note));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/plan/:id/undo', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.undoPlan(req.params.id));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/quotes', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.addQuote(req.body ?? {}));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/quotes/:id/win', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.winQuote(req.params.id));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/quotes/:id/lose', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.loseQuote(req.params.id));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/packing', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.pack(String(req.body?.orderId ?? ''), Number(req.body?.weightKg), Number(req.body?.volumeM3)));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/loading/preview', async (req, res, next) => {
+  try {
+    res.json(await ops.previewLoad(String(req.body?.plate ?? ''), Array.isArray(req.body?.orderIds) ? req.body.orderIds.map(String) : []));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/offerings', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.addOffering(req.body ?? {}));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.delete('/api/offerings/:id', async (req, res, next) => {
+  try {
+    stateJson(res, await ops.deleteOffering(req.params.id));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/products/read-label', (req, res, next) => {
+  try {
+    res.json(readLabel(String(req.body?.text ?? '')));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/reports/:kind', async (req, res, next) => {
+  try {
+    const kind = req.params.kind === 'diagnostics' ? 'diagnostics' : req.params.kind === 'traceability' ? 'traceability' : '';
+    const format = req.query.format === 'pdf' ? 'pdf' : req.query.format === 'xlsx' ? 'xlsx' : '';
+    if (!kind || !format) {
+      res.status(400).json({ error: 'Usa traceability o diagnostics, en xlsx o pdf.' });
+      return;
+    }
+    const state = await repo.load();
+    const file = await renderReport(state, kind, format);
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    res.end(file.buffer);
   } catch (e) {
     next(e);
   }

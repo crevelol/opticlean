@@ -6,14 +6,14 @@ import { useAuth } from '../../shared/hooks/AuthProvider';
 import { api } from '../../shared/api/client';
 import {
   activeWarehouseId,
-  available,
+  availableIn,
   client,
   money,
   num,
   orderValue,
+  sellableIn,
   statusColor,
-  stock,
-  sellableStock,
+  stockIn,
 } from '../../shared/lib/inventory';
 import { buildForecast } from '../../shared/lib/forecast';
 import { expiryAlerts } from '../../shared/lib/wholesale';
@@ -21,6 +21,7 @@ import { Badge, Btn, Kpi, KpiGrid, PageHead, Button } from '../../shared/compone
 import { SegmentedControl } from '../../shared/components/Tabs';
 import { Icon } from '../../shared/components/Icon';
 import { AssignPicker } from '../orders/AssignPicker';
+import { buildMoneyStory, type MoneyKind } from './moneyStory';
 import '../../styles/dashboard.css';
 import '../../styles/orders.css';
 import { Pagination } from '../../shared/components/Pagination';
@@ -36,6 +37,7 @@ export function DashboardPage() {
   const [whFilter, setWhFilter] = useState('all');
   const [whBusy, setWhBusy] = useState(false);
   const [bodegueroCount, setBodegueroCount] = useState(0);
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const forecast = useMemo(() => (state ? buildForecast(state) : null), [state]);
 
   useEffect(() => {
@@ -58,25 +60,54 @@ export function DashboardPage() {
 
   if (!state || !meta || !forecast) return null;
 
-  const totalCells = meta.locations.length;
-  const occupied = meta.locations.filter((l) => {
-    const q = state.lots.filter((lot) => lot.loc === l.id).reduce((n, lot) => n + lot.qty, 0);
-    return q > 0;
-  }).length;
-  const occupancyPct = Math.round((occupied / Math.max(totalCells, 1)) * 100);
   const pending = state.orders.filter((o) => o.status === 'Por preparar');
   const unassigned = pending.filter((o) => !o.assignedToUserId).length;
   const activeOrders = state.orders.filter((o) => o.status !== 'Entregado');
-  const low = state.products.filter((p) => available(state, p.id) < p.min);
-  const units = state.products.reduce((n, p) => n + available(state, p.id), 0);
-  // A costo promedio: es el valor que cuadra con contabilidad.
-  const stockValue = state.products.reduce((n, p) => n + stock(state, p.id) * (p.avgCost ?? 0), 0);
-  const saleValue = state.products.reduce((n, p) => n + stock(state, p.id) * p.price, 0);
+  const activeWh = activeWarehouseId(state);
+  const scope = whFilter;
+  const cellsOf = (layout: {
+    rackCount: number;
+    levels: number;
+    positionsPerLevel: number;
+    depthFaces?: number;
+  }) => layout.rackCount * layout.levels * layout.positionsPerLevel * (layout.depthFaces ?? 1);
+  const sites =
+    scope === 'all'
+      ? state.warehouses.filter((w) => w.status === 'Operativa')
+      : state.warehouses.filter((w) => w.id === scope);
+  const totalCells =
+    scope === activeWh ? meta.locations.length : sites.reduce((n, w) => n + cellsOf(w.layout), 0);
+  const occupied =
+    scope === activeWh
+      ? meta.locations.filter((l) =>
+          state.lots.some(
+            (lot) => lot.loc === l.id && (lot.warehouseId ?? 'WH-QT-01') === scope && lot.qty > 0,
+          ),
+        ).length
+      : new Set(
+          state.lots
+            .filter(
+              (lot) =>
+                lot.qty > 0 &&
+                lot.loc !== 'CUARENTENA' &&
+                lot.loc !== 'TRANSITO' &&
+                (scope === 'all' || (lot.warehouseId ?? 'WH-QT-01') === scope),
+            )
+            .map((lot) => `${lot.warehouseId ?? 'WH-QT-01'}:${lot.loc}`),
+        ).size;
+  const occupancyPct = Math.round((occupied / Math.max(totalCells, 1)) * 100);
+  const low = state.products.filter((p) => availableIn(state, p.id, scope) < p.min);
+  const units = state.products.reduce((n, p) => n + availableIn(state, p.id, scope), 0);
+  const stockValue = state.products.reduce(
+    (n, p) => n + stockIn(state, p.id, scope) * (p.avgCost ?? 0),
+    0,
+  );
+  const saleValue = state.products.reduce((n, p) => n + stockIn(state, p.id, scope) * p.price, 0);
   const missingCost = state.products.filter(
-    (p) => stock(state, p.id) > 0 && !(p.avgCost && p.avgCost > 0),
+    (p) => stockIn(state, p.id, scope) > 0 && !(p.avgCost && p.avgCost > 0),
   ).length;
   const unsellable = state.products.reduce(
-    (n, p) => n + Math.max(0, stock(state, p.id) - sellableStock(state, p.id)),
+    (n, p) => n + Math.max(0, stockIn(state, p.id, scope) - sellableIn(state, p.id, scope)),
     0,
   );
   const waiting = state.orders.filter((o) => o.status === 'Esperando stock').length;
@@ -87,10 +118,29 @@ export function DashboardPage() {
   const productionAlerts =
     forecast.productionRisks.length ||
     forecast.recommendations.filter((r) => r.urgency === 'now').length;
-  const activeWh = activeWarehouseId(state);
-  const expiry = expiryAlerts(state);
+  const expiry = expiryAlerts(state, scope);
   const expired = expiry.filter((item) => item.band === 'vencido');
   const soon = expiry.filter((item) => item.band !== 'vencido');
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+  const sanitaryGaps = state.products.filter(
+    (item) =>
+      item.requiresSanitary &&
+      (!item.sanitaryRegistration ||
+        (item.sanitaryExpires != null && item.sanitaryExpires < today)),
+  );
+  const moneyStory = buildMoneyStory(state);
+  const moneyKind: Record<MoneyKind, string> = {
+    venta: 'Venta',
+    reclamo: 'Reclamo',
+    flete: 'Camión',
+    compra: 'Compra',
+  };
+  const periodLabel = new Date().toLocaleDateString('es-EC', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'America/Guayaquil',
+  });
 
   const onWarehouseChange = async (value: string) => {
     if (whBusy) return;
@@ -120,7 +170,7 @@ export function DashboardPage() {
       <PageHead
         eyebrow="Panel de control"
         title="Resumen de operaciones"
-        desc="Pedidos, stock y movimientos de tu operación de un vistazo."
+        desc="Ventas, costos y fletes del período, con acceso rápido a la operación."
         actions={
           <>
             <Btn icon="receive" onClick={() => navigate('/recepcion/nueva')}>
@@ -131,24 +181,225 @@ export function DashboardPage() {
             </Btn>
           </>
         }
-      >
-        <label className="dash-wh">
-          <Icon name="warehouse" />
-          <Select
-            value={whFilter}
-            disabled={whBusy}
-            onChange={(e) => void onWarehouseChange(e.target.value)}
-            aria-label="Bodega"
+      />
+
+      <section className="dash-summary" aria-label="Resumen financiero">
+        <div className="dash-summary-toolbar">
+          <label className="dash-wh">
+            <Icon name="warehouse" />
+            <Select
+              value={whFilter}
+              disabled={whBusy}
+              onChange={(e) => void onWarehouseChange(e.target.value)}
+              aria-label="Bodega"
+            >
+              <option value="all">Todas las bodegas</option>
+              {state.warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <div className="dash-period" aria-label="Período">
+            <Icon name="calendar" />
+            <span>Hoy · {periodLabel}</span>
+          </div>
+          <span className="dash-currency">Valores en USD</span>
+        </div>
+
+        <div className="dash-kpi-row">
+          <article className="dash-kpi-card">
+            <span>Ventas netas</span>
+            <strong>{money(moneyStory.sold)}</strong>
+            <small>Facturas menos reclamos · Sin IVA</small>
+          </article>
+          <article className="dash-kpi-card">
+            <span>Costo de venta</span>
+            <strong>{money(moneyStory.spent)}</strong>
+            <small>
+              Mercancía {money(moneyStory.cogs)} · Fletes {money(moneyStory.freight)}
+            </small>
+          </article>
+          <article
+            className={`dash-kpi-card is-result ${moneyStory.profit >= 0 ? 'is-gain' : 'is-loss'}`}
           >
-            <option value="all">Todas las bodegas</option>
-            {state.warehouses.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </Select>
-        </label>
-      </PageHead>
+            <span>Resultado del período</span>
+            <strong>{money(moneyStory.profit)}</strong>
+            <small>Ventas − mercancía − fletes</small>
+          </article>
+          <article className="dash-kpi-card">
+            <span>Por cobrar</span>
+            <strong>{money(moneyStory.receivable)}</strong>
+            <small>Saldo pendiente de clientes</small>
+          </article>
+        </div>
+
+        {(moneyStory.freight > 0 || moneyStory.sold === 0) && moneyStory.routes.length ? (
+          <div className="dash-insight" role="status">
+            <Icon name="info" />
+            <p>
+              El resultado incluye {money(moneyStory.freight)} en fletes y {money(moneyStory.sold)}{' '}
+              en ventas netas.
+            </p>
+            <button type="button" onClick={() => setShowBreakdown((v) => !v)}>
+              {showBreakdown ? 'Ocultar desglose' : 'Ver desglose'}
+            </button>
+          </div>
+        ) : null}
+
+        {showBreakdown ? (
+          <ul className="dash-money-lines">
+            {moneyStory.lines.length ? (
+              moneyStory.lines.slice(0, 12).map((line) => (
+                <li key={line.id}>
+                  <span className={`dash-money-kind is-${line.kind}`}>{moneyKind[line.kind]}</span>
+                  <span className="dash-money-copy">
+                    <strong>{line.title}</strong>
+                    <small>{line.detail}</small>
+                  </span>
+                  <em className={line.amount >= 0 ? 'is-in' : 'is-out'}>{money(line.amount)}</em>
+                </li>
+              ))
+            ) : (
+              <li className="dash-money-empty">
+                Cuando factures un pedido, aquí aparece el desglose del período.
+              </li>
+            )}
+          </ul>
+        ) : null}
+
+        <div className="dash-summary-grid">
+          <section className="dash-panel dash-routes" aria-label="Costos de rutas">
+            <header>
+              <div>
+                <h2>Costos de rutas</h2>
+                <p>
+                  {moneyStory.routes.length} vehículo
+                  {moneyStory.routes.length === 1 ? '' : 's'} · {moneyStory.routeStops} parada
+                  {moneyStory.routeStops === 1 ? '' : 's'} · {moneyStory.routeKmTotal} km
+                </p>
+              </div>
+              <Button variant="link" className="dash-kpi-link" onClick={() => navigate('/logistica')}>
+                Ver logística
+              </Button>
+            </header>
+            {moneyStory.routes.length ? (
+              <>
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Vehículo</th>
+                        <th>Paradas</th>
+                        <th>Distancia</th>
+                        <th>Costo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {moneyStory.routes.map((route) => (
+                        <tr key={route.plate}>
+                          <td>
+                            <div className="dash-route-vehicle">
+                              <span className="dash-route-icon" aria-hidden>
+                                <Icon name="truck" />
+                              </span>
+                              <div>
+                                <strong>{route.plate}</strong>
+                                <small>{route.vehicleType}</small>
+                              </div>
+                            </div>
+                          </td>
+                          <td>{route.stops}</td>
+                          <td>{route.km} km</td>
+                          <td>
+                            <strong>{money(route.cost)}</strong>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <footer>
+                  <span>Total de fletes</span>
+                  <strong>{money(moneyStory.freight)}</strong>
+                </footer>
+              </>
+            ) : (
+              <p className="dash-empty-copy">
+                Aún no hay camiones en ruta o entregados en este período.
+              </p>
+            )}
+          </section>
+
+          <div className="dash-side-stack">
+            <section className="dash-panel dash-shortcuts" aria-label="Accesos operativos">
+              <header>
+                <h2>Accesos operativos</h2>
+              </header>
+              <ul>
+                <li>
+                  <button type="button" onClick={() => navigate('/pedidos')}>
+                    <span className="dash-shortcut-icon">
+                      <Icon name="orders" />
+                      {pending.length ? <em>{pending.length}</em> : null}
+                    </span>
+                    <span>
+                      <strong>Pedidos</strong>
+                      <small>Consultar bandeja de pedidos</small>
+                    </span>
+                    <Icon name="chevron" />
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={() => navigate('/recepcion')}>
+                    <span className="dash-shortcut-icon">
+                      <Icon name="receive" />
+                    </span>
+                    <span>
+                      <strong>Recepción</strong>
+                      <small>Consultar entradas de mercancía</small>
+                    </span>
+                    <Icon name="chevron" />
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={() => navigate('/inventario')}>
+                    <span className="dash-shortcut-icon">
+                      <Icon name="box" />
+                    </span>
+                    <span>
+                      <strong>Inventario</strong>
+                      <small>Revisar existencias por bodega</small>
+                    </span>
+                    <Icon name="chevron" />
+                  </button>
+                </li>
+              </ul>
+            </section>
+
+            <section className="dash-panel dash-supply" aria-label="Abastecimiento">
+              <header>
+                <h2>Abastecimiento</h2>
+              </header>
+              <dl>
+                <div>
+                  <dt>Compras recibidas</dt>
+                  <dd>{money(moneyStory.bought)}</dd>
+                </div>
+                <div>
+                  <dt>Por pagar a proveedores</dt>
+                  <dd>{money(moneyStory.payable)}</dd>
+                </div>
+              </dl>
+              <Button variant="link" className="dash-kpi-link" onClick={() => navigate('/compras')}>
+                Ver abastecimiento
+                <Icon name="arrow" />
+              </Button>
+            </section>
+          </div>
+        </div>
+      </section>
       <KpiGrid label="Resumen de la operación">
         <Kpi
           label="Pedidos activos"
@@ -186,7 +437,11 @@ export function DashboardPage() {
           label="Ocupación de bodega"
           icon="warehouse"
           value={`${occupancyPct}%`}
-          caption={`${occupied} de ${totalCells} posiciones`}
+          caption={
+            scope === 'all'
+              ? `${occupied} de ${totalCells} en bodegas operativas`
+              : `${occupied} de ${totalCells} posiciones`
+          }
           progress={occupancyPct}
         />
       </KpiGrid>
@@ -318,11 +573,35 @@ export function DashboardPage() {
                       : 'Sin lotes en los próximos 90 días.'}{' '}
                     El vencido queda en cuarentena y no se puede preparar.
                   </small>
-                  <Button variant="link" onClick={() => navigate('/inventario?estado=expiring&orden=expiry')}>
+                  <Button
+                    variant="link"
+                    onClick={() => navigate('/inventario?estado=expiring&orden=expiry')}
+                  >
                     Revisar caducidades
                   </Button>
                 </div>
               </article>
+              {sanitaryGaps.length ? (
+                <article className="dash-prio-item">
+                  <div className="dash-prio-icon">
+                    <Icon name="alert" />
+                  </div>
+                  <div className="dash-prio-body">
+                    <strong>
+                      {sanitaryGaps.length === 1
+                        ? '1 producto sin registro vigente'
+                        : `${sanitaryGaps.length} productos sin registro vigente`}
+                    </strong>
+                    <small>
+                      {sanitaryGaps[0]?.name}. No se puede vender hasta actualizar el registro
+                      sanitario.
+                    </small>
+                    <Button variant="link" onClick={() => navigate('/inventario')}>
+                      Revisar registros
+                    </Button>
+                  </div>
+                </article>
+              ) : null}
               <article className="dash-prio-item">
                 <div className="dash-prio-icon">
                   <Icon name="spark" />
@@ -351,7 +630,7 @@ export function DashboardPage() {
               {meta.categories.map((c) => {
                 const q = state.products
                   .filter((p) => p.category === c)
-                  .reduce((n, p) => n + stock(state, p.id), 0);
+                  .reduce((n, p) => n + stockIn(state, p.id, scope), 0);
                 return (
                   <button
                     type="button"
@@ -393,7 +672,11 @@ export function DashboardPage() {
                   </Button>
                 </p>
               ) : null}
-              <Button variant="link" className="dash-kpi-link" onClick={() => navigate('/inventario')}>
+              <Button
+                variant="link"
+                className="dash-kpi-link"
+                onClick={() => navigate('/inventario')}
+              >
                 Ver detalle
               </Button>
             </div>

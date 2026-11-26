@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Icon } from '../shared/components/Icon';
@@ -11,8 +11,9 @@ import { cx } from '../shared/components/ui';
 import { transition } from '../shared/motion/presets';
 import { Sidebar } from './shell/Sidebar';
 import { Topbar } from './shell/Topbar';
-import { PageSkeleton } from './shell/PageSkeleton';
-import { breadcrumbsFor, fallbackMenu, titleFor, type MenuSection } from './navigation';
+import { AppSkeleton, PageSkeleton } from './shell/PageSkeleton';
+import { RouteErrorBoundary } from './shell/RouteErrorBoundary';
+import { breadcrumbsFor, fallbackMenu, homeForRole, menuForRole, roleAllowsPath, titleFor, type MenuSection } from './navigation';
 
 const ROUTE_SKELETON_MS = 160;
 
@@ -31,14 +32,16 @@ function PageFrame() {
       {busy ? <PageSkeleton /> : null}
       <div className={busy ? 'page-content is-pending' : 'page-content'} aria-hidden={busy}>
         <Suspense fallback={<PageSkeleton />}>
-          <motion.div
-            key={pathname}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={transition.fast}
-          >
-            <Outlet />
-          </motion.div>
+          <RouteErrorBoundary>
+            <motion.div
+              key={pathname}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={transition.fast}
+            >
+              <Outlet />
+            </motion.div>
+          </RouteErrorBoundary>
         </Suspense>
       </div>
     </>
@@ -76,22 +79,19 @@ export function AppLayout() {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantAnswer, setAssistantAnswer] = useState<string[]>([]);
   const [notifyOpen, setNotifyOpen] = useState(false);
-  const [menuSections, setMenuSections] = useState<MenuSection[]>(() =>
-    user?.role === 'admin'
-      ? fallbackMenu
-      : fallbackMenu.map((s) => ({
-          ...s,
-          items: s.items.filter((i) => i.path !== '/usuarios'),
-        })),
-  );
+  /** El menú real viene de SQLite (company_modules); el fallback solo si falla la API. */
+  const menuFromApiRef = useRef(false);
+  const [menuSections, setMenuSections] = useState<MenuSection[]>([]);
 
   useEffect(() => {
     let cancelled = false;
+    menuFromApiRef.current = false;
     void api
       .menu(user?.companyId)
       .then((res) => {
-        if (cancelled || !res.sections?.length) return;
-        let sections = res.sections.map((s) => ({
+        if (cancelled) return;
+        // Fuente de verdad: company_modules + menu_items en admin.db
+        let sections = (res.sections ?? []).map((s) => ({
           section: s.section,
           items: s.items.map((i) => ({
             id: i.id,
@@ -103,7 +103,7 @@ export function AppLayout() {
         }));
         if (user?.role === 'admin') {
           const hasUsers = sections.some((s) => s.items.some((i) => i.path === '/usuarios'));
-          if (!hasUsers) {
+          if (!hasUsers && sections.some((s) => s.section === 'Gestión')) {
             sections = sections.map((s) =>
               s.section === 'Gestión'
                 ? {
@@ -130,15 +130,28 @@ export function AppLayout() {
             }))
             .filter((s) => s.items.length > 0);
         }
-        setMenuSections(sections);
+        setMenuSections(menuForRole(sections, user));
+        menuFromApiRef.current = true;
       })
       .catch(() => {
-        /* mantiene menú fallback */
+        if (cancelled || menuFromApiRef.current) return;
+        // Solo si nunca llegó el menú de BD: fallback mínimo (no el catálogo completo).
+        setMenuSections(
+          menuForRole(
+            fallbackMenu
+              .map((s) => ({
+                ...s,
+                items: s.items.filter((i) => i.path === '/' || i.path === '/configuracion'),
+              }))
+              .filter((s) => s.items.length > 0),
+            user,
+          ),
+        );
       });
     return () => {
       cancelled = true;
     };
-  }, [user?.companyId, user?.role]);
+  }, [user, user?.companyId, user?.role]);
 
   const path = location.pathname;
   const crumbs = useMemo(() => breadcrumbsFor(path, menuSections), [path, menuSections]);
@@ -146,6 +159,10 @@ export function AppLayout() {
   useEffect(() => {
     document.title = `${titleFor(path, menuSections)} · OPTICLEAN AI`;
   }, [path, menuSections]);
+
+  useEffect(() => {
+    if (!roleAllowsPath(user, path)) navigate(homeForRole(user?.role), { replace: true });
+  }, [path, user, navigate]);
 
   // Cierra el menú móvil al navegar.
   useEffect(() => setMobileOpen(false), [path]);
@@ -160,7 +177,7 @@ export function AppLayout() {
       return !v;
     });
 
-  if (!state) return null;
+  if (!state) return <AppSkeleton label="Cargando operación…" />;
 
   const userName = user?.name || state.settings.operator || 'Operación';
   const pending = state.orders.filter((o) => o.status === 'Por preparar').length;
@@ -210,12 +227,36 @@ export function AppLayout() {
           onToggleSidebar={toggleCollapsed}
           onOpenMobileMenu={() => setMobileOpen(true)}
           onNotifications={() => setNotifyOpen(true)}
+          onSearch={(query) => {
+            const q = query.trim().toLowerCase();
+            if (!q) {
+              navigate('/inventario');
+              return;
+            }
+            const orderHit = state.orders.some(
+              (order) => order.id.toLowerCase() === q || (q.startsWith('ped') && order.id.toLowerCase().includes(q)),
+            );
+            const clientHit = state.clients.some((item) =>
+              [item.name, item.taxId, item.email, item.contact, item.phone].some((value) => value?.toLowerCase().includes(q)),
+            );
+            const supplierHit = (state.suppliers ?? []).some((item) =>
+              [item.name, item.taxId, item.email, item.contact].some((value) => value?.toLowerCase().includes(q)),
+            );
+            const productHit = state.products.some((item) =>
+              [item.name, item.sku, item.id].some((value) => value?.toLowerCase().includes(q)),
+            );
+            const encoded = encodeURIComponent(query.trim());
+            if (orderHit) navigate(`/pedidos?q=${encoded}`);
+            else if (supplierHit && !clientHit && !productHit) navigate(`/proveedores?q=${encoded}`);
+            else if (clientHit && !productHit) navigate(`/clientes?q=${encoded}`);
+            else navigate(`/inventario?q=${encoded}`);
+          }}
         />
         <main className="page">
           <PageFrame />
           <footer className="page-footer">
             <span>OPTICLEAN AI · Operación conectada</span>
-            <span>Datos de demostración · Persistencia en servidor local</span>
+            <span>{state.demo === false ? 'Datos de la empresa' : 'Datos de demostración'} · Persistencia en servidor local</span>
           </footer>
         </main>
       </div>

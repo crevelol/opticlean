@@ -6,6 +6,7 @@ function variantForPath(path: string): SkeletonVariant {
   if (path === '/' || path === '') return 'dashboard';
   if (
     path.startsWith('/pedidos/nuevo') ||
+    path.startsWith('/cotizaciones/nueva') ||
     path.startsWith('/reglas') ||
     path.startsWith('/configuracion') ||
     path.startsWith('/recepcion')
@@ -13,6 +14,10 @@ function variantForPath(path: string): SkeletonVariant {
     return 'form';
   if (
     path.startsWith('/clientes') ||
+    path.startsWith('/proveedores') ||
+    path.startsWith('/cotizaciones') ||
+    path.startsWith('/empaque') ||
+    path.startsWith('/plan') ||
     path.startsWith('/bodegas') ||
     path.startsWith('/logistica') ||
     path.startsWith('/inventario') ||

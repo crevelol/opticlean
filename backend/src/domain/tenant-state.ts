@@ -23,7 +23,7 @@ export function emptyState(companyName = 'Mi empresa'): AppState {
       operator: 'Sistema',
       activeWarehouseId: warehouse.id,
     },
-    families: base.families,
+    families: [],
     vehicles: [],
     bundles: [],
     suppliers: [],

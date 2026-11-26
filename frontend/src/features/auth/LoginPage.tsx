@@ -1,10 +1,12 @@
-import { FormEvent, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { FormEvent, useEffect, useState } from 'react';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { Icon, Logo, Spinner } from '../../shared/components/Icon';
 import { Button } from '../../shared/components/ui';
 import { fadeUp, stagger, swap } from '../../shared/motion/presets';
 import { useAuth } from '../../shared/hooks/AuthProvider';
+import { api } from '../../shared/api/client';
+import { homeForRole } from '../../app/navigation';
 import '../../styles/login.css';
 import { Tooltip } from '../../shared/components/Tooltip';
 import { Input } from '../../shared/components/Input';
@@ -15,8 +17,20 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [signupEnabled, setSignupEnabled] = useState(false);
 
-  if (!loading && user) return <Navigate to="/bodega" replace />;
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .publicConfig()
+      .then((c) => !cancelled && setSignupEnabled(c.signupEnabled))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!loading && user) return <Navigate to={homeForRole(user.role)} replace />;
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -24,8 +38,8 @@ export function LoginPage() {
     setError('');
     const form = new FormData(e.currentTarget);
     try {
-      await login(String(form.get('email') ?? ''), String(form.get('password') ?? ''));
-      navigate('/bodega', { replace: true });
+      const session = await login(String(form.get('email') ?? ''), String(form.get('password') ?? ''));
+      navigate(homeForRole(session.role), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo iniciar sesión');
     } finally {
@@ -158,8 +172,16 @@ export function LoginPage() {
           </Button>
 
           <p className="login-hint">
+            <Link to="/olvide-contrasena">¿Olvidaste tu contraseña?</Link>
+          </p>
+          <p className="login-hint">
             Panel: <code>admin@innovamf.com</code> · Piso: <code>ops@innovamf.com</code>
           </p>
+          {signupEnabled ? (
+            <p className="login-hint">
+              ¿Empresa nueva? <Link to="/registro">Crea tu cuenta</Link>
+            </p>
+          ) : null}
         </motion.form>
       </div>
     </div>

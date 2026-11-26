@@ -1,5 +1,11 @@
-import type { AppState, Location, Meta, Metrics } from '../types';
-import { clearSession, getToken, type AuthUser } from '../auth/session';
+import type { AppState, Location, Meta, Metrics, PlanAction } from '../types';
+import {
+  clearSession,
+  getRefreshToken,
+  getToken,
+  setSession,
+  type AuthUser,
+} from '../auth/session';
 
 type StateResponse = { state: AppState; metrics: Metrics };
 
@@ -14,7 +20,43 @@ export type ManagedUser = {
   isDemo: boolean;
 };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+type SessionResponse = {
+  token: string;
+  accessToken?: string;
+  refreshToken?: string;
+  user: AuthUser;
+  expiresIn?: number;
+  refreshExpiresIn?: number;
+};
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function tryRefreshSession(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const res = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+        const data = (await res.json().catch(() => ({}))) as SessionResponse & { error?: string };
+        if (!res.ok || !data.token || !data.user) return false;
+        setSession(data.accessToken || data.token, data.user, data.refreshToken || refreshToken);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+  }
+  return refreshInFlight;
+}
+
+async function request<T>(path: string, init?: RequestInit, retried = false): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(init?.headers as Record<string, string> | undefined),
@@ -27,7 +69,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers,
   });
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401 && path !== '/api/auth/login') {
+  if (res.status === 401 && !path.startsWith('/api/auth/') && !path.startsWith('/api/public/')) {
+    if (!retried) {
+      const ok = await tryRefreshSession();
+      if (ok) return request<T>(path, init, true);
+    }
     clearSession();
     if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
       window.location.assign('/login');
@@ -37,13 +83,63 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+export async function downloadReport(kind: 'traceability' | 'diagnostics', format: 'xlsx' | 'pdf') {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`/api/reports/${kind}?format=${format}`, { headers });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? 'No se pudo descargar el informe.');
+  }
+  const blob = await res.blob();
+  const match = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '');
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = match?.[1] ?? `OPTICLEAN_${kind}.${format}`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
   login: (email: string, password: string) =>
-    request<{ token: string; user: AuthUser }>('/api/auth/login', {
+    request<SessionResponse>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
+  signup: (body: { companyName: string; name: string; email: string; password: string }) =>
+    request<SessionResponse & { company: { id: string; name: string } }>('/api/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  refresh: (refreshToken: string) =>
+    request<SessionResponse>('/api/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken }),
+    }),
+  logout: (refreshToken?: string) =>
+    request<{ ok: boolean }>('/api/auth/logout', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken }),
+    }),
+  publicConfig: () => request<{ signupEnabled: boolean }>('/api/public/config'),
   me: () => request<{ user: AuthUser }>('/api/auth/me'),
+  forgotPassword: (email: string) =>
+    request<{ ok: boolean; message: string; resetUrl?: string }>('/api/auth/password/forgot', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+  resetPassword: (token: string, newPassword: string) =>
+    request<{ ok: boolean; message: string }>('/api/auth/password/reset', {
+      method: 'POST',
+      body: JSON.stringify({ token, newPassword }),
+    }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: boolean; message: string }>('/api/auth/password/change', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
   getMeta: () => request<Meta>('/api/meta'),
   getState: () => request<StateResponse>('/api/state'),
   reset: () => request<StateResponse>('/api/state/reset', { method: 'POST' }),
@@ -169,12 +265,19 @@ export const api = {
       method: 'DELETE',
     }),
   dispatch: (orderIds: string[], vehicle?: string) =>
-    request<StateResponse>('/api/dispatch', {
+    request<
+      StateResponse & {
+        km?: { added: number; odometerKm: number; plate: string } | null;
+        trucks?: Array<Record<string, unknown>>;
+      }
+    >('/api/dispatch', {
       method: 'POST',
       body: JSON.stringify({ orderIds, vehicle }),
     }),
-  delivery: (body: { orderId: string; person: string; notes?: string }) =>
+  delivery: (body: { orderId: string; person: string; notes?: string; code?: string }) =>
     request<StateResponse>('/api/delivery', { method: 'POST', body: JSON.stringify(body) }),
+  skipStop: (orderId: string) =>
+    request<StateResponse>('/api/delivery/skip', { method: 'POST', body: JSON.stringify({ orderId }) }),
   incident: (body: { orderId: string; reason: string; notes?: string }) =>
     request<StateResponse>('/api/incidents', { method: 'POST', body: JSON.stringify(body) }),
   addClient: (body: Record<string, unknown>) =>
@@ -216,6 +319,11 @@ export const api = {
     }),
   addSupplier: (body: Record<string, unknown>) =>
     request<StateResponse>('/api/suppliers', { method: 'POST', body: JSON.stringify(body) }),
+  updateSupplier: (id: string, body: Record<string, unknown>) =>
+    request<StateResponse>(`/api/suppliers/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
   saveBundle: (body: Record<string, unknown>) =>
     request<StateResponse>('/api/bundles', { method: 'POST', body: JSON.stringify(body) }),
   assembleBundle: (id: string, body: Record<string, unknown>) =>
@@ -347,10 +455,16 @@ export const api = {
         route_km: number;
         allowed_sectors?: string;
         allowed_sectors_list?: string[];
+        shipping_template_id?: string;
         active: number;
         sort_order: number;
       }>;
     }>('/api/fleet/manage'),
+  applyShippingTemplateToFleet: (body: { templateId: string; vehicleIds?: string[] }) =>
+    request<{ updated: number; trucks: Array<Record<string, unknown>> }>(
+      '/api/fleet/shipping-template',
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
   createFleetVehicle: (body: {
     plate: string;
     label: string;
@@ -363,6 +477,7 @@ export const api = {
     etaHours?: number;
     routeKm?: number;
     allowedSectors?: string[];
+    shippingTemplateId?: string | null;
   }) =>
     request<{
       vehicle: Record<string, unknown>;
@@ -397,6 +512,7 @@ export const api = {
       etaHours: number;
       routeKm: number;
       allowedSectors: string[];
+      shippingTemplateId: string | null;
       active: boolean;
     }>,
   ) =>
@@ -516,6 +632,35 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ replace }),
     }),
+  vehicleKmLogs: (vehicleId: string) =>
+    request<{
+      vehicleId: string;
+      plate: string;
+      odometerKm: number;
+      logs: Array<{
+        id: string;
+        km: number;
+        stops: number;
+        source: string;
+        note: string;
+        odometerAfter: number;
+        createdAt: string;
+      }>;
+    }>(`/api/fleet/${encodeURIComponent(vehicleId)}/km`),
+  recordVehicleKm: (vehicleId: string, body: { km: number; note?: string; stops?: number }) =>
+    request<{
+      vehicle: Record<string, unknown>;
+      log: { km: number; odometerAfter: number };
+      trucks: Array<Record<string, unknown>>;
+    }>(`/api/fleet/${encodeURIComponent(vehicleId)}/km`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  setVehicleOdometer: (vehicleId: string, body: { odometerKm: number; note?: string }) =>
+    request<{ vehicle: Record<string, unknown>; trucks: Array<Record<string, unknown>> }>(
+      `/api/fleet/${encodeURIComponent(vehicleId)}/odometer`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
   logisticsAutoAssign: (body: {
     orderIds?: string[];
     stagedByTruck?: Record<string, string[]>;
@@ -551,7 +696,7 @@ export const api = {
     }>('/api/logistics/auto-assign', { method: 'POST', body: JSON.stringify(body) }),
   issueInvoice: (orderId: string) =>
     request<StateResponse>('/api/invoices', { method: 'POST', body: JSON.stringify({ orderId }) }),
-  issueCreditNote: (body: { invoiceId: string; reason: string; lines: Array<{ productId: string; qty: number; restock?: boolean }> }) =>
+  issueCreditNote: (body: { invoiceId: string; reason: string; lines: Array<{ productId: string; qty: number; batch?: string; restock?: boolean }> }) =>
     request<StateResponse>('/api/credit-notes', { method: 'POST', body: JSON.stringify(body) }),
   issueGuide: (body: { orderId?: string; transferId?: string }) =>
     request<StateResponse>('/api/guides', { method: 'POST', body: JSON.stringify(body) }),
@@ -590,7 +735,7 @@ export const api = {
         supplierId: string;
         supplierName: string;
         leadTimeDays: number;
-        lines: Array<{ productId: string; name: string; gap: number; packCode: string; packQty: number; unitsPerPack: number; unitPrice: number }>;
+        lines: Array<{ productId: string; name: string; gap: number; packCode: string; packQty: number; unitsPerPack: number; unitPrice: number; reason: string }>;
       }>;
     }>('/api/replenishment'),
   createReplenishment: () => request<StateResponse>('/api/replenishment', { method: 'POST' }),
@@ -600,4 +745,55 @@ export const api = {
       clients: Array<{ orderId: string; clientId: string; clientName: string; productId: string; qty: number; date: string; status: string }>;
       stock: Array<{ lotId: string; productId: string; qty: number; loc: string; warehouseId: string; expiry: string }>;
     }>(`/api/recall?batch=${encodeURIComponent(batch)}`),
+  plan: () =>
+    request<{
+      actions: PlanAction[];
+      forecast: Array<{
+        clientId: string;
+        name: string;
+        weeklyUnits: number;
+        orders: number;
+        confidence: number;
+        deviationPct: number;
+        reorderEveryDays: number | null;
+      }>;
+      diagnostics: Array<{ orderId: string; clientId: string; hours: number; late: boolean; incident: string }>;
+    }>('/api/plan'),
+  approvePlan: (id: string) =>
+    request<StateResponse>(`/api/plan/${encodeURIComponent(id)}/approve`, { method: 'POST' }),
+  discardPlan: (id: string, note: string) =>
+    request<StateResponse>(`/api/plan/${encodeURIComponent(id)}/discard`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    }),
+  undoPlan: (id: string) => request<StateResponse>(`/api/plan/${encodeURIComponent(id)}/undo`, { method: 'POST' }),
+  addQuote: (body: Record<string, unknown>) =>
+    request<StateResponse>('/api/quotes', { method: 'POST', body: JSON.stringify(body) }),
+  winQuote: (id: string) => request<StateResponse>(`/api/quotes/${encodeURIComponent(id)}/win`, { method: 'POST' }),
+  loseQuote: (id: string) => request<StateResponse>(`/api/quotes/${encodeURIComponent(id)}/lose`, { method: 'POST' }),
+  packOrder: (body: { orderId: string; weightKg: number; volumeM3: number }) =>
+    request<StateResponse>('/api/packing', { method: 'POST', body: JSON.stringify(body) }),
+  previewLoad: (plate: string, orderIds: string[]) =>
+    request<{
+      plate: string;
+      kg: number;
+      m3: number;
+      fill: number;
+      underMin: boolean;
+      over: boolean;
+      loadSequence: string[];
+      trip: { km: number; allIn: number; fuel: number; fuelUnits: number; fuelType: string | null };
+    }>('/api/loading/preview', { method: 'POST', body: JSON.stringify({ plate, orderIds }) }),
+  addOffering: (body: Record<string, unknown>) =>
+    request<StateResponse>('/api/offerings', { method: 'POST', body: JSON.stringify(body) }),
+  deleteOffering: (id: string) =>
+    request<StateResponse>(`/api/offerings/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  readLabel: (text: string) =>
+    request<{
+      name: string;
+      presentations: string[];
+      hazardous: boolean;
+      warnings: string[];
+      attributes: Array<{ name: string; value: string }>;
+    }>('/api/products/read-label', { method: 'POST', body: JSON.stringify({ text }) }),
 };

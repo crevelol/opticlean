@@ -31,7 +31,7 @@ export function CommercialPage() {
   const [busy, setBusy] = useState(false);
   const [orderId, setOrderId] = useState('');
   const [invoiceId, setInvoiceId] = useState('');
-  const [returnQty, setReturnQty] = useState(1);
+  const [returnQtys, setReturnQtys] = useState<Record<string, number>>({});
   const [returnReason, setReturnReason] = useState('Devolución de cliente');
   const [restock, setRestock] = useState(true);
   const [payAmount, setPayAmount] = useState('');
@@ -118,7 +118,7 @@ export function CommercialPage() {
       <PageHead
         eyebrow="Gestión"
         title="Comercial"
-        desc="Factura, guía, cartera, precio, costo, devoluciones, conteo, traslado, reposición y retiro de lote. La clave de acceso queda lista para firmar ante el SRI con el certificado de la empresa."
+        desc="Factura, guía, cartera, precios y devoluciones. El número es interno hasta conectar el certificado de la empresa ante el SRI."
       />
       <Tabs
         label="Áreas comerciales"
@@ -174,18 +174,30 @@ export function CommercialPage() {
                           <td>{money(invoice.total)}</td>
                           <td>{money(invoiceBalance(state, invoice.id))}</td>
                           <td>
-                            <Btn
-                              size="small"
-                              disabled={busy}
-                              onClick={() =>
-                                void run(
-                                  () => api.issueGuide({ orderId: invoice.orderId }),
-                                  'Guía de remisión emitida.',
-                                )
-                              }
-                            >
-                              Guía
-                            </Btn>
+                            {(() => {
+                            const guide = (state.guides ?? []).find(
+                              (item) =>
+                                item.orderId === invoice.orderId &&
+                                item.kind === 'Venta' &&
+                                item.status === 'Emitida',
+                            );
+                            return guide ? (
+                              <span>{guide.number}</span>
+                            ) : (
+                              <Btn
+                                size="small"
+                                disabled={busy}
+                                onClick={() =>
+                                  void run(
+                                    () => api.issueGuide({ orderId: invoice.orderId }),
+                                    'Guía de remisión emitida.',
+                                  )
+                                }
+                              >
+                                Guía
+                              </Btn>
+                            );
+                          })()}
                           </td>
                         </tr>
                       ))}
@@ -202,15 +214,20 @@ export function CommercialPage() {
                 onSubmit={(event) => {
                   event.preventDefault();
                   const invoice = (state.invoices ?? []).find((item) => item.id === invoiceId);
-                  const line = invoice?.lines[0];
-                  if (!line) return;
-                  void run(
-                    () =>
-                      api.issueCreditNote({
-                        invoiceId,
-                        reason: returnReason,
-                        lines: [{ productId: line.productId, qty: returnQty, restock }],
-                      }),
+                  const lines = (invoice?.lines ?? [])
+                  .map((line, index) => ({
+                    productId: line.productId,
+                    qty: Number(returnQtys[`${line.productId}:${line.batch ?? index}`] ?? 0),
+                    ...(line.batch ? { batch: line.batch } : {}),
+                    restock,
+                  }))
+                  .filter((line) => line.qty > 0);
+                if (!lines.length) {
+                  toast('Indica la cantidad a devolver de al menos un producto.');
+                  return;
+                }
+                void run(
+                  () => api.issueCreditNote({ invoiceId, reason: returnReason, lines }),
                     restock
                       ? 'Nota emitida. El lote volvió a cuarentena.'
                       : 'Nota de crédito emitida.',
@@ -222,7 +239,10 @@ export function CommercialPage() {
                   <Select
                     id="com-invoice"
                     value={invoiceId}
-                    onChange={(event) => setInvoiceId(event.target.value)}
+                    onChange={(event) => {
+                      setInvoiceId(event.target.value);
+                      setReturnQtys({});
+                    }}
                     required
                   >
                     <option value="">Selecciona</option>
@@ -235,16 +255,32 @@ export function CommercialPage() {
                       ))}
                   </Select>
                 </div>
-                <div className="field">
-                  <label htmlFor="com-return-qty">Cantidad de la primera línea</label>
-                  <Input
-                    id="com-return-qty"
-                    type="number"
-                    min={1}
-                    value={returnQty}
-                    onChange={(event) => setReturnQty(Number(event.target.value))}
-                  />
-                </div>
+                {(state.invoices ?? [])
+                .find((item) => item.id === invoiceId)
+                ?.lines.map((line, index) => {
+                  const key = `${line.productId}:${line.batch ?? index}`;
+                  return (
+                    <div className="field" key={key}>
+                      <label htmlFor={`com-return-${key}`}>
+                        {product(state, line.productId)?.name ?? line.productId}
+                        {line.batch ? ` · lote ${line.batch}` : ''} · facturado {line.qty}
+                      </label>
+                      <Input
+                        id={`com-return-${key}`}
+                        type="number"
+                        min={0}
+                        max={line.qty}
+                        value={returnQtys[key] ?? 0}
+                        onChange={(event) =>
+                          setReturnQtys((current) => ({
+                            ...current,
+                            [key]: Number(event.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                  );
+                })}
                 <div className="field">
                   <label htmlFor="com-return-reason">Motivo</label>
                   <Input
@@ -490,21 +526,32 @@ export function CommercialPage() {
                 className="form-grid"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  void run(
-                    () =>
-                      api.savePriceList({
-                        name: listName,
-                        clientType: listType,
-                        items: [
-                          {
-                            productId: listProduct,
-                            price: Number(listPrice),
-                            minQty: Number(listMin) || 1,
-                          },
-                        ],
-                      }),
-                    'Lista de precios guardada.',
-                  );
+                  const existing = (state.priceLists ?? []).find(
+                  (list) => list.clientType === listType,
+                );
+                const item = {
+                  productId: listProduct,
+                  price: Number(listPrice),
+                  minQty: Number(listMin) || 1,
+                };
+                const items = existing
+                  ? [
+                      ...existing.items.filter(
+                        (row) => !(row.productId === item.productId && row.minQty === item.minQty),
+                      ),
+                      item,
+                    ]
+                  : [item];
+                void run(
+                  () =>
+                    api.savePriceList({
+                      id: existing?.id,
+                      name: listName,
+                      clientType: listType,
+                      items,
+                    }),
+                  existing ? 'Precio agregado a la lista.' : 'Lista de precios guardada.',
+                );
                 }}
               >
                 <div className="field">
@@ -1073,7 +1120,7 @@ export function CommercialPage() {
                       {group.lines.map((line) => (
                         <li key={line.productId}>
                           {line.name}: {line.packQty} {line.packCode} × {line.unitsPerPack} · costo{' '}
-                          {money(line.unitPrice)}
+                          {money(line.unitPrice)} · {line.reason}
                         </li>
                       ))}
                     </ul>

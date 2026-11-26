@@ -4,6 +4,7 @@ import {
   estimateRouteEtaHours,
   estimateRouteKm,
   resolveBusinessRules,
+  resolveShippingParams,
 } from '../../shared/lib/businessRules';
 import { vehicleAllowsZone, zonePathOf } from '../../shared/lib/zones';
 import type { AppState, BusinessRules, Order } from '../../shared/types';
@@ -27,8 +28,12 @@ export type Truck = {
   costFromRules?: boolean;
   etaHours: number;
   routeKm: number;
+  /** Km acumulados del vehículo (odómetro). */
+  odometerKm?: number;
   /** Vacío = sin restricción de sectores */
   allowedSectors?: string[];
+  /** Plantilla de costo de envío (Reglas de negocio). Vacío = default empresa. */
+  shippingTemplateId?: string;
   baseOccupancy: number;
 };
 
@@ -462,7 +467,6 @@ function resolveTruck(fleet: Truck[], plate: string, sample?: Order, s?: AppStat
  * por placa + fecha operativa.
  */
 export function buildRouteHistory(s: AppState, fleet: Truck[] = FLEET): RouteHistoryEntry[] {
-  const rules = resolveBusinessRules(s.settings);
   const wh = s.warehouses[0];
   const relevant = s.orders.filter(
     (o) =>
@@ -485,6 +489,7 @@ export function buildRouteHistory(s: AppState, fleet: Truck[] = FLEET): RouteHis
   const entries: RouteHistoryEntry[] = [];
   for (const b of buckets.values()) {
     const truck = resolveTruck(fleet, b.plate, b.orders[0], s);
+    const shipping = resolveShippingParams(s.settings, truck.shippingTemplateId);
     const warehouse =
       s.warehouses.find((w) => w.city === truck.city) ??
       s.warehouses.find((w) => w.id === s.settings.activeWarehouseId) ??
@@ -494,9 +499,9 @@ export function buildRouteHistory(s: AppState, fleet: Truck[] = FLEET): RouteHis
     const pending = b.orders.filter((o) => o.status === 'En ruta').length;
     const stops = b.orders.length;
     const kg = Math.round(b.orders.reduce((n, o) => n + orderWeight(s, o), 0));
-    const km = estimateRouteKm(truck.routeKm, stops, rules);
+    const km = estimateRouteKm(truck.routeKm, stops, shipping);
     const cost = estimateRouteCost(km, truck.costPerKm);
-    const etaHours = estimateRouteEtaHours(truck.etaHours, stops, rules);
+    const etaHours = estimateRouteEtaHours(truck.etaHours, stops, shipping);
     let status: RouteHistoryEntry['status'] = 'Parcial';
     if (pending > 0) status = 'En ruta';
     else if (incidents > 0 && delivered + incidents === stops) status = 'Incidencia';

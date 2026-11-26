@@ -95,6 +95,71 @@
   line-height: 1.45;
 }
 
+.br-formula {
+  margin: 0 0 14px;
+  font-size: 12px;
+  color: var(--br-muted);
+  line-height: 1.45;
+}
+
+.br-formula code {
+  font-size: 11px;
+  background: #f3f7fb;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.br-tpl-bar {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.br-tpl-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.br-tpl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--br-line);
+  background: #f7fafc;
+  color: var(--br-ink);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.br-tpl-chip em {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--br-blue);
+  background: #e8f2fc;
+  border-radius: 999px;
+  padding: 2px 6px;
+}
+
+.br-tpl-chip.is-on {
+  border-color: #8ebceb;
+  background: #edf5ff;
+  color: var(--br-blue);
+}
+
+.br-tpl-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .br-actions {
   display: flex;
   gap: 10px;

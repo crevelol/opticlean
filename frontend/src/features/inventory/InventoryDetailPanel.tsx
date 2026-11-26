@@ -1,6 +1,6 @@
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { Icon } from '../../shared/components/Icon';
-import { TabPanel, Tabs } from '../../shared/components/Tabs';
+import { Modal } from '../../shared/components/Modal';
 import {
   dateShort,
   daysUntil,
@@ -15,8 +15,9 @@ import { faceLabel } from '../../shared/lib/warehouseLayout';
 import type { AppState } from '../../shared/types';
 import { inventoryStatusLabels, type InventoryRow } from './inventoryModel';
 import '../../styles/inventory-detail.css';
-import { IconButton } from '../../shared/components/IconButton';
+import { Tooltip } from '../../shared/components/Tooltip';
 import { Button } from '../../shared/components/ui';
+import { TabPanel, Tabs } from '../../shared/components/Tabs';
 
 type InventoryDetailPanelProps = {
   state: AppState;
@@ -32,7 +33,7 @@ type InventoryDetailPanelProps = {
   onOpenPurchase?: (purchaseId: string) => void;
 };
 
-type DetailTab = 'locations' | 'lots' | 'entries';
+type DetailTab = 'locations' | 'lots' | 'entries' | 'bom' | 'usedBy';
 
 function locationDescription(location: string) {
   const match = /^(.+)-(\d+)-(\d+)(?:-([DT]))?$/.exec(location);
@@ -60,6 +61,10 @@ function expiryLabel(expiry: string) {
   });
 }
 
+/**
+ * Detalle de un producto del inventario, en modal de dos columnas:
+ * resumen fijo (stock, acciones, valores) a la izquierda y pestañas a la derecha.
+ */
 export function InventoryDetailPanel({
   state,
   row,
@@ -73,9 +78,13 @@ export function InventoryDetailPanel({
   onSelectRelated,
   onOpenPurchase,
 }: InventoryDetailPanelProps) {
-  const [tab, setTab] = useState<DetailTab>('locations');
   const id = useId();
   const { product, stock, reserved, available, status, shortage } = row;
+  // La pestaña vuelve a Ubicaciones al cambiar de producto (p. ej. desde «Usado en»).
+  const [tabState, setTabState] = useState<{ productId: string; tab: DetailTab }>({
+    productId: product.id,
+    tab: 'locations',
+  });
   const bomChildren = childrenStatus(state, product);
   const usedBy = isRaw(product) ? parentsOf(state, product.id) : [];
   const minimum = Math.max(0, product.min);
@@ -97,7 +106,8 @@ export function InventoryDetailPanel({
     if (lot.loc === 'CUARENTENA') return 'Cuarentena';
     if (lot.loc === 'TRANSITO') return 'En tránsito';
     const days = daysUntil(lot.expiry);
-    if (days != null && days < 0) return 'Vencido';
+    if (days == null) return 'Sin fecha de caducidad';
+    if (days < 0) return 'Vencido';
     return `Bajo vida útil mínima (${product.minShelfLifeDays ?? 0} días)`;
   };
   // Historial de entradas: cada recepción con su OC, proveedor, lote y cuánto queda hoy.
@@ -120,127 +130,108 @@ export function InventoryDetailPanel({
     timeZone: 'America/Guayaquil',
   }).format(new Date());
 
-  return (
-    <aside className={`inv-detail inv-detail--${status}`} aria-labelledby={`${id}-title`}>
-      <div className="inv-detail-heading">
-        <span>
-          <Icon name="box" /> Detalle del producto
+  const tabs: { key: DetailTab; label: string; count: number }[] = [
+    { key: 'locations', label: 'Ubicaciones', count: locations.length },
+    { key: 'lots', label: 'Lotes', count: lots.length },
+    { key: 'entries', label: 'Entradas', count: entries.length },
+    ...(bomChildren.length
+      ? [{ key: 'bom' as const, label: 'Insumos', count: bomChildren.length }]
+      : []),
+    ...(usedBy.length ? [{ key: 'usedBy' as const, label: 'Usado en', count: usedBy.length }] : []),
+  ];
+  const requested = tabState.productId === product.id ? tabState.tab : 'locations';
+  const tab = tabs.some((t) => t.key === requested) ? requested : 'locations';
+  const setTab = (next: DetailTab) => setTabState({ productId: product.id, tab: next });
+
+  const kindLabel =
+    isRaw(product) && !/insum/i.test(product.category)
+      ? `${product.category} · Insumo`
+      : product.category;
+
+  const header = (
+    <div className="invd-title">
+      <div className="invd-top">
+        <span className="invd-kind">{kindLabel}</span>
+        <span className="invd-status">
+          <span aria-hidden="true" />
+          {inventoryStatusLabels[status]}
         </span>
-        <IconButton icon="close" label="Cerrar detalle del producto" className="inv-detail-close" onClick={onClose} />
       </div>
-
-      <div className="inv-detail-product">
-        <div className="inv-detail-product-meta">
-          <span className="inv-detail-category">{product.category}</span>
-          {isRaw(product) && <span className="inv-detail-category inv-detail-kind">Insumo</span>}
-          <span className="inv-detail-status">
-            <span aria-hidden="true" />
-            {inventoryStatusLabels[status]}
-          </span>
-        </div>
-        <h2 id={`${id}-title`}>{product.name}</h2>
-        <div className="inv-detail-sku">
-          SKU <strong>{product.sku || product.id}</strong>
-        </div>
-        <p className="inv-detail-supplier">
-          <Icon name="building" />
-          {product.supplier || 'Sin proveedor registrado'}
-        </p>
+      <h2 id={`${id}-title`}>{product.name}</h2>
+      <div className="invd-sub">
+        <span className="invd-sku">{product.sku || product.id}</span>
+        <span className="invd-dot" aria-hidden="true" />
+        <span>{product.supplier || 'Sin proveedor registrado'}</span>
+        {usedBy.length > 0 ? (
+          <>
+            <span className="invd-dot" aria-hidden="true" />
+            <Button variant="link" className="invd-rel" onClick={() => setTab('usedBy')}>
+              Usado en {usedBy.length} {usedBy.length === 1 ? 'producto' : 'productos'}
+            </Button>
+          </>
+        ) : null}
+        {bomChildren.length > 0 ? (
+          <>
+            <span className="invd-dot" aria-hidden="true" />
+            <Button variant="link" className="invd-rel" onClick={() => setTab('bom')}>
+              {bomChildren.length} {bomChildren.length === 1 ? 'insumo' : 'insumos'}
+            </Button>
+          </>
+        ) : null}
       </div>
+    </div>
+  );
 
-      {bomChildren.length > 0 && (
-        <section className="inv-detail-bom" aria-label="Estructura de insumos">
-          <header>
-            <strong>Insumos del producto</strong>
-            <span>{bomChildren.length}</span>
-          </header>
-          <ul>
-            {bomChildren.map((child) => (
-              <li key={child.product.id}>
-                <button type="button" onClick={() => onSelectRelated(child.product.id)}>
-                  <span>
-                    <strong>{child.product.name}</strong>
-                    <small>
-                      {child.qtyPerUnit} uds. / unidad · alc. {num(child.buildable)}
-                    </small>
-                  </span>
-                  <em className={`inv-pill inv-pill-${child.status}`}>
-                    {child.status === 'ok' ? 'OK' : child.status === 'low' ? 'Bajo' : 'Crítico'}
-                  </em>
-                </button>
-                <div className="inv-detail-bom-meter">
-                  <span
-                    style={{ width: `${Math.max(4, child.coverage)}%` }}
-                    className={child.status}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+  const footer = (
+    <div className="invd-footer">
+      {onEdit ? (
+        <Button variant="ghost" size="small" icon="edit" onClick={onEdit}>
+          Editar ficha
+        </Button>
+      ) : null}
+      <Button variant="ghost" size="small" icon="history" onClick={onTrace}>
+        Trazabilidad
+      </Button>
+      {onDelete ? (
+        <Button variant="danger" size="small" icon="trash" className="invd-delete" onClick={onDelete}>
+          Eliminar
+        </Button>
+      ) : null}
+    </div>
+  );
 
-      {usedBy.length > 0 && (
-        <section
-          className="inv-detail-bom inv-detail-parents"
-          aria-label="Productos que usan este insumo"
-        >
-          <header>
-            <strong>Usado por</strong>
-            <span>{usedBy.length}</span>
-          </header>
-          <ul>
-            {usedBy.map((parent) => (
-              <li key={parent.id}>
-                <button type="button" onClick={() => onSelectRelated(parent.id)}>
-                  <span>
-                    <strong>{parent.name}</strong>
-                    <small>
-                      {parent.id} · {parent.category}
-                    </small>
-                  </span>
-                  <Icon name="chevron" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+  const panel = (key: DetailTab, children: ReactNode) => (
+    <TabPanel value={key} className="invd-tab-content">
+      {children}
+    </TabPanel>
+  );
 
-      <div className="inv-detail-stock">
-        <dl className="inv-detail-quantities">
-          <div>
-            <dt>Físico</dt>
-            <dd>{num(stock)}</dd>
-          </div>
-          <div>
-            <dt>Reservado</dt>
-            <dd>{num(reserved)}</dd>
-          </div>
-          <div className="inv-detail-available">
-            <dt>Disponible</dt>
-            <dd>{num(available)}</dd>
-          </div>
-        </dl>
-        <p className="inv-detail-formula">
-          Disponible = físico vendible − reservado en pedidos.
-          {row.unsellable > 0 ? (
-            <>
-              {' '}
-              <strong>{num(row.unsellable)} uds.</strong> no se pueden vender hoy (vencidas, en
-              inspección o con poca vida útil).
-            </>
-          ) : null}
-        </p>
-
-        <div className="inv-detail-minimum">
-          <div className="inv-detail-minimum-heading">
-            <span>Mínimo operativo</span>
-            <strong>{num(minimum)} uds.</strong>
+  return (
+    <Modal
+      title={`Detalle de ${product.name}`}
+      header={header}
+      footer={footer}
+      className={`inv-detail inv-detail--${status}`}
+      bodyClassName="invd-body"
+      onClose={onClose}
+    >
+      <div className="invd-side">
+        <div className="invd-stock">
+          <div className="invd-available">
+            <div>
+              <span className="invd-label">Disponible</span>
+              <strong className="invd-big">
+                {num(available)}
+                <small>uds.</small>
+              </strong>
+            </div>
+            <div className="invd-minimum">
+              Mínimo<strong>{minimum > 0 ? `${num(minimum)} uds.` : '—'}</strong>
+            </div>
           </div>
           {minimum > 0 && (
             <div
-              className="inv-detail-meter"
+              className="invd-meter"
               role="meter"
               aria-label="Disponible respecto al mínimo operativo"
               aria-valuemin={0}
@@ -251,83 +242,116 @@ export function InventoryDetailPanel({
               <span style={{ width: `${coverage}%` }} />
             </div>
           )}
-          <p className="inv-detail-coverage">
+          <p className="invd-coverage">
             <Icon name={status === 'healthy' ? 'check' : 'alert'} />
             <span>
               {shortage > 0 ? (
                 <>
-                  Faltan <strong>{num(shortage)} uds.</strong> para alcanzar el mínimo.
+                  Faltan <strong>{num(shortage)} uds.</strong> para el mínimo
                 </>
               ) : available <= 0 ? (
-                'Sin unidades disponibles para nuevos pedidos.'
+                'Sin unidades para nuevos pedidos'
               ) : minimum > 0 ? (
                 available === minimum ? (
-                  'Disponible justo en el mínimo.'
+                  'Justo en el mínimo'
                 ) : (
                   <>
-                    <strong>{num(available - minimum)} uds.</strong> por encima del mínimo.
+                    <strong>{num(available - minimum)} uds.</strong> sobre el mínimo
                   </>
                 )
               ) : (
-                'Sin mínimo de stock configurado.'
+                'Sin mínimo configurado'
               )}
             </span>
           </p>
+          <div className="invd-split">
+            <span>
+              Físico <strong>{num(stock)}</strong>
+            </span>
+            <span>
+              Reservado <strong>{num(reserved)}</strong>
+            </span>
+            <Tooltip content={"Disponible = físico vendible − reservado en pedidos"}><span
+              className="invd-info"
+              aria-label="Disponible = físico vendible − reservado en pedidos"
+              role="img"
+            >
+              <Icon name="info" />
+            </span></Tooltip>
+          </div>
+          {row.unsellable > 0 ? (
+            <p className="invd-unsellable">
+              <strong>{num(row.unsellable)} uds.</strong> no se pueden vender hoy (vencidas, en
+              inspección o con poca vida útil).
+            </p>
+          ) : null}
         </div>
-      </div>
 
-      <div className="inv-detail-actions">
-        <Button variant="primary" size="small" className="inv-detail-action inv-detail-action-primary" onClick={onReceive}>
-          <Icon name="receive" />
-          Recibir stock
-        </Button>
-        {status !== 'healthy' && (
-          <Button size="small" className="inv-detail-action inv-detail-action-buy" onClick={onPurchase}>
-            <Icon name="cart" />
-            Solicitar compra
+        <div className="invd-actions">
+          <Button variant="primary" icon="receive" className="invd-action-primary" onClick={onReceive}>
+            Recibir stock
           </Button>
-        )}
-        <Button size="small" className="inv-detail-action" onClick={() => onLocate()} disabled={locations.length === 0}>
-          <Icon name="map" />
-          Ver en bodega
-        </Button>
+          {status !== 'healthy' && (
+            <Button icon="cart" onClick={onPurchase}>
+              Solicitar compra
+            </Button>
+          )}
+          <Button icon="map" onClick={() => onLocate()} disabled={locations.length === 0}>
+            Ver en bodega
+          </Button>
+        </div>
+
+        <section className="invd-values" aria-label="Valores">
+          <h3>Valores</h3>
+          <dl>
+            <div>
+              <dt>Precio unitario</dt>
+              <dd>{money(product.price)}</dd>
+            </div>
+            <div>
+              <dt>Costo promedio</dt>
+              <dd>{product.avgCost ? money(product.avgCost) : 'Sin costo'}</dd>
+            </div>
+            <div>
+              <dt>Valor a costo</dt>
+              <dd>{money(row.stockValue)}</dd>
+            </div>
+          </dl>
+        </section>
       </div>
 
-      <Tabs
-        label="Existencias del producto"
-        value={tab}
-        onValueChange={setTab}
-        className="inv-detail-tabset"
-        items={[
-          { value: 'locations', label: 'Ubicaciones', count: locations.length },
-          { value: 'lots', label: 'Lotes', count: lots.length },
-          { value: 'entries', label: 'Entradas', count: entries.length },
-        ]}
-      >
-        <TabPanel value="locations" className="inv-detail-tab-content">
-          {locations.length > 0 ? (
+      <div className="invd-main">
+        <Tabs
+          label="Existencias del producto"
+          value={tab}
+          onValueChange={setTab}
+          className="invd-tabset"
+          items={tabs.map((t) => ({ value: t.key, label: t.label, count: t.count }))}
+        >
+
+        {panel(
+          'locations',
+          locations.length > 0 ? (
             <>
-              <p className="inv-detail-section-note">Stock físico en la bodega seleccionada.</p>
-              <ul className="inv-detail-locations">
+              <p className="invd-note">Stock físico en la bodega seleccionada.</p>
+              <ul className="invd-list">
                 {locations.map(([location, totals]) => (
                   <li key={location}>
                     <button
                       type="button"
-                      className="inv-detail-location"
+                      className="invd-row"
                       onClick={() => onLocate(location)}
                       aria-label={`Ver ubicación ${location}, ${num(totals.qty)} unidades, en bodega`}
                     >
-                      <span className="inv-detail-location-icon">
-                        <Icon name="pin" />
-                      </span>
-                      <span className="inv-detail-location-copy">
-                        <strong>{location}</strong>
-                        <small>{locationDescription(location)}</small>
+                      <Icon name="pin" />
+                      <span className="invd-row-main">
+                        <strong className="invd-mono">{location}</strong>
                         <small>
-                          {totals.lots} {totals.lots === 1 ? 'lote' : 'lotes'}
+                          {locationDescription(location)} · {totals.lots}{' '}
+                          {totals.lots === 1 ? 'lote' : 'lotes'}
                         </small>
                       </span>
-                      <span className="inv-detail-location-qty">
+                      <span className="invd-qty">
                         <strong>{num(totals.qty)}</strong>
                         <small>uds.</small>
                       </span>
@@ -338,80 +362,81 @@ export function InventoryDetailPanel({
               </ul>
             </>
           ) : (
-            <div className="inv-detail-empty">
+            <div className="invd-empty">
               <Icon name="warehouse" />
               <strong>Aún no hay existencias</strong>
               <p>Recibe stock para asignar una ubicación en esta bodega.</p>
             </div>
-          )}
-        </TabPanel>
+          ),
+        )}
 
-        <TabPanel value="lots" className="inv-detail-tab-content">
-          {lots.length > 0 ? (
+        {panel(
+          'lots',
+          lots.length > 0 ? (
             <>
-              <p className="inv-detail-section-note">
-                En orden de salida: primero lo que entró antes (FIFO); a igual fecha, lo que vence
+              <p className="invd-note">
+                En orden de salida: primero lo que vence antes (FEFO); a igual fecha, lo que entró
                 antes.
               </p>
-              <ul className="inv-detail-lots">
+              <ul className="invd-list">
                 {lots.map((lot) => {
                   const sellable = isLotSellable(state, lot);
                   const order = sellable ? sellableLots.indexOf(lot) + 1 : 0;
                   const days = daysUntil(lot.expiry, today);
                   const expired = days != null && days < 0;
                   return (
-                    <li key={lot.id} className="inv-detail-lot">
-                      <div className="inv-detail-lot-heading">
-                        <strong style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                          {sellable ? (
-                            <span
-                              className="fx-order-num"
-                              aria-label={`Sale en el puesto ${order}`}
-                            >
-                              {order}
-                            </span>
-                          ) : null}
+                    <li key={lot.id} className="invd-lot">
+                      {sellable ? (
+                        <span className="fx-order-num" aria-label={`Sale en el puesto ${order}`}>
+                          {order}
+                        </span>
+                      ) : (
+                        <span className="invd-lot-blocked" aria-hidden="true">
+                          <Icon name="alert" />
+                        </span>
+                      )}
+                      <div className="invd-row-main">
+                        <strong>
                           {lot.batch || 'Sin lote registrado'}
                           {order === 1 ? <span className="fx-first">Sale 1º</span> : null}
                         </strong>
-                        <span>{num(lot.qty)} uds.</span>
-                      </div>
-                      <div
-                        className={`inv-detail-expiry${expired ? ' inv-detail-expiry--expired' : ''}`}
-                      >
-                        <Icon name={expired ? 'alert' : 'calendar'} />
-                        <span>
-                          {lot.expiry ? `${expired ? 'Vencido' : 'Vence'}: ` : ''}
-                          {expiryLabel(lot.expiry)}
-                        </span>
-                      </div>
-                      <div className="fx-exit-meta">
-                        {days != null ? (
-                          <span className={`fx-chip ${expiryTone(days)}`}>
-                            {expired ? `hace ${-days} días` : `${days} días`}
+                        <div className="fx-exit-meta">
+                          <span className={expired ? 'invd-expired' : undefined}>
+                            {lot.expiry ? `${expired ? 'Vencido' : 'Vence'} ` : ''}
+                            {expiryLabel(lot.expiry)}
                           </span>
-                        ) : null}
-                        {!sellable ? <span className="fx-chip red">{blockReason(lot)}</span> : null}
-                        {lot.purchaseId ? (
-                          onOpenPurchase ? (
-                            <Button variant="link" className="fx-link" onClick={() => onOpenPurchase(lot.purchaseId!)}>
-                              {lot.purchaseId}
-                            </Button>
-                          ) : (
-                            <span>{lot.purchaseId}</span>
-                          )
-                        ) : null}
-                        {lot.receivedAt ? <span>Ingresó {dateShort(lot.receivedAt)}</span> : null}
+                          {days != null ? (
+                            <span className={`fx-chip ${expiryTone(days)}`}>
+                              {expired ? `hace ${-days} días` : `${days} días`}
+                            </span>
+                          ) : null}
+                          {!sellable ? (
+                            <span className="fx-chip red">{blockReason(lot)}</span>
+                          ) : null}
+                          {lot.purchaseId ? (
+                            onOpenPurchase ? (
+                              <Button variant="link" className="fx-link" onClick={() => onOpenPurchase(lot.purchaseId!)}>
+                                {lot.purchaseId}
+                              </Button>
+                            ) : (
+                              <span>{lot.purchaseId}</span>
+                            )
+                          ) : null}
+                          {lot.receivedAt ? <span>Ingresó {dateShort(lot.receivedAt)}</span> : null}
+                        </div>
                       </div>
+                      <span className="invd-qty">
+                        <strong>{num(lot.qty)}</strong>
+                        <small>uds.</small>
+                      </span>
                       <button
                         type="button"
-                        className="inv-detail-lot-location"
+                        className="invd-lot-loc"
                         onClick={() => onLocate(lot.loc)}
                         aria-label={`Ver lote ${lot.batch || lot.id} en ubicación ${lot.loc}`}
                       >
                         <Icon name="pin" />
                         {lot.loc}
-                        <Icon name="arrow" />
                       </button>
                     </li>
                   );
@@ -419,107 +444,163 @@ export function InventoryDetailPanel({
               </ul>
             </>
           ) : (
-            <div className="inv-detail-empty">
+            <div className="invd-empty">
               <Icon name="layers" />
               <strong>No hay lotes con stock</strong>
               <p>Los lotes aparecerán al registrar una recepción en esta bodega.</p>
             </div>
-          )}
-        </TabPanel>
+          ),
+        )}
 
-        <TabPanel value="entries" className="inv-detail-tab-content">
-          {entries.length > 0 ? (
+        {panel(
+          'entries',
+          entries.length > 0 ? (
             <>
-              <p className="inv-detail-section-note">
+              <p className="invd-note">
                 Cada ingreso con su orden de compra. «Queda» es lo que aún está en bodega de ese
                 ingreso.
               </p>
-              <div className="fx-table-wrap">
-                <table className="fx-table">
-                  <thead>
-                    <tr>
-                      <th>Ingreso</th>
-                      <th>Orden</th>
-                      <th>Proveedor</th>
-                      <th>Lote</th>
-                      <th>Vence</th>
-                      <th className="num">Recibido</th>
-                      <th className="num">Queda</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {entries.map(({ receipt, left }) => (
-                      <tr key={receipt.id}>
-                        <td>
-                          {dateShort(receipt.receivedAt ?? receipt.date)}
-                          <div className="fx-muted">{receipt.id}</div>
-                        </td>
-                        <td>
-                          {receipt.purchaseId ? (
-                            onOpenPurchase ? (
-                              <Button variant="link" className="fx-link" onClick={() => onOpenPurchase(receipt.purchaseId!)}>
-                                {receipt.purchaseId}
-                              </Button>
-                            ) : (
-                              receipt.purchaseId
-                            )
+              <table className="fx-table invd-entries-table">
+                <thead>
+                  <tr>
+                    <th>Ingreso</th>
+                    <th>Orden</th>
+                    <th>Proveedor</th>
+                    <th>Lote</th>
+                    <th>Vence</th>
+                    <th className="num">Recibido</th>
+                    <th className="num">Queda</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map(({ receipt, left }) => (
+                    <tr key={receipt.id}>
+                      <td>
+                        {dateShort(receipt.receivedAt ?? receipt.date)}
+                        <div className="fx-muted">{receipt.id}</div>
+                      </td>
+                      <td>
+                        {receipt.purchaseId ? (
+                          onOpenPurchase ? (
+                            <Button variant="link" className="fx-link" onClick={() => onOpenPurchase(receipt.purchaseId!)}>
+                              {receipt.purchaseId}
+                            </Button>
                           ) : (
-                            <span className="fx-chip">{receipt.reason ?? 'Sin orden'}</span>
-                          )}
-                        </td>
-                        <td>{receipt.supplier || '—'}</td>
-                        <td>{receipt.batch}</td>
-                        <td>{receipt.expiry ? dateShort(receipt.expiry) : '—'}</td>
-                        <td className="num">{num(receipt.qty)}</td>
-                        <td className="num">{num(left)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                            receipt.purchaseId
+                          )
+                        ) : (
+                          <span className="fx-chip">{receipt.reason ?? 'Sin orden'}</span>
+                        )}
+                      </td>
+                      <Tooltip content={receipt.supplier || undefined}><td className="invd-ellipsis">
+                        {receipt.supplier || '—'}
+                      </td></Tooltip>
+                      <td>{receipt.batch}</td>
+                      <td>{receipt.expiry ? dateShort(receipt.expiry) : '—'}</td>
+                      <td className="num">{num(receipt.qty)}</td>
+                      <td className="num">
+                        <strong>{num(left)}</strong>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <ul className="invd-list invd-entries-list">
+                {entries.map(({ receipt, left }) => (
+                  <li key={receipt.id} className="invd-entry">
+                    <div className="invd-row-main">
+                      <strong>
+                        {receipt.purchaseId ?? receipt.reason ?? 'Sin orden'} · {receipt.batch}
+                      </strong>
+                      <small>
+                        {dateShort(receipt.receivedAt ?? receipt.date)}
+                        {receipt.expiry ? ` · vence ${dateShort(receipt.expiry)}` : ''}
+                        {receipt.supplier ? ` · ${receipt.supplier}` : ''}
+                      </small>
+                    </div>
+                    <span className="invd-qty">
+                      <strong>{num(left)}</strong>
+                      <small>de {num(receipt.qty)}</small>
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </>
           ) : (
-            <div className="inv-detail-empty">
+            <div className="invd-empty">
               <Icon name="receive" />
               <strong>Sin entradas registradas</strong>
               <p>Las recepciones de este producto aparecerán aquí con su orden de compra.</p>
             </div>
-          )}
-        </TabPanel>
-      </Tabs>
+          ),
+        )}
 
-      <dl className="inv-detail-values">
-        <div>
-          <dt>Precio unitario</dt>
-          <dd>{money(product.price)}</dd>
-        </div>
-        <div>
-          <dt>Costo promedio</dt>
-          <dd>{product.avgCost ? money(product.avgCost) : 'Sin costo'}</dd>
-        </div>
-        <div>
-          <dt>Valor a costo</dt>
-          <dd>{money(row.stockValue)}</dd>
-        </div>
-      </dl>
-      <div className="inv-detail-footer">
-        {onEdit ? (
-          <Button size="small" onClick={onEdit}>
-            <Icon name="edit" />
-            Editar ficha
-          </Button>
-        ) : null}
-        {onDelete ? (
-          <Button variant="danger" size="small" onClick={onDelete}>
-            <Icon name="trash" />
-            Eliminar
-          </Button>
-        ) : null}
-        <Button size="small" onClick={onTrace}>
-          <Icon name="history" />
-          Trazabilidad
-        </Button>
+        {bomChildren.length > 0 &&
+          panel(
+            'bom',
+            <>
+              <p className="invd-note">
+                Insumos que lleva cada unidad y cuántas unidades alcanzan con el stock de cada uno.
+              </p>
+              <ul className="invd-list">
+                {bomChildren.map((child) => (
+                  <li key={child.product.id}>
+                    <button
+                      type="button"
+                      className="invd-row"
+                      onClick={() => onSelectRelated(child.product.id)}
+                    >
+                      <span className="invd-row-main">
+                        <strong>{child.product.name}</strong>
+                        <small>
+                          {child.qtyPerUnit} uds. por unidad · alcanza para {num(child.buildable)}
+                        </small>
+                        <span className="invd-bom-meter">
+                          <span
+                            style={{ width: `${Math.max(4, child.coverage)}%` }}
+                            className={child.status}
+                          />
+                        </span>
+                      </span>
+                      <em className={`invd-pill invd-pill-${child.status}`}>
+                        {child.status === 'ok' ? 'OK' : child.status === 'low' ? 'Bajo' : 'Crítico'}
+                      </em>
+                      <Icon name="chevron" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>,
+          )}
+
+        {usedBy.length > 0 &&
+          panel(
+            'usedBy',
+            <>
+              <p className="invd-note">Productos terminados que llevan este insumo en su receta.</p>
+              <ul className="invd-list">
+                {usedBy.map((parent) => (
+                  <li key={parent.id}>
+                    <button
+                      type="button"
+                      className="invd-row"
+                      onClick={() => onSelectRelated(parent.id)}
+                    >
+                      <span className="invd-row-main">
+                        <strong>{parent.name}</strong>
+                        <small>
+                          {parent.id} · {parent.category}
+                        </small>
+                      </span>
+                      <Icon name="chevron" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>,
+          )}
+        </Tabs>
       </div>
-    </aside>
+    </Modal>
   );
 }

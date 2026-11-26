@@ -10,7 +10,6 @@ import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import { RouteMap } from './RouteMap';
 import {
-  FLEET as DEFAULT_FLEET,
   activeOrders,
   cityOf,
   deliveredToday,
@@ -29,11 +28,10 @@ export function RoutesPage() {
   const { state, applyResponse, toast } = useAppState();
   const navigate = useNavigate();
   const location = useLocation();
-  const [fleet, setFleet] = useState<Truck[]>(DEFAULT_FLEET);
+  const [fleet, setFleet] = useState<Truck[]>([]);
   const initialTruck =
     (location.state as { truckId?: string } | null)?.truckId ??
     new URLSearchParams(location.search).get('truck') ??
-    DEFAULT_FLEET[0]?.id ??
     '';
 
   const [truckId, setTruckId] = useState(initialTruck);
@@ -43,11 +41,13 @@ export function RoutesPage() {
     void api
       .fleet()
       .then((r) => {
-        if (!r.trucks?.length) return;
-        setFleet(r.trucks);
-        setTruckId((cur) => (r.trucks.some((t) => t.id === cur) ? cur : r.trucks[0].id));
+        const trucks = Array.isArray(r.trucks) ? r.trucks : [];
+        setFleet(trucks);
+        setTruckId((cur) => (trucks.some((t) => t.id === cur) ? cur : trucks[0]?.id ?? ''));
       })
-      .catch(() => {});
+      .catch(() => {
+        setFleet([]);
+      });
   }, []);
 
   const [stopId, setStopId] = useState<string | null>(null);
@@ -91,6 +91,7 @@ export function RoutesPage() {
           orderId: current.id,
           person: String(data.person),
           notes: String(data.notes ?? ''),
+          code: String(data.code ?? ''),
         }),
       );
       toast(`Entrega de ${current.id} confirmada.`);
@@ -337,6 +338,22 @@ export function RoutesPage() {
                   >
                     Incidencia
                   </Btn>
+                  <Btn
+                    variant="ghost"
+                    disabled={!!current.skipped}
+                    onClick={() => {
+                      setError('');
+                      void api
+                        .skipStop(current.id)
+                        .then((response) => {
+                          applyResponse(response);
+                          toast(`${current.id} quedó fuera de la ruta. Las paradas que siguen se reordenaron.`);
+                        })
+                        .catch((err) => setError(err instanceof Error ? err.message : 'No se pudo saltar la parada.'));
+                    }}
+                  >
+                    Saltar y reordenar
+                  </Btn>
                 </div>
               </div>
             </>
@@ -382,6 +399,19 @@ export function RoutesPage() {
                 defaultValue={currentClient?.contact}
               />
             </div>
+            <div className="field">
+              <label htmlFor="route-code">Código que dicta el cliente</label>
+              <input id="route-code" name="code" inputMode="numeric" autoComplete="off" required={!!current.deliveryCode} />
+            </div>
+            {current.deliveryKey ? (
+              <p className="subtle">
+                El cliente lo ve en{' '}
+                <a href={`/entrega?orderId=${encodeURIComponent(current.id)}&k=${encodeURIComponent(current.deliveryKey)}`}>
+                  su enlace
+                </a>
+                .
+              </p>
+            ) : null}
             <div className="field">
               <label htmlFor="route-notes">Observaciones</label>
               <Textarea id="route-notes" name="notes" />

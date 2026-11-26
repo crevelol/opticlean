@@ -29,7 +29,9 @@ export function FamiliesPage() {
 
   const families = state?.families ?? [];
   const categories = useMemo(
-    () => [...new Set([...(meta?.categories ?? []), ...((state?.products ?? []).map((p) => p.category))])],
+    () => [
+      ...new Set([...(meta?.categories ?? []), ...(state?.products ?? []).map((p) => p.category)]),
+    ],
     [meta, state],
   );
   const racks = useMemo(() => {
@@ -48,7 +50,6 @@ export function FamiliesPage() {
     setError('');
     setEdit({ ...f, productCategories: [...f.productCategories], rackIds: [...f.rackIds] });
   };
-
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,14 +90,20 @@ export function FamiliesPage() {
       <PageHead
         eyebrow="Reglas de ubicación"
         title="Familias de bodega"
-        desc="Define qué líneas van a qué racks y si la zona prioriza productos frágiles. El móvil y la recepción usan estas reglas."
-        actions={<Btn variant="primary" icon="plus" onClick={openNew}>Nueva familia</Btn>}
+        desc="Agrupación opcional de productos por familia. Sirve para sugerir racks al recibir; no es obligatorio crearlas."
+        actions={
+          <Btn variant="primary" icon="plus" onClick={openNew}>
+            Nueva familia
+          </Btn>
+        }
       />
 
       <section className="fam-hint">
         <Icon name="spark" />
         <p>
-          Al recibir mercadería, la guía de ubicación prioriza racks de la familia, huecos vacíos y niveles bajos si el producto es frágil.
+          Opcional: puedes asignar una familia a cada producto o vincular líneas enteras. Al
+          recibir, la guía prioriza racks de la familia, huecos vacíos y niveles bajos si el
+          producto es frágil.
         </p>
       </section>
 
@@ -104,15 +111,22 @@ export function FamiliesPage() {
         <div className="fam-grid">
           {families.map((f) => {
             const count = state.products.filter(
-              (p) => p.familyId === f.id || (!p.familyId && f.productCategories.includes(p.category)),
+              (p) =>
+                p.familyId === f.id || (!p.familyId && f.productCategories.includes(p.category)),
             ).length;
             return (
-              <article key={f.id} className="fam-card" style={{ ['--fam-color' as string]: f.color }}>
+              <article
+                key={f.id}
+                className="fam-card"
+                style={{ ['--fam-color' as string]: f.color }}
+              >
                 <header>
                   <span className="fam-swatch" />
                   <div>
                     <strong>{f.name}</strong>
-                    <small>{f.code} · {count} productos</small>
+                    <small>
+                      {f.code} · {count} productos
+                    </small>
                   </div>
                   {f.fragilePreferred && <em className="fam-pill">Zona frágil</em>}
                 </header>
@@ -120,23 +134,32 @@ export function FamiliesPage() {
                 <dl>
                   <div>
                     <dt>Líneas</dt>
-                    <dd>{f.productCategories.join(', ') || '—'}</dd>
+                    <dd>
+                      {f.productCategories.join(', ') || 'Sin líneas (solo asignación manual)'}
+                    </dd>
                   </div>
                   <div>
                     <dt>Racks</dt>
-                    <dd>{f.rackIds.join(', ') || '—'}</dd>
+                    <dd>{f.rackIds.join(', ') || 'Sin racks preferidos'}</dd>
                   </div>
                 </dl>
                 <footer>
-                  <Btn variant="small" icon="edit" onClick={() => openEdit(f)}>Editar</Btn>
-                  <Btn variant="small" icon="trash" onClick={() => void remove(f.id)}>Eliminar</Btn>
+                  <Btn variant="small" icon="edit" onClick={() => openEdit(f)}>
+                    Editar
+                  </Btn>
+                  <Btn variant="small" icon="trash" onClick={() => void remove(f.id)}>
+                    Eliminar
+                  </Btn>
                 </footer>
               </article>
             );
           })}
         </div>
       ) : (
-        <Empty title="Sin familias" desc="Crea la primera familia para guiar la ubicación." />
+        <Empty
+          title="Sin familias"
+          desc="No hay familias configuradas. Puedes operar sin ellas o crear la primera para agrupar productos y racks."
+        />
       )}
 
       {edit && (
@@ -185,28 +208,47 @@ export function FamiliesPage() {
                 />
               </div>
               <div className="field full">
-                <label>Líneas de producto</label>
-                <ChipGroup
-                  type="multiple"
-                  label="Categorías de producto"
-                  value={edit.productCategories}
-                  onValueChange={(productCategories) => setEdit({ ...edit, productCategories })}
-                  items={categories.map((c) => ({ value: c, label: c }))}
-                />
+                <label>
+                  Líneas de producto <small>(opcional)</small>
+                </label>
+                {categories.length ? (
+                  <ChipGroup
+                    type="multiple"
+                    label="Líneas de producto"
+                    value={edit.productCategories}
+                    onValueChange={(productCategories) => setEdit({ ...edit, productCategories })}
+                    items={categories.map((c) => ({ value: c, label: c }))}
+                  />
+                ) : (
+                  <p className="subtle" style={{ margin: 0 }}>
+                    Aún no hay líneas en el catálogo. Puedes asignar productos a mano desde Inventario.
+                  </p>
+                )}
               </div>
               <div className="field full">
-                <label>Racks de bodega</label>
-                <ChipGroup
-                  type="multiple"
-                  label="Racks de bodega"
-                  value={edit.rackIds}
-                  onValueChange={(rackIds) => setEdit({ ...edit, rackIds })}
-                  items={racks.map((r) => ({ value: r, label: `Rack ${r}` }))}
-                />
+                <label>
+                  Racks de bodega <small>(opcional)</small>
+                </label>
+                {racks.length ? (
+                  <ChipGroup
+                    type="multiple"
+                    label="Racks de bodega"
+                    value={edit.rackIds}
+                    onValueChange={(rackIds) => setEdit({ ...edit, rackIds })}
+                    items={racks.map((r) => ({ value: r, label: `Rack ${r}` }))}
+                  />
+                ) : (
+                  <p className="subtle" style={{ margin: 0 }}>
+                    Configura racks en Bodegas para sugerir ubicación por familia.
+                  </p>
+                )}
               </div>
               <div className="field full">
                 <label className="fam-check">
-                  <Switch checked={edit.fragilePreferred} onCheckedChange={(checked) => setEdit({ ...edit, fragilePreferred: checked })} />
+                  <Switch
+                    checked={edit.fragilePreferred}
+                    onCheckedChange={(checked) => setEdit({ ...edit, fragilePreferred: checked })}
+                  />
                   Preferir productos frágiles en esta familia (niveles bajos)
                 </label>
               </div>

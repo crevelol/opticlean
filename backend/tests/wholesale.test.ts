@@ -104,6 +104,7 @@ test('CSV purchase import previews rows and does not invent an expiry', () => {
   const committed = commitImport(s, {
     kind: 'purchase',
     partyName: 'Química Andina',
+    partyTaxId: '1790000001001',
     docNumber: 'OC-CSV-1',
     rows: preview.rows,
   });
@@ -137,4 +138,42 @@ test('Sale import creates the order even without stock and keeps shortage alert'
   assert.equal(order.status, 'Esperando stock');
   assert.ok(s.products.some((p) => p.sku === 'NUEVO99' || p.id === 'NUEVO99'));
   assert.ok((order.purchaseIds?.length ?? 0) >= 1);
+});
+
+test('Import pricing: value as cost + margin sets PVP and avgCost', () => {
+  const s = seed();
+  const csv = 'codigo,descripcion,cantidad,precio\nMARGEN01,Producto margen,1,10\n';
+  const preview = previewCsv(s, csv, 'sale');
+  assert.equal(preview.rows[0].status, 'new');
+  const client = s.clients[0]!;
+  commitImport(s, {
+    kind: 'sale',
+    partyName: client.name,
+    partyTaxId: client.contact,
+    priceRole: 'cost',
+    marginPct: 25,
+    rows: preview.rows,
+  });
+  const item = s.products.find((p) => p.id === 'MARGEN01' || p.sku === 'MARGEN01')!;
+  assert.equal(item.avgCost, 10);
+  assert.equal(item.price, 12.5);
+});
+
+test('Import pricing: value as PVP derives cost with margin', () => {
+  const s = seed();
+  const csv = 'codigo,descripcion,cantidad,pvp\nPVP01,Producto pvp,1,13\n';
+  const preview = previewCsv(s, csv, 'purchase');
+  commitImport(s, {
+    kind: 'purchase',
+    partyName: 'Química Andina',
+    partyTaxId: '1790000001001',
+    priceRole: 'pvp',
+    marginPct: 30,
+    rows: preview.rows,
+  });
+  const item = s.products.find((p) => p.id === 'PVP01' || p.sku === 'PVP01')!;
+  assert.equal(item.price, 13);
+  assert.equal(item.avgCost, 10);
+  const po = s.purchases.find((p) => p.lines?.some((line) => line.productId === item.id))!;
+  assert.equal(po.lines?.find((line) => line.productId === item.id)?.unitPrice, 10);
 });

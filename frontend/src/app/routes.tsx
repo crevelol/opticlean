@@ -3,7 +3,11 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './AppLayout';
 import { useAppState } from '../shared/hooks/AppStateProvider';
 import { useAuth } from '../shared/hooks/AuthProvider';
+import { homeForRole } from './navigation';
 import { LoginPage } from '../features/auth/LoginPage';
+import { SignupPage } from '../features/auth/SignupPage';
+import { ForgotPasswordPage } from '../features/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
 import { AppSkeleton } from './shell/PageSkeleton';
 import { Button } from '../shared/components/ui';
 
@@ -44,6 +48,9 @@ const RouteHistoryPage = lazy(() =>
 const ClientsPage = lazy(() =>
   import('../features/clients/ClientsPage').then((m) => ({ default: m.ClientsPage })),
 );
+const SuppliersPage = lazy(() =>
+  import('../features/suppliers/SuppliersPage').then((m) => ({ default: m.SuppliersPage })),
+);
 const TraceabilityPage = lazy(() =>
   import('../features/traceability/TraceabilityPage').then((m) => ({
     default: m.TraceabilityPage,
@@ -72,6 +79,24 @@ const FamiliesPage = lazy(() =>
 const CommercialPage = lazy(() =>
   import('../features/commercial/CommercialPage').then((m) => ({ default: m.CommercialPage })),
 );
+const QuotesPage = lazy(() =>
+  import('../features/quotes/QuotesPage').then((m) => ({ default: m.QuotesPage })),
+);
+const NewQuotePage = lazy(() =>
+  import('../features/quotes/NewQuotePage').then((m) => ({ default: m.NewQuotePage })),
+);
+const PackingPage = lazy(() =>
+  import('../features/packing/PackingPage').then((m) => ({ default: m.PackingPage })),
+);
+const PlanPage = lazy(() => import('../features/plan/PlanPage').then((m) => ({ default: m.PlanPage })));
+const DeliveryCodePage = lazy(() =>
+  import('../features/logistics/DeliveryCodePage').then((m) => ({ default: m.DeliveryCodePage })),
+);
+
+function RoleHome() {
+  const { user } = useAuth();
+  return <Navigate to={homeForRole(user?.role)} replace />;
+}
 
 function ProtectedApp() {
   const { loading: authLoading, user } = useAuth();
@@ -104,18 +129,23 @@ function ProtectedApp() {
         <Route path="familias" element={<FamiliesPage />} />
         <Route path="pedidos" element={<OrdersPage />} />
         <Route path="pedidos/nuevo" element={<NewOrderPage />} />
+        <Route path="cotizaciones" element={<QuotesPage />} />
+        <Route path="cotizaciones/nueva" element={<NewQuotePage />} />
+        <Route path="empaque" element={<PackingPage />} />
+        <Route path="plan" element={<PlanPage />} />
         <Route path="compras" element={<PurchasesPage />} />
         <Route path="logistica" element={<LogisticsPage />} />
         <Route path="logistica/rutas" element={<RoutesPage />} />
         <Route path="logistica/historial" element={<RouteHistoryPage />} />
         <Route path="clientes" element={<ClientsPage />} />
+        <Route path="proveedores" element={<SuppliersPage />} />
         <Route path="comercial" element={<CommercialPage />} />
         <Route path="trazabilidad" element={<TraceabilityPage />} />
         <Route path="reportes" element={<ReportsPage />} />
         <Route path="reglas" element={<BusinessRulesPage />} />
         <Route path="usuarios" element={<UsersPage />} />
         <Route path="configuracion" element={<SettingsPage />} />
-        <Route path="*" element={<Navigate to="/bodega" replace />} />
+        <Route path="*" element={<RoleHome />} />
       </Route>
     </Routes>
   );
@@ -125,6 +155,10 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/registro" element={<SignupPage />} />
+      <Route path="/olvide-contrasena" element={<ForgotPasswordPage />} />
+      <Route path="/restablecer" element={<ResetPasswordPage />} />
+      <Route path="/entrega" element={<DeliveryCodePage />} />
       <Route path="/*" element={<ProtectedApp />} />
     </Routes>
   );

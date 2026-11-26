@@ -167,6 +167,9 @@ export type DialogProps = {
   /** Bloquea el cierre (Escape / clic fuera / ✕) mientras se guarda. */
   busy?: boolean;
   className?: string;
+  /** Encabezado propio en lugar de título/subtítulo; `title` queda como nombre accesible. */
+  header?: ReactNode;
+  bodyClassName?: string;
 };
 
 /** Diálogo estándar. */
@@ -180,6 +183,8 @@ export function Dialog({
   onClose,
   busy,
   className,
+  header,
+  bodyClassName,
 }: DialogProps) {
   const block = (e: Event) => {
     if (busy) e.preventDefault();
@@ -194,24 +199,31 @@ export function Dialog({
           size === 'fill' && 'fill',
           className,
         )}
-        noDescription={!subtitle}
+        noDescription={!subtitle || !!header}
         onEscapeKeyDown={block}
         onPointerDownOutside={block}
       >
         <div className="modal-header">
-          <div>
-            <DialogTitle asChild>
-              <h2>{title}</h2>
-            </DialogTitle>
-            {subtitle ? (
-              <DialogDescription asChild>
-                <p>{subtitle}</p>
-              </DialogDescription>
-            ) : null}
-          </div>
+          {header ? (
+            <>
+              <DialogTitle className="sr-only">{title}</DialogTitle>
+              {header}
+            </>
+          ) : (
+            <div>
+              <DialogTitle asChild>
+                <h2>{title}</h2>
+              </DialogTitle>
+              {subtitle ? (
+                <DialogDescription asChild>
+                  <p>{subtitle}</p>
+                </DialogDescription>
+              ) : null}
+            </div>
+          )}
           <DialogCloseButton disabled={busy} />
         </div>
-        <div className="modal-body">{children}</div>
+        <div className={cx('modal-body', bodyClassName)}>{children}</div>
         {footer ? <div className="modal-footer">{footer}</div> : null}
       </DialogContent>
     </DialogRoot>

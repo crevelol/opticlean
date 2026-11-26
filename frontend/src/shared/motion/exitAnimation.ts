@@ -25,8 +25,12 @@ export type GhostPart = {
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+/** Capas con una salida ya programada (el contenido de un tooltip enriquecido se repite). */
+const pending = new WeakSet<HTMLElement>();
+
 export function playExitGhost(source: HTMLElement | null, parts: GhostPart[], ms = duration.base * 1000) {
-  if (!source?.isConnected || prefersReducedMotion()) return;
+  if (!source?.isConnected || pending.has(source) || prefersReducedMotion()) return;
+  pending.add(source);
 
   // ── Fase 1: preparar la copia mientras el original sigue en el DOM ──
   const parent = source.parentElement;
@@ -65,6 +69,7 @@ export function playExitGhost(source: HTMLElement | null, parts: GhostPart[], ms
 
   // ── Fase 2: al terminar el ciclo de React, solo si fue un desmontaje real ──
   queueMicrotask(() => {
+    pending.delete(source);
     if (source.isConnected) return; // desmontaje simulado (StrictMode) o la capa sigue viva
     (parent?.isConnected ? parent : document.body).appendChild(ghost);
 
