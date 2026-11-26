@@ -25,7 +25,7 @@ export function Modal({
   children: ReactNode;
   footer?: ReactNode;
   wide?: boolean;
-  /** Usa casi todo el viewport (importaciones con tabla). */
+  /** Usa casi todo el viewport (importaciones y tablas grandes). */
   fill?: boolean;
   /** Bloquea el cierre mientras se guarda. */
   busy?: boolean;

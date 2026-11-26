@@ -86,7 +86,7 @@ test('Picking uses earliest expiry (FEFO) among sellable lots', () => {
   const first = plan.find((l) => l.productId === 'P001')!;
   const earliest = s.lots
     .filter((l) => l.productId === 'P001' && isLotSellable(s, l))
-    .sort((a, b) => a.expiry.localeCompare(b.expiry))[0];
+    .sort((a, b) => a.expiry.localeCompare(b.expiry) || (a.receivedAt ?? '').localeCompare(b.receivedAt ?? ''))[0];
   assert.equal(first.id, earliest.id);
   prepare(s, o.id);
   assert.equal(o.status, 'Preparado');

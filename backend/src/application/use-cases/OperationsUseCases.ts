@@ -58,6 +58,7 @@ import {
   createPurchase,
   promoteWaitingOrders,
   receivePurchase,
+  receiveWithoutPurchase,
   updateClient as saveClientProfile,
 } from '../../domain/commerce.service.js';
 import { addEvent } from '../../domain/inventory.service.js';
@@ -207,6 +208,12 @@ export class OperationsUseCases {
   async receiveGoods(body: Parameters<typeof receive>[1]) {
     return this.mutate((s) => {
       receive(s, body);
+    });
+  }
+
+  async receiveGoodsBatch(body: Parameters<typeof receiveWithoutPurchase>[1]) {
+    return this.mutate((s) => {
+      receiveWithoutPurchase(s, body);
     });
   }
 

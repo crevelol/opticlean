@@ -362,6 +362,51 @@ export function receivePurchase(
   return ids;
 }
 
+/** Recibe varios productos sin orden de compra en un solo paso. Todo o nada. */
+export function receiveWithoutPurchase(
+  s: AppState,
+  body: {
+    supplier: string;
+    reason: string;
+    lines: Array<{
+      productId: string;
+      qty?: number | string;
+      packCode?: string;
+      packQty?: number | string;
+      loc: string;
+      batch: string;
+      expiry: string;
+      inspect?: boolean;
+    }>;
+  },
+) {
+  const lines = body.lines ?? [];
+  if (!lines.length) throw new Error('Agrega al menos un producto a recibir.');
+  const ids: string[] = [];
+  for (const line of lines) {
+    const name = product(s, line.productId)?.name ?? line.productId;
+    try {
+      ids.push(
+        receive(s, {
+          productId: line.productId,
+          qty: line.qty ?? 0,
+          packCode: line.packCode,
+          packQty: line.packQty,
+          loc: line.loc,
+          batch: line.batch,
+          expiry: line.expiry,
+          supplier: body.supplier,
+          reason: body.reason,
+          inspect: line.inspect,
+        }),
+      );
+    } catch (e) {
+      throw new Error(`${name}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return ids;
+}
+
 /* ─── Pedidos con faltante ────────────────────────────────── */
 
 /** Crea una OC por proveedor para el faltante del pedido y las enlaza. */

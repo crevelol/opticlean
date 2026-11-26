@@ -1,0 +1,213 @@
+/* Recepción: orden completa o varios productos sin orden */
+.rec-modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.rec-mode {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px;
+  text-align: left;
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-input);
+  border-radius: 14px;
+  cursor: pointer;
+}
+.rec-mode .icon,
+.rec-mode svg {
+  color: var(--blue-600);
+}
+.rec-mode span {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+.rec-mode.is-active {
+  border-color: var(--blue-500);
+  background: color-mix(in srgb, var(--blue-500) 7%, var(--color-surface));
+  box-shadow: 0 0 0 1px var(--blue-500);
+}
+.rec-mode:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.rec-po-preview {
+  grid-column: 1 / -1;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+.rec-po-preview li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+}
+.rec-po-preview li + li {
+  border-top: 1px solid var(--color-border-subtle);
+}
+.rec-po-preview b {
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.rec-cols,
+.rec-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.4fr) minmax(0, 1.4fr) 110px 80px 40px;
+  gap: 10px;
+  align-items: center;
+}
+.rec-cols {
+  padding: 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.rec-cols .end {
+  text-align: right;
+}
+.rec-row {
+  padding: 10px 2px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+.rec-row .field {
+  margin: 0;
+}
+.rec-row.is-off .rec-prod {
+  opacity: 0.55;
+}
+.rec-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.rec-check strong,
+.rec-check small {
+  display: block;
+}
+.rec-check small {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.rec-units {
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.rec-units.is-error {
+  color: var(--color-danger);
+}
+.rec-remove {
+  color: var(--color-danger);
+}
+.rec-remove:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.rec-row-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-danger);
+}
+.rec-card {
+  padding: 16px 0 4px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+.rec-card header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.rec-card header strong,
+.rec-card header small {
+  display: block;
+}
+.rec-card header small,
+.rec-card-n {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.rec-loc {
+  display: flex;
+  gap: 8px;
+}
+.rec-loc > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.rec-inspect {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rec-review-lines {
+  display: flex;
+  flex-direction: column;
+  margin: 8px 0 12px;
+}
+.rec-review-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+.rec-review-line strong,
+.rec-review-line small {
+  display: block;
+}
+.rec-review-line small {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.rec-review-loc {
+  text-align: right;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.rec-side-lines {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  font-size: 13px;
+}
+.rec-side-lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+.rec-side-lines small {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+@media (max-width: 720px) {
+  .rec-modes {
+    grid-template-columns: 1fr;
+  }
+  .rec-cols {
+    display: none;
+  }
+  .rec-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .rec-prod {
+    grid-column: 1 / -1;
+  }
+}
