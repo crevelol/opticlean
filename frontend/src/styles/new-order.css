@@ -1,85 +1,12 @@
 .no-page {
   color: var(--color-text);
   min-width: 0;
-  padding-bottom: 88px;
 }
 
 .no-xml-file {
   margin: -6px 0 12px;
   font-size: var(--text-md);
   color: var(--color-text-muted);
-}
-
-.no-steps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.no-steps button {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  background: var(--slate-0);
-  text-align: left;
-  font: inherit;
-  color: var(--color-text-muted);
-  cursor: pointer;
-}
-
-.no-steps button b {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-  background: var(--slate-100);
-  color: var(--color-text-muted);
-  font-size: var(--text-md);
-  flex-shrink: 0;
-}
-
-.no-steps button strong {
-  display: block;
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
-  color: inherit;
-}
-
-.no-steps button small {
-  display: block;
-  margin-top: 2px;
-  font-size: var(--text-sm);
-  color: var(--slate-500);
-}
-
-.no-steps button.is-current {
-  background: var(--blue-50);
-  color: var(--color-primary);
-  border-color: var(--slate-300);
-}
-
-.no-steps button.is-current b {
-  background: var(--color-primary);
-  color: var(--slate-0);
-}
-
-.no-steps button.is-done {
-  color: var(--green-600);
-}
-
-.no-steps button.is-done b {
-  background: var(--teal-50);
-  color: var(--green-600);
-}
-
-.no-steps button:disabled {
-  opacity: 1;
-  cursor: default;
 }
 
 .no-layout {
@@ -581,37 +508,6 @@
   letter-spacing: -0.3px;
 }
 
-.no-footer {
-  position: sticky;
-  bottom: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 16px;
-  padding: 12px 14px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 -4px 20px rgba(23, 50, 79, 0.06);
-}
-
-.no-step-label {
-  font-size: var(--text-md);
-  font-weight: var(--weight-semibold);
-  color: var(--color-text-muted);
-}
-
-.no-footer-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-left: auto;
-}
-
 @media (max-width: 960px) {
   .no-layout {
     grid-template-columns: 1fr;
@@ -620,8 +516,9 @@
   .no-info-grid {
     grid-template-columns: 1fr;
   }
+}
 
-  .no-steps {
-    grid-template-columns: 1fr;
-  }
+/* Recibe el foco al cambiar de paso. */
+.no-main:focus {
+  outline: none;
 }

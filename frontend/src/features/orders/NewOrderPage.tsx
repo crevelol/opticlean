@@ -20,6 +20,12 @@ import { Icon } from '../../shared/components/Icon';
 import { SegmentedControl } from '../../shared/components/Tabs';
 import { ImportDialog } from '../imports/ImportDialog';
 import '../../styles/new-order.css';
+import {
+  WizardFooter,
+  WizardSteps,
+  useDiscardGuard,
+  useStepFocus,
+} from '../../shared/components/Wizard';
 import { Checkbox } from '../../shared/components/Checkbox';
 import { Input, Textarea, NumberStepper } from '../../shared/components/Input';
 import { SearchInput } from '../../shared/components/SearchInput';
@@ -28,10 +34,10 @@ type Line = { productId: string; qty: number };
 type KitLine = { bundleId: string; qty: number };
 
 const STEPS = [
-  { id: 1, title: 'Cliente', desc: 'Datos y entrega' },
-  { id: 2, title: 'Productos', desc: 'Artículos y cantidades' },
-  { id: 3, title: 'Confirmar', desc: 'Revisión final' },
-] as const;
+  { title: 'Cliente', subtitle: 'Datos y entrega' },
+  { title: 'Productos', subtitle: 'Artículos y cantidades' },
+  { title: 'Confirmar', subtitle: 'Revisión final' },
+];
 
 function initials(name: string) {
   return name
@@ -94,6 +100,17 @@ export function NewOrderPage() {
       (b) => !q || (b.name + b.id + b.description).toLowerCase().includes(q),
     );
   }, [search, meta, state]);
+
+  const stepRef = useStepFocus<HTMLDivElement>(step);
+  const discard = useDiscardGuard(
+    !busy &&
+      (clientId !== (routeClient ?? '') ||
+        lines.length > 0 ||
+        kits.length > 0 ||
+        !!notes.trim() ||
+        !!requestedDate),
+  );
+  const leaveTo = (to: string) => discard.guard(() => navigate(to));
 
   if (!state || !meta) return null;
 
@@ -225,6 +242,13 @@ export function NewOrderPage() {
     }
   };
 
+  const missing =
+    step === 1 && !clientId
+      ? 'Selecciona un cliente'
+      : step === 2 && !lines.length && !kits.length
+        ? 'Agrega al menos un producto'
+        : '';
+
   const stepTitle =
     step === 1
       ? 'Selecciona el cliente y el punto de entrega.'
@@ -240,7 +264,7 @@ export function NewOrderPage() {
         desc={stepTitle}
         actions={
           <>
-            <Btn icon="back" onClick={() => navigate('/pedidos')}>
+            <Btn icon="back" onClick={() => leaveTo('/pedidos')}>
               Volver a pedidos
             </Btn>
             <Btn icon="file" onClick={() => setImportOpen(true)}>
@@ -263,36 +287,22 @@ export function NewOrderPage() {
       ) : null}
       {error && step === 1 ? <div className="form-error visible">{error}</div> : null}
 
-      <nav className="no-steps" aria-label="Pasos del pedido">
-        {STEPS.map((s) => {
-          const done = step > s.id;
-          const current = step === s.id;
-          return (
-            <button
-              key={s.id}
-              type="button"
-              className={current ? 'is-current' : done ? 'is-done' : ''}
-              disabled={!done && !current}
-              onClick={() => done && setStep(s.id)}
-            >
-              <b>{done ? '✓' : s.id}</b>
-              <span>
-                <strong>{s.title}</strong>
-                <small>{s.desc}</small>
-              </span>
-            </button>
-          );
-        })}
-      </nav>
+      <WizardSteps
+        label="Pasos del pedido"
+        steps={STEPS}
+        current={step - 1}
+        onSelect={(index) => setStep(index + 1)}
+        disabled={busy}
+      />
 
       <div className="no-layout">
-        <div className="no-main">
+        <div className="no-main" ref={stepRef} tabIndex={-1}>
           {step === 1 ? (
             <>
               <section className="no-card">
                 <header className="no-card-head">
                   <h2>Cliente</h2>
-                  <Button variant="link" className="no-link" onClick={() => navigate('/clientes')}>
+                  <Button variant="link" className="no-link" onClick={() => leaveTo('/clientes')}>
                     <Icon name="plus" /> Nuevo cliente
                   </Button>
                 </header>
@@ -356,7 +366,7 @@ export function NewOrderPage() {
                 <header className="no-card-head">
                   <h2>Entrega</h2>
                   {selected ? (
-                    <Button variant="link" className="no-link" onClick={() => navigate('/clientes')}>
+                    <Button variant="link" className="no-link" onClick={() => leaveTo('/clientes')}>
                       <Icon name="edit" /> Editar dirección
                     </Button>
                   ) : null}
@@ -729,52 +739,48 @@ export function NewOrderPage() {
         </aside>
       </div>
 
-      <footer className="no-footer">
-        <span className="no-step-label">
-          Paso {step} de {STEPS.length}
-        </span>
-        <div className="no-footer-actions">
-          {step === 1 ? (
-            <>
-              <Btn
-                onClick={() =>
-                  toast('Borrador local: continúa cuando quieras. Aún no se guarda en servidor.')
+      <WizardFooter
+        step={step - 1}
+        total={STEPS.length}
+        onBack={() => setStep(step - 1)}
+        onCancel={() => leaveTo('/pedidos')}
+        info={`Paso ${step} de ${STEPS.length}${missing ? ` · ${missing}` : ''}`}
+        primary={
+          step === 1
+            ? {
+                label: 'Continuar a productos',
+                icon: 'arrow',
+                onClick: goProducts,
+                disabled: !!missing,
+              }
+            : step === 2
+              ? {
+                  label: 'Continuar a confirmar',
+                  icon: 'arrow',
+                  onClick: goConfirm,
+                  disabled: !!missing,
                 }
-              >
-                Guardar borrador
-              </Btn>
-              <Btn variant="primary" icon="arrow" onClick={goProducts}>
-                Continuar a productos
-              </Btn>
-            </>
-          ) : null}
-          {step === 2 ? (
-            <>
-              <Btn icon="back" onClick={() => setStep(1)}>
-                Atrás
-              </Btn>
-              <Btn variant="primary" icon="arrow" onClick={goConfirm}>
-                Continuar a confirmar
-              </Btn>
-            </>
-          ) : null}
-          {step === 3 ? (
-            <>
-              <Btn icon="back" onClick={() => setStep(2)}>
-                Atrás
-              </Btn>
-              <Btn
-                variant="primary"
-                icon="check"
-                disabled={busy || (!lines.length && !kits.length)}
-                onClick={() => void confirm()}
-              >
-                {busy ? 'Creando…' : 'Confirmar pedido'}
-              </Btn>
-            </>
-          ) : null}
-        </div>
-      </footer>
+              : {
+                  label: 'Confirmar pedido',
+                  icon: 'check',
+                  onClick: () => void confirm(),
+                  disabled: !lines.length && !kits.length,
+                  busy,
+                  busyLabel: 'Creando…',
+                }
+        }
+      >
+        {step === 1 ? (
+          <Button
+            onClick={() =>
+              toast('Borrador local: continúa cuando quieras. Aún no se guarda en servidor.')
+            }
+          >
+            Guardar borrador
+          </Button>
+        ) : null}
+      </WizardFooter>
+      {discard.dialog}
     </div>
   );
 }
