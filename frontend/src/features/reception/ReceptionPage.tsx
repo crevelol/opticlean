@@ -3,31 +3,88 @@ import { Select } from '../../shared/components/Select';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
-import { activeWarehouseId, available, product, qtyAt, stock } from '../../shared/lib/inventory';
+import { activeWarehouseId, product, qtyAt } from '../../shared/lib/inventory';
 import { buildWarehouseGeometry, faceLabel, normalizeLayout } from '../../shared/lib/warehouseLayout';
 import { Btn, PageHead, cx } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal } from '../../shared/components/Modal';
 import { WarehouseEmbed } from '../warehouse/WarehouseEmbed';
-import { RECEIPT_REASONS, type Location } from '../../shared/types';
+import { RECEIPT_REASONS, type AppState, type Location } from '../../shared/types';
 import { useAuth } from '../../shared/hooks/AuthProvider';
-import { packsOf, pendingUnits, purchaseIncludes } from '../../shared/lib/wholesale';
+import { packsOf, purchaseLines } from '../../shared/lib/wholesale';
 import '../../styles/warehouse-positioning.css';
 import '../../styles/reception.css';
+import '../../styles/reception-rows.css';
 
 const steps = [
-  { title: 'Producto', subtitle: 'Qué llega y de quién' },
-  { title: 'Cantidad y lote', subtitle: 'Empaques y vencimiento' },
-  { title: 'Ubicación', subtitle: 'Dónde se guarda' },
+  { title: 'Origen', subtitle: 'Con o sin orden de compra' },
+  { title: 'Productos', subtitle: 'Qué llega y cuánto' },
+  { title: 'Lote y ubicación', subtitle: 'Vencimiento y dónde se guarda' },
   { title: 'Confirmar', subtitle: 'Revisar y registrar' },
 ];
+
+type Mode = 'po' | 'free';
+
+type Row = {
+  key: string;
+  productId: string;
+  packCode: string;
+  /** Cantidad de empaques. */
+  qty: number;
+  /** En órdenes de compra: la línea se puede dejar fuera de esta recepción. */
+  include: boolean;
+  pendingUnits?: number;
+  batch: string;
+  expiry: string;
+  inspect: boolean;
+  loc: string;
+  options: Location[];
+  optKey: string;
+};
+
+const newKey = () => Math.random().toString(36).slice(2, 9);
 
 const expiryLabel = (d: string) =>
   d
     ? new Date(`${d}T12:00:00`).toLocaleDateString('es-EC', { day: '2-digit', month: 'short', year: 'numeric' })
     : 'Sin fecha';
 
-/** Registro de una recepción en cuatro pasos, con resumen lateral. */
+const makeRow = (s: AppState | null | undefined, productId = '', packCode = 'unidad', qty = 1, extra: Partial<Row> = {}): Row => ({
+  key: newKey(),
+  productId,
+  packCode,
+  qty,
+  include: true,
+  batch: '',
+  expiry: '',
+  inspect: !!s?.products.find((p) => p.id === productId)?.inspectOnReceipt,
+  loc: '',
+  options: [],
+  optKey: '',
+  ...extra,
+});
+
+/** Líneas pendientes de una orden de compra, listas para recibir. */
+const rowsFromPurchase = (s: AppState, purchaseId: string): Row[] => {
+  const po = s.purchases.find((p) => p.id === purchaseId);
+  if (!po) return [];
+  const rows: Row[] = [];
+  for (const line of purchaseLines(po)) {
+    const per = line.unitsPerPack || 1;
+    const pending = line.qty * per - (line.receivedUnits ?? 0);
+    if (pending <= 0) continue;
+    const packs = packsOf(product(s, line.productId));
+    const usePack = packs.some((p) => p.code === line.packCode) && pending % per === 0;
+    rows.push(
+      makeRow(s, line.productId, usePack ? line.packCode : 'unidad', usePack ? pending / per : pending, {
+        pendingUnits: pending,
+      }),
+    );
+  }
+  return rows;
+};
+
+/** Registro de una recepción en cuatro pasos: orden completa o productos sin orden. */
 export function ReceptionNewPage() {
   const { state, meta, applyResponse, toast } = useAppState();
   const navigate = useNavigate();
@@ -35,30 +92,33 @@ export function ReceptionNewPage() {
   const routeState =
     (location.state as { loc?: string; productId?: string; purchaseId?: string; qty?: number } | null) ?? {};
   const prefillLoc = routeState.loc;
-  const [step, setStep] = useState(0);
-  const [productId, setProductId] = useState(routeState.productId ?? state?.products[0]?.id ?? '');
-  const [qty, setQty] = useState(routeState.qty && routeState.qty > 0 ? routeState.qty : 1);
-  const [packCode, setPackCode] = useState('unidad');
-  const [purchaseId, setPurchaseId] = useState(routeState.purchaseId ?? '');
-  const openPurchases = (state?.purchases ?? []).filter(
-    (p) => purchaseIncludes(p, productId) && (!p.status || p.status === 'Abierta' || p.status === 'Parcial'),
-  );
-  const [supplier, setSupplier] = useState('');
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const openPurchases = (state?.purchases ?? []).filter(
+    (p) => !p.status || p.status === 'Abierta' || p.status === 'Parcial',
+  );
+
+  const [step, setStep] = useState(0);
+  const [mode, setMode] = useState<Mode>(
+    routeState.purchaseId ? 'po' : routeState.productId ? 'free' : openPurchases.length ? 'po' : 'free',
+  );
+  const [purchaseId, setPurchaseId] = useState(routeState.purchaseId ?? '');
+  const [supplier, setSupplier] = useState('');
   const [reason, setReason] = useState('');
-  const [inspect, setInspect] = useState(false);
-  const [batch, setBatch] = useState('');
-  const [expiry, setExpiry] = useState('');
-  const [suggestions, setSuggestions] = useState<Location[]>([]);
-  const [selectedLoc, setSelectedLoc] = useState('');
-  const [showAllLocs, setShowAllLocs] = useState(false);
+  const [rows, setRows] = useState<Row[]>(() => {
+    if (routeState.purchaseId && state) return rowsFromPurchase(state, routeState.purchaseId);
+    if (routeState.productId) {
+      const qty = routeState.qty && routeState.qty > 0 ? routeState.qty : 1;
+      return [makeRow(state, routeState.productId, 'unidad', qty)];
+    }
+    return mode === 'free' ? [makeRow(state)] : [];
+  });
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [lookupError, setLookupError] = useState('');
   const [saving, setSaving] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const [mapOpen, setMapOpen] = useState(false);
+  const [mapKey, setMapKey] = useState('');
   const [mapPick, setMapPick] = useState('');
   const saveLock = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -68,68 +128,86 @@ export function ReceptionNewPage() {
   const layout = useMemo(() => normalizeLayout(warehouse?.layout), [warehouse?.layout]);
   const geo = useMemo(() => buildWarehouseGeometry(layout), [layout]);
   const mapLocations = meta?.locations?.length ? meta.locations : geo.locations;
-  const mapFocus = mapPick || selectedLoc;
-  const selected =
-    suggestions.find((item) => item.id === selectedLoc) ??
-    mapLocations.find((item) => item.id === selectedLoc);
   const capacity = layout.capacityPerCell;
-  const selectedProduct = state ? product(state, productId) : undefined;
-  const packs = packsOf(selectedProduct);
-  const pack = packs.find((item) => item.code === packCode) ?? packs[0];
-  const stockQty = Math.round(qty * (pack?.units ?? 1));
-  const validQty = Number.isInteger(qty) && qty > 0 && Number.isInteger(stockQty) && stockQty > 0 && stockQty <= capacity;
-  const [suggestionKey, setSuggestionKey] = useState('');
-  const currentKey = `${warehouseId}:${productId}:${stockQty}`;
-  const ready = !loading && suggestionKey === currentKey && validQty;
-  const visibleSuggestions = showAllLocs ? suggestions : suggestions.slice(0, 4);
-  const hiddenCount = Math.max(0, suggestions.length - 4);
   const purchase = state?.purchases.find((p) => p.id === purchaseId);
+  const purchaseSupplier = state?.suppliers?.find((s) => s.id === purchase?.supplierId)?.name ?? '';
+  const todayIso = new Date().toISOString().slice(0, 10);
 
-  useEffect(() => {
-    if (!selectedProduct) return;
-    setSupplier(selectedProduct.supplier);
-    setInspect(!!selectedProduct.inspectOnReceipt);
-  }, [selectedProduct?.id, selectedProduct?.supplier, selectedProduct?.inspectOnReceipt]);
+  const calc = (row: Row) => {
+    const item = state ? product(state, row.productId) : undefined;
+    const packs = packsOf(item);
+    const pack = packs.find((p) => p.code === row.packCode) ?? packs[0];
+    const stockQty = Math.round(row.qty * (pack?.units ?? 1));
+    const valid =
+      !!item && Number.isInteger(row.qty) && row.qty > 0 && Number.isInteger(stockQty) && stockQty > 0 && stockQty <= capacity;
+    return { item, packs, pack, stockQty, valid };
+  };
+  const optKeyOf = (row: Row) => `${warehouseId}:${row.productId}:${calc(row).stockQty}:${state?.lots.length ?? 0}`;
 
-  const purchaseSupplier = state?.suppliers?.find((s) => s.id === purchase?.supplierId)?.name;
-  useEffect(() => {
-    if (purchaseSupplier) setSupplier(purchaseSupplier);
-  }, [purchase?.id, purchaseSupplier]);
+  const active = rows.filter((row) => row.include);
+  const sig = active.map((row) => `${row.key}:${optKeyOf(row)}`).join('|');
 
+  // Sugerencias de ubicación por línea; cada línea evita casillas ya tomadas por otro producto.
   useEffect(() => {
-    if (!productId || !validQty) {
-      setSuggestions([]);
-      setLoading(false);
-      return;
-    }
+    if (!state) return;
+    const todo = active.filter((row) => calc(row).valid && row.optKey !== optKeyOf(row));
+    if (!todo.length) return;
     let cancelled = false;
     setLoading(true);
     setLookupError('');
-    void api
-      .suggest(productId, stockQty)
-      .then((opts) => {
+    void Promise.all(
+      todo.map(async (row) => ({
+        key: row.key,
+        optKey: optKeyOf(row),
+        opts: await api.suggest(row.productId, calc(row).stockQty),
+      })),
+    )
+      .then((results) => {
         if (cancelled) return;
-        setSuggestions(opts);
-        setSelectedLoc((current) =>
-          opts.some((l) => l.id === current)
-            ? current
-            : prefillLoc && opts.some((l) => l.id === prefillLoc)
-              ? prefillLoc
-              : (opts[0]?.id ?? ''),
-        );
-        setSuggestionKey(currentKey);
+        setRows((current) => {
+          const hit = new Set(results.map((r) => r.key));
+          const next = current.map((row) => {
+            const found = results.find((r) => r.key === row.key);
+            return found ? { ...row, options: found.opts, optKey: found.optKey } : row;
+          });
+          const used = new Map<string, string>();
+          next.forEach((row) => {
+            if (row.include && row.loc && row.options.some((o) => o.id === row.loc)) used.set(row.loc, row.productId);
+          });
+          return next.map((row) => {
+            if (!row.include || !hit.has(row.key) || row.options.some((o) => o.id === row.loc)) return row;
+            const free = (o: Location) => {
+              const owner = used.get(o.id);
+              return !owner || owner === row.productId;
+            };
+            const pick =
+              (prefillLoc ? row.options.find((o) => o.id === prefillLoc && free(o)) : undefined) ??
+              row.options.find(free) ??
+              row.options[0];
+            if (pick) used.set(pick.id, row.productId);
+            return { ...row, loc: pick?.id ?? '' };
+          });
+        });
         setLoading(false);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setSuggestions([]);
         setLoading(false);
         setLookupError(err instanceof Error ? err.message : 'No se pudieron consultar las ubicaciones.');
       });
     return () => {
       cancelled = true;
     };
-  }, [productId, stockQty, prefillLoc, validQty, currentKey, attempt, state?.lots]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sig, attempt]);
+
+  // Proveedor sugerido a partir del primer producto cuando se recibe sin orden.
+  useEffect(() => {
+    if (mode !== 'free' || supplier || !state) return;
+    const first = rows.find((row) => row.productId);
+    const name = first ? product(state, first.productId)?.supplier : '';
+    if (name) setSupplier(name);
+  }, [mode, rows, supplier, state]);
 
   useEffect(() => {
     headingRef.current?.focus({ preventScroll: true });
@@ -137,25 +215,71 @@ export function ReceptionNewPage() {
 
   if (!state) return null;
 
-  const occupiedNow = selected ? qtyAt(state, selected.id) : 0;
-  const occupiedAfter = selected ? occupiedNow + stockQty : 0;
-  const freeNow = selected ? selected.capacity - occupiedNow : 0;
-  const fillNow = selected ? Math.min(100, Math.round((occupiedNow / selected.capacity) * 100)) : 0;
-  const fillAfter = selected ? Math.min(100, Math.round((occupiedAfter / selected.capacity) * 100)) : 0;
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const patch = (key: string, change: Partial<Row>) =>
+    setRows((current) => current.map((row) => (row.key === key ? { ...row, ...change } : row)));
 
-  const expires = selectedProduct?.perishable !== false;
+  const chooseMode = (next: Mode) => {
+    if (next === mode) return;
+    setMode(next);
+    setError('');
+    setPurchaseId('');
+    setSupplier('');
+    setRows(next === 'free' ? [makeRow(state)] : []);
+  };
+
+  const choosePurchase = (id: string) => {
+    setPurchaseId(id);
+    setRows(id ? rowsFromPurchase(state, id) : []);
+  };
+
+  const changeProduct = (row: Row, productId: string) =>
+    patch(row.key, {
+      productId,
+      packCode: 'unidad',
+      inspect: !!product(state, productId)?.inspectOnReceipt,
+      options: [],
+      optKey: '',
+      loc: '',
+      expiry: '',
+    });
+
+  const locOf = (row: Row) =>
+    row.options.find((o) => o.id === row.loc) ?? mapLocations.find((o) => o.id === row.loc);
+  /** Espacio libre de la casilla de la línea, descontando lo que otras líneas dejan en ella. */
+  const freeFor = (row: Row) => {
+    const loc = locOf(row);
+    if (!loc) return 0;
+    const others = active
+      .filter((r) => r.key !== row.key && r.loc === row.loc)
+      .reduce((sum, r) => sum + calc(r).stockQty, 0);
+    return loc.capacity - qtyAt(state, loc.id) - others;
+  };
+
+  const totalUnits = active.reduce((sum, row) => sum + (calc(row).valid ? calc(row).stockQty : 0), 0);
+
   const stepValid = [
-    !!productId && supplier.trim().length > 0 && (!!purchaseId || (isAdmin && !!reason)),
-    validQty && batch.trim().length > 0 && (!expires || (!!expiry && expiry >= todayIso)),
-    ready && !!selected && !lookupError && freeNow >= stockQty,
+    mode === 'po' ? !!purchaseId : isAdmin && !!reason && supplier.trim().length > 0,
+    active.length > 0 && active.every((row) => !!row.productId && calc(row).valid),
+    active.length > 0 &&
+      !lookupError &&
+      !loading &&
+      active.every((row) => {
+        const { item } = calc(row);
+        const expires = item?.perishable !== false;
+        return (
+          row.batch.trim().length > 0 &&
+          (!expires || (!!row.expiry && row.expiry >= todayIso)) &&
+          (!row.expiry || row.expiry >= todayIso) &&
+          row.optKey === optKeyOf(row) &&
+          !!row.loc &&
+          freeFor(row) >= calc(row).stockQty
+        );
+      }),
     true,
   ];
   const canSubmit = !saving && stepValid.every(Boolean);
-  // Primer paso incompleto: no se puede avanzar más allá de él.
   const firstInvalid = stepValid.findIndex((ok) => !ok);
   const maxReachable = firstInvalid === -1 ? steps.length - 1 : firstInvalid;
-
   const goTo = (index: number) => {
     if (index <= maxReachable) setStep(index);
   };
@@ -166,30 +290,44 @@ export function ReceptionNewPage() {
       if (stepValid[step]) setStep(step + 1);
       return;
     }
-    if (saveLock.current || !canSubmit || !selected) return;
+    if (saveLock.current || !canSubmit) return;
     saveLock.current = true;
     setSaving(true);
     setError('');
     try {
-      const res = await api.receive({
-        productId,
-        qty: stockQty,
-        packCode: pack?.code ?? 'unidad',
-        packQty: qty,
-        loc: selectedLoc,
-        batch: batch.trim(),
-        expiry,
-        supplier,
-        purchaseId: purchaseId || undefined,
-        reason: purchaseId ? undefined : reason,
-        inspect,
-      });
+      const res =
+        mode === 'po'
+          ? await api.receivePurchase(
+              purchaseId,
+              active.map((row) => ({
+                productId: row.productId,
+                qty: calc(row).stockQty,
+                loc: row.loc,
+                batch: row.batch.trim(),
+                expiry: row.expiry,
+                inspect: row.inspect,
+              })),
+            )
+          : await api.receiveBatch({
+              supplier: supplier.trim(),
+              reason,
+              lines: active.map((row) => ({
+                productId: row.productId,
+                qty: calc(row).stockQty,
+                packCode: calc(row).pack?.code ?? 'unidad',
+                packQty: row.qty,
+                loc: row.loc,
+                batch: row.batch.trim(),
+                expiry: row.expiry,
+                inspect: row.inspect,
+              })),
+            });
       applyResponse(res);
       const newId = res.state?.receipts?.[0]?.id;
       toast(
-        purchaseId
-          ? `Recepción registrada contra ${purchaseId}: ${stockQty} u. en ${selectedLoc}.`
-          : `Recepción registrada: ${stockQty} u. en ${selectedLoc}.`,
+        `Recepción registrada${mode === 'po' ? ` contra ${purchaseId}` : ''}: ${active.length} ${
+          active.length === 1 ? 'línea' : 'líneas'
+        }, ${totalUnits} u.`,
       );
       navigate('/recepcion', { state: { highlight: newId } });
     } catch (err) {
@@ -201,40 +339,21 @@ export function ReceptionNewPage() {
   };
 
   const checks = [
-    { label: 'Producto y proveedor', ok: stepValid[0] },
-    { label: expires ? 'Cantidad, lote y vencimiento' : 'Cantidad y lote', ok: stepValid[1] },
-    { label: 'Ubicación con espacio', ok: step >= 2 && stepValid[2] },
+    { label: 'Origen definido', ok: stepValid[0] },
+    { label: 'Productos y cantidades', ok: step >= 1 && stepValid[1] },
+    { label: 'Lote, vencimiento y ubicación', ok: step >= 2 && stepValid[2] },
   ];
 
-  const review: Array<{ k: string; v: React.ReactNode; step: number }> = [
-    { k: 'Producto', v: `${productId} · ${selectedProduct?.name ?? ''}`, step: 0 },
-    { k: 'Orden de compra', v: purchaseId || `Sin orden de compra · ${reason || 'falta motivo'}`, step: 0 },
-    { k: 'Inspección', v: inspect ? 'Queda retenido hasta liberarlo' : 'Disponible al registrar', step: 1 },
-    { k: 'Proveedor', v: supplier, step: 0 },
-    {
-      k: 'Cantidad',
-      v: `${qty} × ${pack?.label ?? 'Unidad'} (${pack?.units ?? 1} u.) = ${stockQty} u.`,
-      step: 1,
-    },
-    { k: 'Lote', v: batch.trim(), step: 1 },
-    { k: 'Vencimiento', v: expiryLabel(expiry), step: 1 },
-    {
-      k: 'Ubicación',
-      v: selected
-        ? `${selected.id} · Rack ${selected.rack} · Nivel ${selected.level} · Pos ${selected.pos}${
-            selected.face ? ` · ${faceLabel(selected.face)}` : ''
-          }`
-        : '—',
-      step: 2,
-    },
-  ];
+  const mapRow = rows.find((row) => row.key === mapKey);
+  const mapFocus = mapPick || mapRow?.loc || '';
+  const nameOf = (id: string) => product(state, id)?.name ?? id;
 
   return (
     <div className="reception-page">
       <PageHead
         eyebrow="Ingreso de mercadería"
         title="Registrar recepción"
-        desc="Completa los pasos y confirma el ingreso a bodega."
+        desc="Recibe una orden de compra completa o uno o varios productos que llegan sin orden."
         actions={
           <Btn icon="arrow" onClick={() => navigate('/recepcion')}>
             Ver recepciones
@@ -273,45 +392,78 @@ export function ReceptionNewPage() {
           <fieldset className="transfer-fields" disabled={saving}>
             <div className="form-section reception-step-panel" key={step}>
               <h3 ref={headingRef} tabIndex={-1}>
-                <Icon name={['box', 'receive', 'pin', 'check'][step]} />
-                {['¿Qué producto llega?', 'Cantidad recibida', 'Elige dónde se guarda', 'Revisa antes de registrar'][step]}
+                <Icon name={['receive', 'box', 'pin', 'check'][step]} />
+                {['¿Cómo llega la mercadería?', 'Productos y cantidades', 'Lote y ubicación', 'Revisa antes de registrar'][step]}
               </h3>
 
               {step === 0 ? (
                 <>
-                  <p className="section-note">Si llega con orden de compra, elígela y se completa el proveedor.</p>
-                  <div className="form-grid">
-                    <div className="field full">
-                      <label htmlFor="rec-product">Producto</label>
-                      <Select
-                        id="rec-product"
-                        value={productId}
-                        onChange={(e) => {
-                          setProductId(e.target.value);
-                          setPackCode('unidad');
-                          setPurchaseId('');
-                        }}
-                      >
-                        {state.products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.id} · {p.name}
+                  <div className="rec-modes" role="radiogroup" aria-label="Tipo de recepción">
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={mode === 'po'}
+                      className={cx('rec-mode', mode === 'po' && 'is-active')}
+                      onClick={() => chooseMode('po')}
+                    >
+                      <Icon name="receive" />
+                      <strong>Con orden de compra</strong>
+                      <span>Recibe todas las líneas de una orden, completa o por partes.</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={mode === 'free'}
+                      disabled={!isAdmin}
+                      className={cx('rec-mode', mode === 'free' && 'is-active')}
+                      onClick={() => chooseMode('free')}
+                    >
+                      <Icon name="box" />
+                      <strong>Sin orden de compra</strong>
+                      <span>
+                        Uno o varios productos que llegan sin orden.{' '}
+                        {isAdmin ? 'Se registra con su motivo.' : 'Requiere administración.'}
+                      </span>
+                    </button>
+                  </div>
+
+                  {mode === 'po' ? (
+                    <div className="form-grid">
+                      <div className="field full">
+                        <label htmlFor="rec-po">Orden de compra</label>
+                        <Select id="rec-po" value={purchaseId} onChange={(e) => choosePurchase(e.target.value)}>
+                          <option value="" disabled>
+                            Selecciona una orden
                           </option>
-                        ))}
-                      </Select>
+                          {openPurchases.map((p) => {
+                            const name = state.suppliers?.find((s) => s.id === p.supplierId)?.name ?? 'Sin proveedor';
+                            const pending = purchaseLines(p).reduce(
+                              (sum, line) => sum + line.qty * (line.unitsPerPack || 1) - (line.receivedUnits ?? 0),
+                              0,
+                            );
+                            return (
+                              <option key={p.id} value={p.id}>
+                                {p.id} · {name} · pendiente {pending} u.
+                              </option>
+                            );
+                          })}
+                        </Select>
+                        {!openPurchases.length ? <small>No hay órdenes de compra abiertas.</small> : null}
+                      </div>
+                      {purchase ? (
+                        <ul className="rec-po-preview full" aria-label="Líneas de la orden">
+                          {rows.map((row) => (
+                            <li key={row.key}>
+                              <span>{nameOf(row.productId)}</span>
+                              <b>pendiente {row.pendingUnits} u.</b>
+                            </li>
+                          ))}
+                          {!rows.length ? <li>La orden no tiene líneas pendientes.</li> : null}
+                        </ul>
+                      ) : null}
                     </div>
-                    <div className="field">
-                      <label htmlFor="rec-po">Orden de compra</label>
-                      <Select id="rec-po" value={purchaseId} onChange={(e) => setPurchaseId(e.target.value)}>
-                        <option value="">Sin orden de compra</option>
-                        {openPurchases.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.id} · pendiente {pendingUnits(p, productId)} u.
-                          </option>
-                        ))}
-                      </Select>
-                      {!openPurchases.length ? <small>No hay órdenes abiertas para este producto.</small> : null}
-                    </div>
-                    {!purchaseId ? (
+                  ) : (
+                    <div className="form-grid">
                       <div className="field">
                         <label htmlFor="rec-reason">Motivo del ingreso sin orden</label>
                         <Select id="rec-reason" value={reason} disabled={!isAdmin} onChange={(e) => setReason(e.target.value)}>
@@ -322,109 +474,128 @@ export function ReceptionNewPage() {
                             </option>
                           ))}
                         </Select>
-                        <small>
-                          {isAdmin
-                            ? 'Todo ingreso sin orden de compra queda registrado con su motivo.'
-                            : 'Elige la orden de compra. Ingresar sin orden requiere administración.'}
-                        </small>
+                        <small>Todo ingreso sin orden de compra queda registrado con su motivo.</small>
                       </div>
-                    ) : null}
-                    <div className="field">
-                      <label htmlFor="rec-supplier">Proveedor</label>
-                      <input
-                        id="rec-supplier"
-                        value={supplier}
-                        onChange={(e) => setSupplier(e.target.value)}
-                        required
-                      />
+                      <div className="field">
+                        <label htmlFor="rec-supplier">Proveedor</label>
+                        <input id="rec-supplier" value={supplier} onChange={(e) => setSupplier(e.target.value)} required />
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </>
               ) : null}
 
               {step === 1 ? (
                 <>
-                  <p className="section-note">Cuenta los empaques físicos. Las unidades de stock se calculan solas.</p>
-                  <div className="form-grid">
-                    <div className="field">
-                      <label htmlFor="rec-pack">Empaque recibido</label>
-                      <Select
-                        id="rec-pack"
-                        value={pack?.code ?? 'unidad'}
-                        onChange={(e) => setPackCode(e.target.value)}
-                      >
-                        {packs.map((item) => (
-                          <option key={item.code} value={item.code}>
-                            {item.label} · {item.units} {item.units === 1 ? 'unidad' : 'unidades'}
-                          </option>
-                        ))}
-                      </Select>
-                    </div>
-                    <div className="field">
-                      <label htmlFor="rec-qty">Cantidad de empaques</label>
-                      <input
-                        id="rec-qty"
-                        type="number"
-                        min={1}
-                        inputMode="numeric"
-                        value={qty}
-                        onChange={(e) => setQty(Number(e.target.value))}
-                        required
-                      />
-                    </div>
-                    <div className={cx('reception-calc', !validQty && 'is-error')}>
-                      {validQty ? (
-                        <>
-                          <span>
-                            {qty} × {(pack?.label ?? 'unidad').toLowerCase()} de {pack?.units ?? 1}
-                          </span>
-                          <span>
-                            = <strong>{stockQty} unidades</strong> de stock
-                          </span>
-                          <span>
-                            Stock después: <strong>{stock(state, productId) + stockQty} u.</strong>
-                          </span>
-                        </>
-                      ) : stockQty > capacity ? (
-                        <span>
-                          {stockQty} u. supera la capacidad de una casilla ({capacity} u.). Registra la recepción en
-                          partes.
-                        </span>
-                      ) : (
-                        <span>Ingresa una cantidad entera mayor a cero.</span>
-                      )}
-                    </div>
-                    <div className="field">
-                      <label htmlFor="rec-batch">Lote</label>
-                      <input
-                        id="rec-batch"
-                        value={batch}
-                        onChange={(e) => setBatch(e.target.value)}
-                        placeholder="Ej. LT-261027"
-                        required
-                      />
-                      <small>Tal como aparece en la etiqueta del proveedor.</small>
-                    </div>
-                    <div className="field">
-                      <label htmlFor="rec-expiry">{expires ? 'Vencimiento' : 'Vencimiento (no caduca)'}</label>
-                      <input
-                        id="rec-expiry"
-                        type="date"
-                        value={expiry}
-                        onChange={(e) => setExpiry(e.target.value)}
-                        min={todayIso}
-                        required={expires}
-                      />
-                      <small>{expires ? 'Se despacha primero lo que vence antes.' : 'Este producto no caduca. La fecha queda vacía.'}</small>
-                    </div>
-                    <div className="field">
-                      <label htmlFor="rec-inspect" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <input id="rec-inspect" type="checkbox" checked={inspect} onChange={(e) => setInspect(e.target.checked)} />
-                        Recibir a inspección de calidad
-                      </label>
-                      <small>El lote queda retenido y no se vende hasta que administración lo libere.</small>
-                    </div>
+                  <p className="section-note">
+                    {mode === 'po'
+                      ? `Cuenta los empaques que llegaron de ${purchaseId}. Desmarca lo que no llegó: queda pendiente en la orden.`
+                      : 'Agrega cada producto que llega. Puedes repetir un producto si trae lotes distintos.'}
+                  </p>
+                  <div className="rec-cols" aria-hidden="true">
+                    <span>Producto</span>
+                    <span>Empaque</span>
+                    <span>Cantidad</span>
+                    <span className="end">Unidades</span>
+                    <span />
                   </div>
+                  {rows.map((row, index) => {
+                    const c = calc(row);
+                    return (
+                      <div className={cx('rec-row', !row.include && 'is-off')} key={row.key}>
+                        <div className="rec-prod">
+                          {mode === 'po' ? (
+                            <label className="rec-check">
+                              <input
+                                type="checkbox"
+                                checked={row.include}
+                                onChange={(e) => patch(row.key, { include: e.target.checked })}
+                              />
+                              <span>
+                                <strong>{nameOf(row.productId)}</strong>
+                                <small>Pendiente {row.pendingUnits} u.</small>
+                              </span>
+                            </label>
+                          ) : (
+                            <div className={row.productId ? 'field' : 'field has-error'}>
+                              <Select
+                                aria-label={`Producto ${index + 1}`}
+                                value={row.productId}
+                                onChange={(e) => changeProduct(row, e.target.value)}
+                              >
+                                <option value="" disabled>
+                                  Selecciona un producto
+                                </option>
+                                {state.products.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.id} · {p.name}
+                                  </option>
+                                ))}
+                              </Select>
+                            </div>
+                          )}
+                        </div>
+                        <div className="field">
+                          <Select
+                            aria-label={`Empaque ${index + 1}`}
+                            value={c.pack?.code ?? 'unidad'}
+                            disabled={!row.include || !row.productId}
+                            onChange={(e) => patch(row.key, { packCode: e.target.value })}
+                          >
+                            {c.packs.map((item) => (
+                              <option key={item.code} value={item.code}>
+                                {item.label} · {item.units} {item.units === 1 ? 'unidad' : 'unidades'}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div className="field">
+                          <input
+                            aria-label={`Cantidad de empaques ${index + 1}`}
+                            type="number"
+                            min={1}
+                            inputMode="numeric"
+                            value={row.qty}
+                            disabled={!row.include}
+                            onChange={(e) => patch(row.key, { qty: Number(e.target.value) })}
+                          />
+                        </div>
+                        <output className={cx('rec-units', row.include && row.productId && !c.valid && 'is-error')}>
+                          {row.include && row.productId ? `${c.stockQty} u.` : '—'}
+                        </output>
+                        {mode === 'free' ? (
+                          <button
+                            type="button"
+                            className="icon-btn rec-remove"
+                            aria-label={`Quitar producto ${index + 1}`}
+                            disabled={rows.length === 1}
+                            onClick={() => setRows((current) => current.filter((r) => r.key !== row.key))}
+                          >
+                            <Icon name="trash" />
+                          </button>
+                        ) : (
+                          <span />
+                        )}
+                        {row.include && row.productId && c.stockQty > capacity ? (
+                          <p className="rec-row-note">
+                            {c.stockQty} u. supera la capacidad de una casilla ({capacity} u.). Divide la recepción en
+                            partes.
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                  {mode === 'free' ? (
+                    <div>
+                      <Btn
+                        icon="plus"
+                        disabled={rows.some((row) => !row.productId)}
+                        onClick={() => setRows((current) => [...current, makeRow(state)])}
+                      >
+                        Añadir producto
+                      </Btn>
+                    </div>
+                  ) : null}
                 </>
               ) : null}
 
@@ -433,100 +604,159 @@ export function ReceptionNewPage() {
                   <p className="section-note">
                     {loading
                       ? 'Buscando casillas compatibles…'
-                      : ready
-                        ? `${suggestions.length} ubicaciones con espacio para ${stockQty} u. La primera es la sugerida.`
-                        : 'Vuelve al paso anterior e indica una cantidad válida.'}
+                      : 'Indica el lote y el vencimiento de cada línea. La ubicación sugerida se puede cambiar.'}
                   </p>
-
-                  {ready && prefillLoc && !suggestions.some((item) => item.id === prefillLoc) ? (
-                    <p className="wh-notice" role="status">
-                      La ubicación {prefillLoc} no admite este producto o cantidad. Elige otra opción.
-                    </p>
-                  ) : null}
                   {lookupError ? (
                     <div className="wh-error" role="alert">
                       {lookupError} <Btn onClick={() => setAttempt((value) => value + 1)}>Reintentar</Btn>
                     </div>
                   ) : null}
-                  {ready && !suggestions.length && !lookupError ? (
-                    <p className="positioning-empty" role="status">
-                      No hay ubicaciones compatibles. Reduce la cantidad o libera espacio.
-                    </p>
-                  ) : null}
-
-                  {ready && visibleSuggestions.length ? (
-                    <div className="reception-loc-list" role="radiogroup" aria-label="Ubicaciones compatibles">
-                      {visibleSuggestions.map((l, index) => {
-                        const used = qtyAt(state, l.id);
-                        const free = l.capacity - used;
-                        const active = l.id === selectedLoc;
-                        return (
-                          <button
-                            key={l.id}
-                            type="button"
-                            role="radio"
-                            aria-checked={active}
-                            className={`reception-loc-row${active ? ' is-active' : ''}`}
-                            onClick={() => setSelectedLoc(l.id)}
-                          >
-                            <div className="loc-main">
-                              <div className="loc-id">
-                                {l.id}
-                                {index === 0 ? <span className="loc-tag">Sugerida</span> : null}
-                              </div>
-                              <div className="loc-detail">
-                                Rack {l.rack} · Nivel {l.level} · Posición {l.pos}
-                                {l.face ? ` · ${faceLabel(l.face)}` : ''}
-                              </div>
+                  {active.map((row, index) => {
+                    const c = calc(row);
+                    const expires = c.item?.perishable !== false;
+                    const ready = row.optKey === optKeyOf(row);
+                    const free = freeFor(row);
+                    const noSpace = ready && !!row.loc && free < c.stockQty;
+                    return (
+                      <article className="rec-card" key={row.key}>
+                        <header>
+                          <div>
+                            <strong>{nameOf(row.productId)}</strong>
+                            <small>
+                              {row.qty} × {(c.pack?.label ?? 'unidad').toLowerCase()} = {c.stockQty} u.
+                            </small>
+                          </div>
+                          <span className="rec-card-n">Línea {index + 1}</span>
+                        </header>
+                        <div className="form-grid">
+                          <div className="field">
+                            <label htmlFor={`rec-batch-${index}`}>Lote</label>
+                            <input
+                              id={`rec-batch-${index}`}
+                              value={row.batch}
+                              onChange={(e) => patch(row.key, { batch: e.target.value })}
+                              placeholder="Ej. LT-261027"
+                            />
+                          </div>
+                          <div className="field">
+                            <label htmlFor={`rec-expiry-${index}`}>{expires ? 'Vencimiento' : 'Vencimiento (no caduca)'}</label>
+                            <input
+                              id={`rec-expiry-${index}`}
+                              type="date"
+                              value={row.expiry}
+                              min={todayIso}
+                              onChange={(e) => patch(row.key, { expiry: e.target.value })}
+                            />
+                          </div>
+                          <div className={cx('field', noSpace && 'has-error')}>
+                            <label htmlFor={`rec-loc-${index}`}>Ubicación</label>
+                            <div className="rec-loc">
+                              <Select
+                                id={`rec-loc-${index}`}
+                                value={row.loc}
+                                disabled={!ready}
+                                onChange={(e) => patch(row.key, { loc: e.target.value })}
+                              >
+                                {!row.options.length ? (
+                                  <option value="" disabled>
+                                    Sin ubicaciones compatibles
+                                  </option>
+                                ) : null}
+                                {row.options.map((o, i) => (
+                                  <option key={o.id} value={o.id}>
+                                    {o.id}
+                                    {i === 0 ? ' · sugerida' : ''} · {o.capacity - qtyAt(state, o.id)} libres
+                                  </option>
+                                ))}
+                              </Select>
+                              <Btn
+                                icon="warehouse"
+                                aria-label={`Elegir en el mapa la línea ${index + 1}`}
+                                disabled={!row.loc}
+                                onClick={() => {
+                                  setMapPick(row.loc);
+                                  setMapKey(row.key);
+                                }}
+                              >
+                                Mapa
+                              </Btn>
                             </div>
-                            <div className="loc-free">
-                              {free} libres
-                              <small>de {l.capacity} u.</small>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-
-                  <div className="reception-loc-tools">
-                    {hiddenCount ? (
-                      <Btn variant="ghost" onClick={() => setShowAllLocs((v) => !v)}>
-                        {showAllLocs ? 'Ver menos' : `Ver ${hiddenCount} ubicaciones más`}
-                      </Btn>
-                    ) : null}
-                    {selected ? (
-                      <Btn
-                        variant="ghost"
-                        icon="warehouse"
-                        onClick={() => {
-                          setMapPick(selected.id);
-                          setMapOpen(true);
-                        }}
-                      >
-                        Elegir en el mapa
-                      </Btn>
-                    ) : null}
-                  </div>
+                            {noSpace ? <small className="field-error">No hay espacio suficiente en esta casilla.</small> : null}
+                          </div>
+                          <div className="field">
+                            <label htmlFor={`rec-inspect-${index}`} className="rec-inspect">
+                              <input
+                                id={`rec-inspect-${index}`}
+                                type="checkbox"
+                                checked={row.inspect}
+                                onChange={(e) => patch(row.key, { inspect: e.target.checked })}
+                              />
+                              Recibir a inspección de calidad
+                            </label>
+                            <small>Queda retenido hasta que administración lo libere.</small>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </>
               ) : null}
 
               {step === 3 ? (
                 <>
-                  <p className="section-note">Al confirmar se suma al inventario y queda la trazabilidad del lote.</p>
+                  <p className="section-note">Al confirmar se suma al inventario y queda la trazabilidad de cada lote.</p>
                   <dl className="reception-review">
-                    {review.map((row) => (
-                      <div key={row.k}>
-                        <dt>{row.k}</dt>
+                    <div>
+                      <dt>Origen</dt>
+                      <dd>
+                        <span>{mode === 'po' ? `Orden ${purchaseId} · ${purchaseSupplier}` : `Sin orden de compra · ${reason}`}</span>
+                        <button type="button" className="reception-edit" onClick={() => setStep(0)}>
+                          Editar
+                        </button>
+                      </dd>
+                    </div>
+                    {mode === 'free' ? (
+                      <div>
+                        <dt>Proveedor</dt>
                         <dd>
-                          <span>{row.v}</span>
-                          <button type="button" className="reception-edit" onClick={() => setStep(row.step)}>
+                          <span>{supplier}</span>
+                          <button type="button" className="reception-edit" onClick={() => setStep(0)}>
                             Editar
                           </button>
                         </dd>
                       </div>
-                    ))}
+                    ) : null}
                   </dl>
+                  <div className="rec-review-lines">
+                    {active.map((row) => {
+                      const c = calc(row);
+                      const loc = locOf(row);
+                      return (
+                        <div className="rec-review-line" key={row.key}>
+                          <div>
+                            <strong>{nameOf(row.productId)}</strong>
+                            <small>
+                              {row.qty} × {(c.pack?.label ?? 'unidad').toLowerCase()} = {c.stockQty} u. · Lote {row.batch.trim()} ·{' '}
+                              {expiryLabel(row.expiry)}
+                              {row.inspect ? ' · a inspección' : ''}
+                            </small>
+                          </div>
+                          <span className="rec-review-loc">
+                            {row.loc}
+                            {loc ? (
+                              <small>
+                                Rack {loc.rack} · Nivel {loc.level} · Pos {loc.pos}
+                                {loc.face ? ` · ${faceLabel(loc.face)}` : ''}
+                              </small>
+                            ) : null}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button type="button" className="reception-edit" onClick={() => setStep(1)}>
+                    Editar productos
+                  </button>
                 </>
               ) : null}
 
@@ -565,10 +795,9 @@ export function ReceptionNewPage() {
           <section className="panel reception-confirm">
             <div className="reception-confirm-head">
               <div className="eyebrow">Resumen</div>
-              <h2>{selectedProduct?.name ?? 'Selecciona un producto'}</h2>
+              <h2>{mode === 'po' ? (purchaseId ? `Orden ${purchaseId}` : 'Orden de compra') : 'Sin orden de compra'}</h2>
               <p>
-                {selectedProduct?.id}
-                {selectedProduct?.category ? ` · ${selectedProduct.category}` : ''}
+                {mode === 'po' ? purchaseSupplier || 'Elige una orden' : reason || 'Falta el motivo'}
                 {warehouse ? ` · ${warehouse.name}` : ''}
               </p>
             </div>
@@ -576,58 +805,34 @@ export function ReceptionNewPage() {
             <div className="reception-confirm-body">
               <div className="reception-metric-row">
                 <div className="reception-metric">
-                  <span>Ingresa</span>
-                  <strong>
-                    {validQty ? stockQty : 0}
-                    <small>u.</small>
-                  </strong>
+                  <span>Líneas</span>
+                  <strong>{active.length}</strong>
                 </div>
                 <div className="reception-metric">
-                  <span>Stock</span>
+                  <span>Ingresan</span>
                   <strong>
-                    {stock(state, productId)}
-                    <small>u.</small>
-                  </strong>
-                </div>
-                <div className="reception-metric">
-                  <span>Disponible</span>
-                  <strong>
-                    {available(state, productId)}
+                    {totalUnits}
                     <small>u.</small>
                   </strong>
                 </div>
               </div>
 
-              {step >= 2 && ready && selected ? (
-                <div className="reception-dest">
-                  <div className="dest-label">Ubicación seleccionada</div>
-                  <div className="dest-code">{selected.id}</div>
-                  <div className="dest-path">
-                    <span>Rack {selected.rack}</span>
-                    <span>Nivel {selected.level}</span>
-                    <span>Pos {selected.pos}</span>
-                    {selected.face ? <span className="face">{faceLabel(selected.face)}</span> : null}
-                  </div>
-                  <div className="reception-fill">
-                    <div className="reception-fill-head">
-                      <span>
-                        {occupiedNow} → {occupiedAfter} / {selected.capacity} u.
-                      </span>
-                      <span>{fillAfter}%</span>
-                    </div>
-                    <div className="reception-fill-track" aria-hidden>
-                      <i className="next" style={{ width: `${fillAfter}%` }} />
-                      <i className="now" style={{ width: `${fillNow}%` }} />
-                    </div>
-                    <p>
-                      {freeNow >= stockQty
-                        ? `Quedarán ${freeNow - stockQty} libres después de recibir ${stockQty} u.`
-                        : 'Esta casilla no tiene espacio suficiente.'}
-                    </p>
-                  </div>
-                </div>
+              {active.some((row) => row.productId) ? (
+                <ul className="rec-side-lines" aria-label="Líneas de la recepción">
+                  {active
+                    .filter((row) => row.productId)
+                    .map((row) => (
+                      <li key={row.key}>
+                        <span>{nameOf(row.productId)}</span>
+                        <b>
+                          {calc(row).valid ? calc(row).stockQty : 0} u.
+                          {step >= 2 && row.loc ? <small> · {row.loc}</small> : null}
+                        </b>
+                      </li>
+                    ))}
+                </ul>
               ) : (
-                <div className="reception-dest empty">La ubicación se elige en el paso 3.</div>
+                <div className="reception-dest empty">Aún no hay productos en la recepción.</div>
               )}
 
               <ul className="reception-checks">
@@ -647,21 +852,21 @@ export function ReceptionNewPage() {
         </aside>
       </form>
 
-      {mapOpen ? (
+      {mapRow ? (
         <Modal
           wide
           title="Ubicación en bodega"
           subtitle={`${mapFocus} · ${warehouse?.name ?? 'Bodega activa'}`}
-          onClose={() => setMapOpen(false)}
+          onClose={() => setMapKey('')}
           footer={
             <>
-              <Btn onClick={() => setMapOpen(false)}>Cerrar</Btn>
+              <Btn onClick={() => setMapKey('')}>Cerrar</Btn>
               <Btn
                 variant="primary"
                 icon="check"
                 onClick={() => {
-                  if (mapFocus) setSelectedLoc(mapFocus);
-                  setMapOpen(false);
+                  if (mapFocus) patch(mapRow.key, { loc: mapFocus });
+                  setMapKey('');
                 }}
               >
                 Usar esta ubicación
@@ -682,7 +887,7 @@ export function ReceptionNewPage() {
             />
             <p className="reception-map-selected">
               Seleccionada: <strong>{mapFocus}</strong>
-              {suggestions.some((s) => s.id === mapFocus) ? <em> · sugerida para este ingreso</em> : null}
+              {mapRow.options.some((s) => s.id === mapFocus) ? <em> · sugerida para este ingreso</em> : null}
             </p>
           </div>
         </Modal>

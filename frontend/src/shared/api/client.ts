@@ -84,6 +84,20 @@ export const api = {
     ),
   receive: (body: Record<string, unknown>) =>
     request<StateResponse>('/api/receptions', { method: 'POST', body: JSON.stringify(body) }),
+  receiveBatch: (body: {
+    supplier: string;
+    reason: string;
+    lines: Array<{
+      productId: string;
+      qty: number;
+      packCode?: string;
+      packQty?: number;
+      loc: string;
+      batch: string;
+      expiry: string;
+      inspect?: boolean;
+    }>;
+  }) => request<StateResponse>('/api/receptions/batch', { method: 'POST', body: JSON.stringify(body) }),
   move: (body: Record<string, unknown>) =>
     request<StateResponse>('/api/moves', { method: 'POST', body: JSON.stringify(body) }),
   saveProduct: (body: Record<string, unknown>) =>

@@ -182,7 +182,10 @@ function roleDenied(req: express.Request) {
   ) {
     return allow([]);
   }
-  if (path === '/api/receptions' && req.method === 'POST' && !req.body?.purchaseId) {
+  if (
+    req.method === 'POST' &&
+    ((path === '/api/receptions' && !req.body?.purchaseId) || path === '/api/receptions/batch')
+  ) {
     return 'Recibir sin orden de compra requiere aprobación de administración.';
   }
   if (req.method === 'PATCH' && /^\/api\/clients\/[^/]+$/.test(path)) {
@@ -409,6 +412,15 @@ app.get('/api/orders/:id/pick-plan', async (req, res, next) => {
 app.post('/api/receptions', async (req, res, next) => {
   try {
     const state = await ops.receiveGoods(req.body);
+    res.json({ state, metrics: ops.metricsSnapshot(state) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.post('/api/receptions/batch', async (req, res, next) => {
+  try {
+    const state = await ops.receiveGoodsBatch(req.body);
     res.json({ state, metrics: ops.metricsSnapshot(state) });
   } catch (e) {
     next(e);

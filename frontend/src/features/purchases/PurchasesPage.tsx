@@ -12,7 +12,7 @@ import { ImportDialog } from '../imports/ImportDialog';
 import { buildForecast, suggestedPurchaseQty, type ConfidenceLevel } from '../../shared/lib/forecast';
 import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead, ProductCell } from '../../shared/components/ui';
 import { Modal, ModalActions } from '../../shared/components/Modal';
-import { dateShort, num } from '../../shared/lib/inventory';
+import { dateShort, money, num } from '../../shared/lib/inventory';
 import { Icon } from '../../shared/components/Icon';
 import { ReceivePurchaseDialog } from './ReceivePurchaseDialog';
 import '../../styles/forecast.css';
@@ -36,9 +36,13 @@ export function PurchasesPage() {
   const [supplierId, setSupplierId] = useState('');
   const [lines, setLines] = useState<Array<{ productId: string; qty: number; packCode: string; unitPrice: number }>>([]);
   const [error, setError] = useState('');
+  const [showInvalid, setShowInvalid] = useState(false);
   const [receivingId, setReceivingId] = useState('');
   const [closing, setClosing] = useState<{ id: string; reason: string } | null>(null);
   const [focusId, setFocusId] = useState('');
+  const [detailId, setDetailId] = useState('');
+  const [tab, setTab] = useState<'rec' | 'ord'>('rec');
+  const [filter, setFilter] = useState<'all' | 'open' | 'partial' | 'done'>('all');
 
   const forecast = useMemo(() => (state ? buildForecast(state) : null), [state]);
 
@@ -46,6 +50,8 @@ export function PurchasesPage() {
     const focus = (location.state as { focus?: string } | null)?.focus;
     if (!focus) return;
     setFocusId(focus);
+    setTab('ord');
+    setFilter('all');
     window.setTimeout(() => document.getElementById(`po-${focus}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50);
   }, [location.state]);
 
@@ -53,7 +59,11 @@ export function PurchasesPage() {
     const navState = location.state as { productId?: string; qty?: number } | null;
     if (!navState?.productId || !state) return;
     setPrefillProduct(navState.productId);
-    setPrefillQty(navState.qty ?? suggestedPurchaseQty(state, navState.productId));
+    const amount = navState.qty ?? suggestedPurchaseQty(state, navState.productId);
+    const item = state.products.find((p) => p.id === navState.productId);
+    setPrefillQty(amount);
+    setSupplierId(item?.supplierId ?? state.suppliers?.[0]?.id ?? '');
+    setLines([{ productId: navState.productId, qty: Math.max(1, Math.round(amount)), packCode: 'unidad', unitPrice: item?.price ?? 0 }]);
     setModalOpen(true);
     setError('');
     navigate(location.pathname, { replace: true, state: null });
@@ -62,6 +72,12 @@ export function PurchasesPage() {
   if (!state || !forecast) return null;
 
   const canManage = can(user, 'warehouse');
+  const groupOf = (status?: string) =>
+    (status ?? 'Abierta') === 'Abierta' ? 'open' : status === 'Parcial' ? 'partial' : 'done';
+  const shownOrders = state.purchases.filter((o) => filter === 'all' || groupOf(o.status) === filter);
+  const usedIds = new Set(lines.map((l) => l.productId).filter(Boolean));
+  const hasBlank = lines.some((l) => !l.productId);
+  const canAdd = !hasBlank && state.products.some((p) => !usedIds.has(p.id));
   const urgent = forecast.recommendations.filter((r) => r.urgency === 'now' || r.productionRisk);
   const soon = forecast.recommendations.filter((r) => r.urgency === 'soon' && !r.productionRisk);
 
@@ -69,6 +85,14 @@ export function PurchasesPage() {
     e.preventDefault();
     setError('');
     const data = Object.fromEntries(new FormData(e.currentTarget));
+    if (lines.some((l) => !l.productId)) {
+      setShowInvalid(true);
+      return;
+    }
+    if (new Set(lines.map((l) => l.productId)).size !== lines.length) {
+      setError('Hay productos repetidos. Une las cantidades en una sola línea.');
+      return;
+    }
     try {
       applyResponse(
         await api.addPurchase({
@@ -130,13 +154,14 @@ export function PurchasesPage() {
   };
 
   const openNew = (productId?: string, qty?: number) => {
-    const id = productId ?? state.products[0]?.id ?? '';
-    const amount = qty ?? (id ? suggestedPurchaseQty(state, id) : 12);
+    const id = productId ?? '';
+    const amount = qty ?? (id ? suggestedPurchaseQty(state, id) : 1);
     const item = state.products.find((p) => p.id === id);
     setPrefillProduct(id);
     setPrefillQty(amount);
     setSupplierId(item?.supplierId ?? state.suppliers?.[0]?.id ?? '');
     setLines([{ productId: id, qty: Math.max(1, Math.round(amount)), packCode: 'unidad', unitPrice: item?.price ?? 0 }]);
+    setShowInvalid(false);
     setModalOpen(true);
     setError('');
   };
@@ -177,43 +202,47 @@ export function PurchasesPage() {
         />
       </KpiGrid>
 
-      <section className="fc-banner" aria-label="Insight de previsión">
-        <Icon name="spark" />
-        <div>
-          <strong>Previsión adaptativa</strong>
-          <p>{forecast.insight}</p>
-        </div>
-        <Btn icon="chart" onClick={() => navigate('/reportes')}>Ver reportes</Btn>
-      </section>
+      <div className="po-tabs" role="tablist" aria-label="Vista de compras">
+        <button type="button" role="tab" aria-selected={tab === 'rec'} className="po-tab" onClick={() => setTab('rec')}>
+          Por solicitar
+          {forecast.recommendations.length ? (
+            <span className="po-count alert">{forecast.recommendations.length}</span>
+          ) : null}
+        </button>
+        <button type="button" role="tab" aria-selected={tab === 'ord'} className="po-tab" onClick={() => setTab('ord')}>
+          Órdenes
+          <span className="po-count">{state.purchases.length}</span>
+        </button>
+      </div>
 
-      <section className="panel fc-panel">
-        <div className="panel-head">
-          <span className="panel-title">Recomendaciones de abastecimiento</span>
-          <Badge text={`${forecast.recommendations.length} activas`} color="blue" />
-        </div>
-        {forecast.recommendations.length ? (
-          <div className="table-scroll">
-            <table className="fc-table">
-              <thead>
-                <tr>
-                  <th>Prioridad</th>
-                  <th>Ítem</th>
-                  <th>Cobertura</th>
-                  <th>Sugerido</th>
-                  <th>Confianza</th>
-                  <th>Motivo</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {forecast.recommendations.slice(0, 16).map((row) => (
-                  <tr key={row.productId} className={row.productionRisk ? 'fc-row-risk' : row.urgency === 'now' ? 'fc-row-now' : ''}>
-                    <td>
-                      <span className={`fc-urgency fc-urgency-${row.productionRisk ? 'risk' : row.urgency}`}>
+      {tab === 'rec' ? (
+        <section aria-label="Por solicitar" className="po-rec">
+          <div className="fc-banner">
+            <Icon name="spark" />
+            <div>
+              <strong>Previsión adaptativa</strong>
+              <p>{forecast.insight}</p>
+            </div>
+            <Btn icon="chart" onClick={() => navigate('/reportes')}>Ver reportes</Btn>
+          </div>
+          {forecast.recommendations.length ? (
+            <div className="po-cards">
+              {forecast.recommendations.slice(0, 18).map((row) => {
+                const tone = row.productionRisk ? 'risk' : row.urgency;
+                const pct =
+                  row.daysCover === null ? 100 : Math.max(6, Math.min(100, (row.daysCover / (forecast.leadDays * 2)) * 100));
+                const bar = tone === 'risk' || tone === 'now' ? 'bad' : tone === 'soon' ? 'warn' : 'ok';
+                return (
+                  <article key={row.productId} className="po-card">
+                    <div className="po-card-top">
+                      <span className={`fc-urgency fc-urgency-${tone}`}>
                         {row.productionRisk ? 'Producción' : row.urgency === 'now' ? 'Ahora' : row.urgency === 'soon' ? 'Pronto' : 'Vigilancia'}
                       </span>
-                    </td>
-                    <td>
+                      <span className={`fc-conf fc-conf-${row.confidence}`}>
+                        {confidenceLabel[row.confidence]} · {row.confidenceScore}%
+                      </span>
+                    </div>
+                    <div>
                       <ProductCell
                         name={row.name}
                         id={row.productId}
@@ -222,133 +251,229 @@ export function PurchasesPage() {
                       {row.blocksParents > 0 && (
                         <small className="fc-parents">Bloquea {row.blocksParents}: {row.parentNames.slice(0, 2).join(', ')}{row.parentNames.length > 2 ? '…' : ''}</small>
                       )}
-                    </td>
-                    <td>
-                      <strong>{row.daysCover === null ? '—' : `${row.daysCover}d`}</strong>
-                      <small className="sub">{num(row.available)} disp. · mín. {num(row.min)}</small>
-                      <div className="fc-learn" title={`Aprendizaje ${(row.learningWeight * 100).toFixed(0)}%`}>
-                        <span style={{ width: `${Math.max(8, row.learningWeight * 100)}%` }} />
+                    </div>
+                    <div className="po-cover">
+                      <div>
+                        <span>Cobertura</span>
+                        <b>{row.daysCover === null ? '—' : `${row.daysCover} d`}</b>
                       </div>
-                    </td>
-                    <td>
-                      <strong>{num(row.suggestedQty)}</strong>
-                      <small className="sub">~{row.dailyDemand.toFixed(1)} uds/día</small>
-                    </td>
-                    <td>
-                      <span className={`fc-conf fc-conf-${row.confidence}`}>
-                        {confidenceLabel[row.confidence]} · {row.confidenceScore}%
-                      </span>
-                    </td>
-                    <td className="fc-reason">{row.reason}</td>
-                    <td>
-                      {canManage ? (
-                        <Btn variant="small" icon="plus" onClick={() => openNew(row.productId, row.suggestedQty || undefined)}>
-                          Solicitar
-                        </Btn>
-                      ) : null}
-                    </td>
+                      <div className={`po-bar ${bar}`} role="img" aria-label={`Cobertura ${row.daysCover ?? 'sin dato'} días`}>
+                        <span style={{ width: `${pct}%` }} />
+                      </div>
+                      <small>
+                        {num(row.available)} disp. · mín. {num(row.min)} · ~{row.dailyDemand.toFixed(1)} uds/día
+                      </small>
+                    </div>
+                    <p className="po-reason">{row.reason}</p>
+                    {canManage ? (
+                      <Btn icon="plus" onClick={() => openNew(row.productId, row.suggestedQty || undefined)}>
+                        Solicitar {row.suggestedQty ? `${num(row.suggestedQty)} u.` : ''}
+                      </Btn>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <Empty title="Sin recomendaciones" desc="El inventario cubre el horizonte. El modelo sigue aprendiendo en segundo plano." />
+          )}
+        </section>
+      ) : (
+        <section className="panel" aria-label="Órdenes">
+          <div className="po-filters">
+            {(
+              [
+                ['all', 'Todas'],
+                ['open', 'Abiertas'],
+                ['partial', 'Parciales'],
+                ['done', 'Cerradas'],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className="po-filter"
+                aria-pressed={filter === key}
+                onClick={() => setFilter(key)}
+              >
+                {label} · {state.purchases.filter((o) => groupOf(o.status) === key || key === 'all').length}
+              </button>
+            ))}
+          </div>
+          {shownOrders.length ? (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Orden</th>
+                    <th>Proveedor</th>
+                    <th>Líneas</th>
+                    <th>Recibido</th>
+                    <th>Estado</th>
+                    <th />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <Empty title="Sin recomendaciones" desc="El inventario cubre el horizonte. El modelo sigue aprendiendo en segundo plano." />
-        )}
-      </section>
-
-      <section className="panel" style={{ marginTop: 18 }}>
-        <div className="panel-head">
-          <span className="panel-title">Solicitudes de compra</span>
-        </div>
-        {state.purchases.length ? (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Orden</th>
-                  <th>Proveedor</th>
-                  <th>Líneas</th>
-                  <th>Recibido</th>
-                  <th>Estado</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {state.purchases.map((o) => {
-                  const status = o.status ?? 'Abierta';
-                  const open = status === 'Abierta' || status === 'Parcial';
-                  const linesOf = purchaseLines(o);
-                  const supplier = state.suppliers?.find((item) => item.id === o.supplierId);
-                  const isAdmin = user?.role === 'admin';
-                  return (
-                    <tr key={o.id} id={`po-${o.id}`} className={focusId === o.id ? 'is-new' : undefined}>
-                      <td>
-                        <strong>{o.id}</strong>
-                        <span className="sub">{dateShort(o.date)}</span>
-                        {o.orderIds?.length ? (
-                          <span className="sub">
-                            Para{' '}
-                            {o.orderIds.map((id, i) => (
-                              <span key={id}>
-                                {i ? ', ' : ''}
-                                <button type="button" className="fx-link" onClick={() => navigate('/pedidos', { state: { open: id } })}>
-                                  {id}
-                                </button>
-                              </span>
-                            ))}
-                          </span>
-                        ) : null}
-                        {o.closeReason ? <span className="sub">Cerrada: {o.closeReason}</span> : null}
-                      </td>
-                      <td>{supplier?.name ?? 'Sin proveedor'}</td>
-                      <td>
-                        {linesOf.map((line) => (
-                          <div key={`${o.id}-${line.productId}`}>
-                            {product(state, line.productId)?.name ?? line.productId}
-                            <span className="sub">
-                              {' '}
-                              {line.qty} {line.packCode}
-                            </span>
+                </thead>
+                <tbody>
+                  {shownOrders.map((o) => {
+                    const status = o.status ?? 'Abierta';
+                    const open = status === 'Abierta' || status === 'Parcial';
+                    const linesOf = purchaseLines(o);
+                    const supplier = state.suppliers?.find((item) => item.id === o.supplierId);
+                    const isAdmin = user?.role === 'admin';
+                    const received = o.received ?? 0;
+                    const recvPct = o.qty ? Math.min(100, (received / o.qty) * 100) : 0;
+                    return (
+                      <tr key={o.id} id={`po-${o.id}`} className={focusId === o.id ? 'is-new' : undefined}>
+                        <td>
+                          <strong>{o.id}</strong>
+                          <span className="sub">{dateShort(o.date)}</span>
+                        </td>
+                        <td>{supplier?.name ?? 'Sin proveedor'}</td>
+                        <td>
+                          <strong>
+                            {linesOf.length} {linesOf.length === 1 ? 'producto' : 'productos'}
+                          </strong>
+                          <span className="sub">{o.qty} u. en total</span>
+                        </td>
+                        <td className="po-recv">
+                          <div className={`po-bar ${status === 'Parcial' ? 'warn' : recvPct >= 100 ? 'ok' : ''}`} role="img" aria-label={`Recibido ${received} de ${o.qty}`}>
+                            <span style={{ width: `${recvPct}%` }} />
                           </div>
-                        ))}
-                      </td>
-                      <td>
-                        {o.received ?? 0} / {o.qty} u.
-                      </td>
-                      <td>
-                        <Badge text={status} color={statusColor(status)} />
-                      </td>
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        {open && canManage ? (
-                          <>
-                            <Btn variant="small" icon="receive" onClick={() => setReceivingId(o.id)}>
-                              Recibir
-                            </Btn>{' '}
-                            {status === 'Parcial' ? (
-                              isAdmin ? (
-                                <Btn variant="small" icon="check" onClick={() => setClosing({ id: o.id, reason: '' })}>
-                                  Cerrar con faltante
+                          <small>
+                            {received} / {o.qty} u.
+                          </small>
+                        </td>
+                        <td>
+                          <Badge text={status} color={statusColor(status)} />
+                        </td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <Btn variant="small" icon="eye" onClick={() => setDetailId(o.id)}>
+                            Ver detalles
+                          </Btn>{' '}
+                          {open && canManage ? (
+                            <>
+                              <Btn variant="small" icon="receive" onClick={() => setReceivingId(o.id)}>
+                                Recibir
+                              </Btn>{' '}
+                              {status === 'Parcial' ? (
+                                isAdmin ? (
+                                  <Btn variant="small" icon="check" onClick={() => setClosing({ id: o.id, reason: '' })}>
+                                    Cerrar con faltante
+                                  </Btn>
+                                ) : null
+                              ) : (
+                                <Btn variant="small" icon="close" onClick={() => void cancel(o.id)}>
+                                  Cancelar
                                 </Btn>
-                              ) : null
-                            ) : (
-                              <Btn variant="small" icon="close" onClick={() => void cancel(o.id)}>
-                                Cancelar
-                              </Btn>
-                            )}
-                          </>
-                        ) : null}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <Empty title="Sin solicitudes" desc="Crea la primera desde una recomendación del modelo." />
-        )}
-      </section>
+                              )}
+                            </>
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <Empty
+              title={state.purchases.length ? 'Sin órdenes en este filtro' : 'Sin solicitudes'}
+              desc={state.purchases.length ? 'Prueba con otro estado.' : 'Crea la primera desde una recomendación del modelo.'}
+            />
+          )}
+        </section>
+      )}
+
+      {detailId && state.purchases.some((p) => p.id === detailId)
+        ? (() => {
+            const o = state.purchases.find((p) => p.id === detailId)!;
+            const supplier = state.suppliers?.find((item) => item.id === o.supplierId);
+            const status = o.status ?? 'Abierta';
+            return (
+              <Modal
+                title={`Orden ${o.id}`}
+                subtitle={`${supplier?.name ?? 'Sin proveedor'} · ${dateShort(o.date)}`}
+                onClose={() => setDetailId('')}
+                footer={<Btn onClick={() => setDetailId('')}>Cerrar</Btn>}
+              >
+                <div className="po-detail">
+                  <div className="po-summary">
+                    <div className="po-summary-row">
+                      <Badge text={status} color={statusColor(status)} />
+                      {status === 'Abierta' || status === 'Parcial' ? (
+                        <span className="po-summary-eta">
+                          {o.expectedDate ? `Llegada esperada ${dateShort(o.expectedDate)}` : 'Sin fecha estimada'}
+                        </span>
+                      ) : null}
+                      <span className="po-summary-total">
+                        <b>{num(o.received ?? 0)}</b> / {num(o.qty)} u. recibidas
+                      </span>
+                    </div>
+                    <div className={`po-bar ${status === 'Parcial' ? 'warn' : (o.received ?? 0) >= o.qty ? 'ok' : ''}`}>
+                      <span style={{ width: `${o.qty ? Math.min(100, ((o.received ?? 0) / o.qty) * 100) : 0}%` }} />
+                    </div>
+                  </div>
+
+                  <section>
+                    <h3 className="po-detail-title">
+                      Productos <span>· {purchaseLines(o).length}</span>
+                    </h3>
+                    <ul className="po-detail-lines">
+                      {purchaseLines(o).map((line) => {
+                        const units = line.qty * (line.unitsPerPack || 1);
+                        return (
+                          <li key={`${o.id}-${line.productId}`}>
+                            <div>
+                              <strong>{product(state, line.productId)?.name ?? line.productId}</strong>
+                              <small>
+                                {line.packCode}
+                                {line.unitsPerPack > 1 ? ` × ${line.unitsPerPack}` : ''}
+                              </small>
+                            </div>
+                            <div className="po-detail-qty">
+                              <b>{num(units)} u.</b>
+                              <small>Recibido {num(line.receivedUnits ?? 0)}</small>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+
+                  {o.orderIds?.length ? (
+                    <section>
+                      <h3 className="po-detail-title">Pedidos relacionados</h3>
+                      <div className="po-detail-links">
+                        {o.orderIds.map((id) => (
+                          <button
+                            key={id}
+                            type="button"
+                            className="po-filter"
+                            onClick={() => navigate('/pedidos', { state: { open: id } })}
+                          >
+                            {id}
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
+                  {o.closeReason ? (
+                    <section>
+                      <h3 className="po-detail-title">Cerrada con faltante</h3>
+                      <p className="po-detail-text">{o.closeReason}</p>
+                    </section>
+                  ) : null}
+                  {o.notes ? (
+                    <section>
+                      <h3 className="po-detail-title">Observaciones</h3>
+                      <p className="po-detail-text">{o.notes}</p>
+                    </section>
+                  ) : null}
+                </div>
+              </Modal>
+            );
+          })()
+        : null}
 
       {receivingId && state.purchases.some((p) => p.id === receivingId) ? (
         <ReceivePurchaseDialog
@@ -387,73 +512,101 @@ export function PurchasesPage() {
       {modalOpen ? (
         <Modal
           title="Nueva solicitud de compra"
-          subtitle="Cantidad prellenada por la previsión adaptativa (puedes ajustarla)."
+          subtitle="Cantidades prellenadas por la previsión adaptativa. Puedes ajustarlas antes de registrar."
+          className="po-modal"
           onClose={() => setModalOpen(false)}
           footer={
-            <ModalActions onCancel={() => setModalOpen(false)} submitLabel="Registrar" formId="purchase-form" icon="save" />
+            <>
+              <div className="po-totals" aria-live="polite">
+                <div>
+                  <span>Unidades</span>
+                  <b>{num(lines.reduce((sum, l) => sum + (l.qty || 0), 0))}</b>
+                </div>
+                <div>
+                  <span>Total estimado</span>
+                  <b>{money(lines.reduce((sum, l) => sum + (l.qty || 0) * (l.unitPrice || 0), 0))}</b>
+                </div>
+              </div>
+              <ModalActions onCancel={() => setModalOpen(false)} submitLabel="Registrar solicitud" formId="purchase-form" icon="save" />
+            </>
           }
         >
-          <form id="purchase-form" onSubmit={submit} key={`${prefillProduct}-${prefillQty}`}>
-            <div className="form-grid">
-              <div className="field full">
-                <label htmlFor="pur-supplier">Proveedor</label>
-                <Select id="pur-supplier" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-                  <option value="">Sin proveedor</option>
-                  {(state.suppliers ?? []).map((supplier) => (
-                    <option key={supplier.id} value={supplier.id}>
-                      {supplier.name}
-                      {supplier.taxId ? ` · ${supplier.taxId}` : ''}
-                    </option>
-                  ))}
-                </Select>
+          <form id="purchase-form" className="po-form" onSubmit={submit} key={`${prefillProduct}-${prefillQty}`}>
+            <div className="field">
+              <label htmlFor="pur-supplier">Proveedor</label>
+              <Select id="pur-supplier" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+                <option value="">Sin proveedor</option>
+                {(state.suppliers ?? []).map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name}
+                    {supplier.taxId ? ` · ${supplier.taxId}` : ''}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div className="po-section">
+              <div className="po-section-head">
+                <h3>
+                  Productos <span>· {lines.length}</span>
+                </h3>
+                <button
+                  type="button"
+                  className="btn small"
+                  disabled={!canAdd}
+                  title={canAdd ? undefined : hasBlank ? 'Elige primero el producto de la línea vacía' : 'Ya agregaste todos los productos'}
+                  onClick={() =>
+                    setLines((current) => [...current, { productId: '', qty: 1, packCode: 'unidad', unitPrice: 0 }])
+                  }
+                >
+                  <Icon name="plus" />
+                  Añadir línea
+                </button>
+              </div>
+              <div className="po-cols" aria-hidden="true">
+                <span>Producto</span>
+                <span>Presentación</span>
+                <span>Cantidad</span>
+                <span>Costo unit.</span>
+                <span className="end">Subtotal</span>
+                <span />
               </div>
               {lines.map((line, index) => {
                 const item = state.products.find((p) => p.id === line.productId);
                 const packs = packsOf(item);
+                const patch = (change: Partial<typeof line>) =>
+                  setLines((current) => current.map((row, i) => (i === index ? { ...row, ...change } : row)));
                 return (
-                  <div className="field full" key={`${line.productId}-${index}`}>
-                    <label>Línea {index + 1}</label>
-                    <div className="form-grid">
+                  <div className="po-line" key={`${line.productId}-${index}`}>
+                    <div className={showInvalid && !line.productId ? 'field has-error' : 'field'}>
                       <Select
                         aria-label={`Producto ${index + 1}`}
+                        aria-invalid={showInvalid && !line.productId ? true : undefined}
                         value={line.productId}
                         onChange={(e) => {
                           const next = state.products.find((p) => p.id === e.target.value);
-                          setLines((current) =>
-                            current.map((row, i) =>
-                              i === index
-                                ? { ...row, productId: e.target.value, unitPrice: next?.price ?? row.unitPrice }
-                                : row,
-                            ),
-                          );
+                          patch({ productId: e.target.value, packCode: 'unidad', unitPrice: next?.price ?? 0 });
                         }}
                       >
+                        <option value="" disabled>
+                          Selecciona un producto
+                        </option>
                         {state.products.map((p) => (
-                          <option key={p.id} value={p.id}>
+                          <option
+                            key={p.id}
+                            value={p.id}
+                            disabled={p.id !== line.productId && usedIds.has(p.id)}
+                          >
                             {isRaw(p) ? 'MP' : 'PT'} · {p.name}
                           </option>
                         ))}
                       </Select>
-                      <input
-                        aria-label={`Cantidad ${index + 1}`}
-                        type="number"
-                        min={1}
-                        value={line.qty}
-                        onChange={(e) =>
-                          setLines((current) =>
-                            current.map((row, i) => (i === index ? { ...row, qty: Number(e.target.value) } : row)),
-                          )
-                        }
-                        required
-                      />
+                    </div>
+                    <div className="field">
                       <Select
                         aria-label={`Empaque ${index + 1}`}
                         value={line.packCode}
-                        onChange={(e) =>
-                          setLines((current) =>
-                            current.map((row, i) => (i === index ? { ...row, packCode: e.target.value } : row)),
-                          )
-                        }
+                        onChange={(e) => patch({ packCode: e.target.value })}
                       >
                         {packs.map((pack) => (
                           <option key={pack.code} value={pack.code}>
@@ -461,22 +614,57 @@ export function PurchasesPage() {
                           </option>
                         ))}
                       </Select>
+                    </div>
+                    <div className="po-qty">
+                      <button
+                        type="button"
+                        aria-label={`Disminuir cantidad ${index + 1}`}
+                        onClick={() => patch({ qty: Math.max(1, (line.qty || 1) - 1) })}
+                      >
+                        −
+                      </button>
+                      <input
+                        aria-label={`Cantidad ${index + 1}`}
+                        type="number"
+                        min={1}
+                        value={line.qty}
+                        onChange={(e) => patch({ qty: Number(e.target.value) })}
+                        required
+                      />
+                      <button
+                        type="button"
+                        aria-label={`Aumentar cantidad ${index + 1}`}
+                        onClick={() => patch({ qty: (line.qty || 0) + 1 })}
+                      >
+                        +
+                      </button>
+                    </div>
+                    <div className="field">
                       <input
                         aria-label={`Precio ${index + 1}`}
                         type="number"
                         min={0}
                         step="0.01"
                         value={line.unitPrice}
-                        onChange={(e) =>
-                          setLines((current) =>
-                            current.map((row, i) => (i === index ? { ...row, unitPrice: Number(e.target.value) } : row)),
-                          )
-                        }
+                        onChange={(e) => patch({ unitPrice: Number(e.target.value) })}
                       />
                     </div>
+                    <output className="po-sub">{money((line.qty || 0) * (line.unitPrice || 0))}</output>
+                    <button
+                      type="button"
+                      className="icon-btn po-remove"
+                      aria-label={`Quitar línea ${index + 1}`}
+                      disabled={lines.length === 1}
+                      onClick={() => setLines((current) => current.filter((_, i) => i !== index))}
+                    >
+                      <Icon name="trash" />
+                    </button>
                   </div>
                 );
               })}
+            </div>
+
+            <div className="po-dates">
               <div className="field">
                 <label htmlFor="pur-date">Fecha</label>
                 <input id="pur-date" name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
@@ -485,33 +673,17 @@ export function PurchasesPage() {
                 <label htmlFor="pur-expected">Llegada esperada</label>
                 <input id="pur-expected" name="expectedDate" type="date" />
               </div>
-              <div className="field full">
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => {
-                    const item = state.products[0];
-                    if (!item) return;
-                    setLines((current) => [
-                      ...current,
-                      { productId: item.id, qty: 1, packCode: 'unidad', unitPrice: item.price },
-                    ]);
-                  }}
-                >
-                  Añadir línea
-                </button>
-              </div>
-              <div className="field full">
-                <label htmlFor="pur-notes">Observaciones</label>
-                <textarea
-                  id="pur-notes"
-                  name="notes"
-                  maxLength={300}
-                  defaultValue={
-                    forecast.recommendations.find((r) => r.productId === prefillProduct)?.reason?.slice(0, 280) ?? ''
-                  }
-                />
-              </div>
+            </div>
+            <div className="field">
+              <label htmlFor="pur-notes">Observaciones</label>
+              <textarea
+                id="pur-notes"
+                name="notes"
+                maxLength={300}
+                defaultValue={
+                  forecast.recommendations.find((r) => r.productId === prefillProduct)?.reason?.slice(0, 280) ?? ''
+                }
+              />
             </div>
             {error ? <div className="form-error visible">{error}</div> : null}
           </form>

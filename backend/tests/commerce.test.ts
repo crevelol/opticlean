@@ -9,10 +9,12 @@ import {
   createClient,
   createPurchase,
   deleteClient,
+  receiveWithoutPurchase,
   stageOrders,
   unstageOrders,
   updateClient,
 } from '../src/domain/commerce.service.js';
+import { RECEIPT_REASONS } from '../src/domain/types.js';
 import { createSupplier } from '../src/domain/suppliers.service.js';
 import { deleteBundle, saveBundle } from '../src/domain/bundles.service.js';
 import { deleteVehicle, upsertVehicle } from '../src/domain/fleet.service.js';
@@ -163,4 +165,20 @@ test('Bundles can be created and removed', () => {
   deleteBundle(s, created.id);
   assert.equal(s.bundles!.some((b) => b.id === created.id), false);
   assert.throws(() => saveBundle(s, { name: 'Vacío', lines: [] }), /al menos un producto/);
+});
+
+test('Recibir sin orden varios productos registra todos con su motivo o ninguno', () => {
+  const s = seed();
+  const reason = RECEIPT_REASONS[0];
+  const empty = (id: string) => !s.lots.some((lot) => lot.loc === id && lot.qty > 0);
+  const locA = suggest(s, 'P015', 3).find((item) => empty(item.id))!.id;
+  const locB = suggest(s, 'P001', 2).find((item) => empty(item.id) && item.id !== locA)!.id;
+  const line = (productId: string, qty: number, loc: string) => ({ productId, qty, loc, batch: 'SIN-OC', expiry: '2099-01-01' });
+  const before = s.receipts.length;
+  const ids = receiveWithoutPurchase(s, { supplier: 'Q', reason, lines: [line('P015', 3, locA), line('P001', 2, locB)] });
+  assert.equal(ids.length, 2);
+  assert.equal(s.receipts.length, before + 2);
+  assert.ok(s.receipts.slice(0, 2).every((r) => r.reason === reason && !r.purchaseId));
+  assert.throws(() => receiveWithoutPurchase(s, { supplier: 'Q', reason: '', lines: [line('P015', 1, locA)] }), /motivo/i);
+  assert.throws(() => receiveWithoutPurchase(s, { supplier: 'Q', reason, lines: [] }), /al menos un producto/);
 });
