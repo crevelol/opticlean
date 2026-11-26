@@ -185,56 +185,6 @@
 .wh-error .btn {
   margin-top: 10px;
 }
-.wh-steps {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  border: 1px solid var(--slate-250);
-  border-radius: var(--radius-lg);
-  background: white;
-  padding: 8px;
-  gap: 8px;
-  margin: 25px 0;
-}
-.wh-steps button {
-  border: 0;
-  background: transparent;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px;
-  border-radius: var(--radius-sm);
-  color: var(--slate-650);
-  text-align: left;
-}
-.wh-steps button > span {
-  display: grid;
-  place-items: center;
-  width: 29px;
-  height: 29px;
-  border-radius: 50%;
-  background: var(--slate-100);
-  flex-shrink: 0;
-}
-.wh-steps strong {
-  font-size: var(--text-md);
-  font-weight: var(--weight-semibold);
-}
-.wh-steps .icon {
-  width: 17px;
-  height: 17px;
-}
-.wh-steps .current {
-  background: var(--blue-50);
-  color: var(--blue-700);
-}
-.wh-steps .current > span {
-  background: var(--blue-600);
-  color: white;
-}
-.wh-steps .complete > span {
-  background: var(--teal-50);
-  color: var(--green-600);
-}
 .wh-editor-fields {
   border: 0;
   margin: 0;
@@ -258,12 +208,6 @@
   line-height: 1.6;
   font-size: var(--text-md);
   color: var(--wh-muted);
-}
-.wh-step-heading > span {
-  white-space: nowrap;
-  color: var(--wh-muted);
-  font-size: var(--text-sm);
-  padding-top: 5px;
 }
 .wh-details {
   max-width: 900px;
@@ -347,35 +291,6 @@
   color: var(--wh-muted);
   margin-top: 7px;
 }
-.wh-editor-footer {
-  position: sticky;
-  bottom: 12px;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 16px 20px;
-  margin-top: 22px;
-  border: 1px solid var(--slate-250);
-  background: color-mix(in srgb, var(--slate-0) 98%, transparent);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 5px 25px color-mix(in srgb, var(--slate-850) 7%, transparent);
-}
-.wh-footer-summary strong {
-  display: block;
-  font-size: var(--text-md);
-}
-.wh-footer-summary span {
-  display: block;
-  font-size: var(--text-sm);
-  color: var(--wh-muted);
-  margin-top: 5px;
-}
-.wh-editor-footer .btn {
-  min-height: 42px;
-  font-size: var(--text-md);
-}
 @media (max-width: 1100px) {
   .wh-review {
     grid-template-columns: 1fr;
@@ -391,47 +306,10 @@
   .wh-card {
     padding: 18px;
   }
-  .wh-steps {
-    gap: 4px;
-    padding: 5px;
-  }
-  .wh-steps button {
-    flex-direction: column;
-    gap: 7px;
-    padding: 10px 4px;
-    text-align: center;
-  }
-  .wh-steps strong {
-    font-size: var(--text-xs);
-  }
-  .wh-step-heading > span {
-    display: none;
-  }
   .wh-details .form-grid {
     grid-template-columns: 1fr;
     padding: 20px;
     gap: 20px;
-  }
-  .wh-editor-footer {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 12px;
-    bottom: 8px;
-  }
-  .wh-footer-summary {
-    display: flex;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 5px;
-  }
-  .wh-footer-summary strong,
-  .wh-footer-summary span {
-    font-size: var(--text-xs);
-    margin: 0;
-  }
-  .wh-editor-footer .button-row {
-    display: grid;
-    grid-template-columns: 1fr 2fr;
   }
   .wh-review .panel-head {
     flex-wrap: wrap;

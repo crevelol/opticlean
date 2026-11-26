@@ -20,6 +20,7 @@ import '../../styles/warehouses-list.css';
 import { ChipGroup } from '../../shared/components/Chip';
 import { Input, Textarea } from '../../shared/components/Input';
 import { SearchInput } from '../../shared/components/SearchInput';
+import { WizardFooter, WizardSteps, useDiscardGuard } from '../../shared/components/Wizard';
 
 type Draft = Omit<WarehouseSite, 'id' | 'racks'> & { id?: string; notes: string };
 type FieldErrors = Partial<Record<'code' | 'name', string>>;
@@ -27,6 +28,11 @@ type ListFilter = 'all' | 'Operativa' | 'Inactiva' | 'attention';
 // Keep unfinished work when navigating to another screen during this session.
 const draftCache = new Map<string, Draft>();
 const fold = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+const STEPS = [
+  { title: 'Datos de la bodega', subtitle: 'Código y nombre' },
+  { title: 'Distribución', subtitle: 'Racks y capacidad' },
+  { title: 'Revisión', subtitle: 'Antes de guardar' },
+];
 const draftFor = (w?: WarehouseSite): Draft => ({
   ...(w ? { id: w.id } : {}), code: w?.code ?? '', name: w?.name ?? '',
   city: w?.city ?? '', address: w?.address ?? '', status: w?.status ?? 'Operativa', notes: w?.notes ?? '',
@@ -185,18 +191,14 @@ function WarehouseEditor({ state, warehouse, initialStep = 0, onCancel, onSaved 
     if (dirty) draftCache.set(cacheKey, draft);
     else draftCache.delete(cacheKey);
   }, [cacheKey, draft, dirty]);
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty]);
   const update = <K extends keyof Draft>(key: K, value: Draft[K]) => { setDraft((d) => ({ ...d, [key]: value })); setError(''); };
+  const discard = useDiscardGuard(dirty);
   const cancel = () => {
-    if (!saving && (!dirty || window.confirm('Tienes cambios sin guardar. ¿Quieres descartarlos y volver a tus bodegas?'))) {
+    if (saving) return;
+    discard.guard(() => {
       draftCache.delete(cacheKey);
       onCancel();
-    }
+    });
   };
   const validateDetails = () => {
     setAttempted(true);
@@ -235,10 +237,21 @@ function WarehouseEditor({ state, warehouse, initialStep = 0, onCancel, onSaved 
   return <div className="wh-admin wh-editor">
     <PageHead eyebrow={warehouse ? `Bodegas / ${warehouse.code}` : 'Bodegas / Nueva bodega'} title={warehouse ? 'Editar bodega' : 'Crea tu bodega'} desc="Define sus datos, organiza el espacio y revisa todo antes de guardar." actions={<Btn icon="back" onClick={cancel} disabled={saving}>Volver a bodegas</Btn>} />
     {restored ? <div className="wh-notice" role="status"><Icon name="history" /> Recuperamos los cambios que dejaste pendientes en esta sesión.</div> : null}
-    <nav className="wh-steps" aria-label="Pasos de configuración">{['Datos de la bodega', 'Distribución', 'Revisión'].map((label, index) => <button type="button" key={label} className={step === index ? 'current' : step > index ? 'complete' : ''} aria-current={step === index ? 'step' : undefined} disabled={saving} onClick={() => goTo(index)}><span>{step > index ? <Icon name="check" /> : index + 1}</span><strong>{label}</strong></button>)}</nav>
+    <WizardSteps
+      label="Pasos de configuración"
+      steps={STEPS}
+      current={step}
+      onSelect={goTo}
+      canSelect={() => true}
+      hasError={(index) =>
+        (index === 0 && attempted && Object.keys(fieldErrors).length > 0) ||
+        (index === 1 && !!layoutError)
+      }
+      disabled={saving}
+    />
     <form onSubmit={(e) => void submit(e)} noValidate aria-busy={saving}>
       <fieldset className="wh-editor-fields" disabled={saving}>
-        <div className="wh-step-heading"><div><h2 tabIndex={-1} ref={heading}>{['Empecemos por lo esencial', 'Diseña tu espacio', 'Todo listo para guardar'][step]}</h2><p>{['Solo el código y el nombre son obligatorios. Puedes completar el resto después.', 'Elige una distribución inicial y ajusta sus dimensiones. La vista previa se actualiza al instante.', 'Comprueba los datos y la capacidad de tu bodega antes de confirmar.'][step]}</p></div><span>Paso {step + 1} de 3</span></div>
+        <div className="wh-step-heading"><div><h2 tabIndex={-1} ref={heading}>{['Empecemos por lo esencial', 'Diseña tu espacio', 'Todo listo para guardar'][step]}</h2><p>{['Solo el código y el nombre son obligatorios. Puedes completar el resto después.', 'Elige una distribución inicial y ajusta sus dimensiones. La vista previa se actualiza al instante.', 'Comprueba los datos y la capacidad de tu bodega antes de confirmar.'][step]}</p></div></div>
         {step === 0 ? <section className="panel wh-details"><div className="form-grid panel-body">
           <div className="field"><label htmlFor="wh-code">Código <span aria-hidden="true">*</span></label><Input id="wh-code" required value={draft.code} placeholder="Ej. BOD-QTO-02" autoComplete="off" spellCheck={false} aria-invalid={!!showError('code')} aria-describedby="wh-code-help" onBlur={() => setTouched((v) => ({ ...v, code: 'true' }))} onChange={(e) => update('code', e.target.value.toUpperCase())} /><small id="wh-code-help" className={showError('code') ? 'wh-field-error' : ''}>{showError('code') || 'Un código único y fácil de reconocer.'}</small></div>
           <div className="field"><label htmlFor="wh-name">Nombre <span aria-hidden="true">*</span></label><Input id="wh-name" required value={draft.name} placeholder="Ej. Bodega norte" autoComplete="off" aria-invalid={!!showError('name')} aria-describedby="wh-name-help" onBlur={() => setTouched((v) => ({ ...v, name: 'true' }))} onChange={(e) => update('name', e.target.value)} /><small id="wh-name-help" className={showError('name') ? 'wh-field-error' : ''}>{showError('name') || 'Así aparecerá en el listado y en la operación.'}</small></div>
@@ -256,7 +269,29 @@ function WarehouseEditor({ state, warehouse, initialStep = 0, onCancel, onSaved 
         </div> : null}
       </fieldset>
       {error ? <div className="wh-error" role="alert">{error} Tus cambios siguen en el formulario; puedes corregirlos y reintentar.</div> : null}
-      <div className="wh-editor-footer"><div className="wh-footer-summary"><strong>{num(summary.totalCells)} ubicaciones · {num(summary.capacityUnits)} u.</strong><span>{dirty ? 'Cambios sin guardar' : 'Configura tu bodega a tu ritmo'}</span></div><div className="button-row"><Btn onClick={step === 0 ? cancel : () => goTo(step - 1)} disabled={saving}>{step === 0 ? 'Cancelar' : 'Atrás'}</Btn><Btn type="submit" variant="primary" icon={step === 2 ? 'save' : 'arrow'} disabled={saving || (step > 0 && !!layoutError)}>{saving ? 'Guardando…' : step === 0 ? 'Continuar al diseño' : step === 1 ? 'Revisar bodega' : warehouse ? 'Guardar cambios' : 'Crear bodega'}</Btn></div></div>
+      <WizardFooter
+        step={step}
+        total={STEPS.length}
+        onBack={() => goTo(step - 1)}
+        onCancel={cancel}
+        info={`Paso ${step + 1} de ${STEPS.length} · ${num(summary.totalCells)} ubicaciones · ${num(summary.capacityUnits)} u.${dirty ? ' · Cambios sin guardar' : ''}`}
+        primary={{
+          type: 'submit',
+          label:
+            step === 0
+              ? 'Continuar al diseño'
+              : step === 1
+                ? 'Revisar bodega'
+                : warehouse
+                  ? 'Guardar cambios'
+                  : 'Crear bodega',
+          icon: step === 2 ? 'save' : 'arrow',
+          disabled: step > 0 && !!layoutError,
+          busy: saving,
+          busyLabel: 'Guardando…',
+        }}
+      />
     </form>
+    {discard.dialog}
   </div>;
 }
