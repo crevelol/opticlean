@@ -769,17 +769,7 @@ export function NewOrderPage() {
                   busyLabel: 'Creando…',
                 }
         }
-      >
-        {step === 1 ? (
-          <Button
-            onClick={() =>
-              toast('Borrador local: continúa cuando quieras. Aún no se guarda en servidor.')
-            }
-          >
-            Guardar borrador
-          </Button>
-        ) : null}
-      </WizardFooter>
+      />
       {discard.dialog}
     </div>
   );
