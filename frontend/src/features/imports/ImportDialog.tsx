@@ -3,7 +3,7 @@ import { api } from '../../shared/api/client';
 import { Btn } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal } from '../../shared/components/Modal';
-import { TooltipButton } from '../../shared/components/Tooltip';
+import { Tooltip, TooltipButton } from '../../shared/components/Tooltip';
 import { money, num } from '../../shared/lib/inventory';
 import { FileDropZone, type FileDropStatus } from '../../shared/components/FileDrop';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
@@ -24,6 +24,7 @@ import {
   type ImportPriceRole,
 } from './importPricing';
 import '../../styles/imports.css';
+import { Input } from '../../shared/components/Input';
 
 type ImportKind = 'purchase' | 'sale';
 
@@ -56,7 +57,14 @@ const PREVIEW_STEPS = ['Leyendo archivo', 'Preparando líneas'];
 
 type RowTone = 'ok' | 'info' | 'warn' | 'err';
 type RowFilter = 'all' | 'err' | 'info';
-type RowView = { tone: RowTone; label: string; title: string; detail: string; action?: string; extra: string[] };
+type RowView = {
+  tone: RowTone;
+  label: string;
+  title: string;
+  detail: string;
+  action?: string;
+  extra: string[];
+};
 
 export function ImportDialog({
   kind,
@@ -83,7 +91,13 @@ export function ImportDialog({
   const party = kind === 'purchase' ? 'Proveedor' : 'Cliente';
   const [filter, setFilter] = useState<RowFilter>('all');
   const issues = useMemo(
-    () => (preview ? indexImportWarnings(preview.warnings, preview.rows.map((row) => row.code)) : null),
+    () =>
+      preview
+        ? indexImportWarnings(
+            preview.warnings,
+            preview.rows.map((row) => row.code),
+          )
+        : null,
     [preview],
   );
 
@@ -120,13 +134,20 @@ export function ImportDialog({
       };
     }
     if (extra.length) {
-      return { tone: 'warn', label: 'Revisar', title: 'Revisa esta línea', detail: extra[0], extra: extra.slice(1) };
+      return {
+        tone: 'warn',
+        label: 'Revisar',
+        title: 'Revisa esta línea',
+        detail: extra[0],
+        extra: extra.slice(1),
+      };
     }
     return { tone: 'ok', label: 'Existe', title: '', detail: '', extra };
   };
 
   const views = preview?.rows.map(viewOf) ?? [];
-  const stockAlerts = kind === 'sale' ? views.filter((view) => view.label === 'Sin stock').length : 0;
+  const stockAlerts =
+    kind === 'sale' ? views.filter((view) => view.label === 'Sin stock').length : 0;
   const errCount = views.filter((view) => view.tone === 'err' && view.label !== 'Sin stock').length;
   const infoCount = views.filter((view) => view.tone === 'info').length;
   const importable = useMemo(
@@ -144,7 +165,8 @@ export function ImportDialog({
     if (!preview) return { totalCost: 0, totalPvp: 0 };
     preview.rows.forEach((row, index) => {
       if (row.status === 'invalid' || row.qty <= 0) return;
-      const priced = pricedByIndex[index] ?? deriveImportPrices(row.unitPrice || 0, priceRole, marginPct);
+      const priced =
+        pricedByIndex[index] ?? deriveImportPrices(row.unitPrice || 0, priceRole, marginPct);
       cost += row.qty * priced.cost;
       pvp += row.qty * priced.pvp;
     });
@@ -222,7 +244,9 @@ export function ImportDialog({
       return;
     }
     if (rows.some((row) => row.expiry && !/^\d{4}-\d{2}-\d{2}$/.test(row.expiry))) {
-      setError('La caducidad debe ir en formato AAAA-MM-DD. Si el archivo no la trae, déjala vacía.');
+      setError(
+        'La caducidad debe ir en formato AAAA-MM-DD. Si el archivo no la trae, déjala vacía.',
+      );
       return;
     }
     setBusy(true);
@@ -245,7 +269,8 @@ export function ImportDialog({
         onDone(`Compra ${res.import.purchaseId} importada. La caducidad se confirma al recibir.`);
         return;
       }
-      const waiting = res.import.status === 'Esperando stock' || (res.import.shortages?.length ?? 0) > 0;
+      const waiting =
+        res.import.status === 'Esperando stock' || (res.import.shortages?.length ?? 0) > 0;
       onDone(
         waiting
           ? `Pedido ${res.import.orderId} creado en «Esperando stock». Falta mercadería; el pedido queda con alerta.`
@@ -275,8 +300,8 @@ export function ImportDialog({
           {stockAlerts ? (
             <span className="import-blocked" role="status">
               <Icon name="alert" />
-              {stockAlerts === 1 ? '1 línea sin stock' : `${stockAlerts} líneas sin stock`}: el pedido se crea
-              igual y queda «Esperando stock».
+              {stockAlerts === 1 ? '1 línea sin stock' : `${stockAlerts} líneas sin stock`}: el
+              pedido se crea igual y queda «Esperando stock».
             </span>
           ) : null}
           <Btn onClick={onClose}>Cancelar</Btn>
@@ -317,7 +342,7 @@ export function ImportDialog({
         <div className="form-grid import-party">
           <div className="field">
             <label htmlFor="import-party">{party}</label>
-            <input
+            <Input
               id="import-party"
               value={preview.partyName}
               onChange={(event) => setPreview({ ...preview, partyName: event.target.value })}
@@ -325,7 +350,7 @@ export function ImportDialog({
           </div>
           <div className="field">
             <label htmlFor="import-doc">Documento</label>
-            <input
+            <Input
               id="import-doc"
               value={preview.docNumber}
               onChange={(event) => setPreview({ ...preview, docNumber: event.target.value })}
@@ -361,7 +386,7 @@ export function ImportDialog({
             </div>
             <div className="field">
               <label htmlFor="import-margin">Margen sobre costo (%)</label>
-              <input
+              <Input
                 id="import-margin"
                 type="number"
                 min={0}
@@ -399,17 +424,31 @@ export function ImportDialog({
             ) : null}
             {errCount || infoCount ? (
               <div className="import-filters" role="group" aria-label="Filtrar líneas">
-                <button type="button" aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
+                <button
+                  type="button"
+                  aria-pressed={filter === 'all'}
+                  onClick={() => setFilter('all')}
+                >
                   Todas {preview.rows.length}
                 </button>
                 {errCount ? (
-                  <button type="button" className="err" aria-pressed={filter === 'err'} onClick={() => setFilter('err')}>
+                  <button
+                    type="button"
+                    className="err"
+                    aria-pressed={filter === 'err'}
+                    onClick={() => setFilter('err')}
+                  >
                     <i aria-hidden="true" />
                     Con error {errCount}
                   </button>
                 ) : null}
                 {infoCount ? (
-                  <button type="button" className="info" aria-pressed={filter === 'info'} onClick={() => setFilter('info')}>
+                  <button
+                    type="button"
+                    className="info"
+                    aria-pressed={filter === 'info'}
+                    onClick={() => setFilter('info')}
+                  >
                     <i aria-hidden="true" />
                     Nuevos {infoCount}
                   </button>
@@ -449,19 +488,26 @@ export function ImportDialog({
               <tbody>
                 {preview.rows.map((row, index) => {
                   const view = views[index];
-                  const priced = pricedByIndex[index] ?? deriveImportPrices(row.unitPrice || 0, priceRole, marginPct);
+                  const priced =
+                    pricedByIndex[index] ??
+                    deriveImportPrices(row.unitPrice || 0, priceRole, marginPct);
                   const hidden =
-                    filter !== 'all' && !(filter === 'err' ? view.tone === 'err' : view.tone === 'info');
+                    filter !== 'all' &&
+                    !(filter === 'err' ? view.tone === 'err' : view.tone === 'info');
                   return (
-                    <tr key={`${row.code}-${index}`} className={`import-row ${view.tone}`} hidden={hidden}>
+                    <tr
+                      key={`${row.code}-${index}`}
+                      className={`import-row ${view.tone}`}
+                      hidden={hidden}
+                    >
                       <td className="import-product">
-                        <strong title={row.name}>{row.name}</strong>
+                        <Tooltip content={row.name}><strong>{row.name}</strong></Tooltip>
                         <span className="sub">{row.code}</span>
                       </td>
                       <td className="import-qty">{num(row.qty)}</td>
                       <td className="import-pack">{row.packCode}</td>
                       <td className="import-price">
-                        <input
+                        <Input
                           aria-label={`${valueLabel} de ${row.code}`}
                           type="number"
                           min={0}
@@ -469,32 +515,28 @@ export function ImportDialog({
                           value={Number.isFinite(row.unitPrice) ? row.unitPrice : 0}
                           disabled={row.status === 'invalid'}
                           onChange={(event) =>
-                            patchRow(index, { unitPrice: Math.max(0, Number(event.target.value) || 0) })
+                            patchRow(index, {
+                              unitPrice: Math.max(0, Number(event.target.value) || 0),
+                            })
                           }
                         />
                       </td>
-                      <td
-                        className="import-money"
-                        title={
-                          marginPct <= 0 || priceRole === 'cost'
+                      <Tooltip content={marginPct <= 0 || priceRole === 'cost'
                             ? 'Igual al valor del archivo'
-                            : 'Calculado con el margen'
-                        }
+                            : 'Calculado con el margen'}><td
+                        className="import-money"
                       >
                         {money(priced.cost)}
-                      </td>
-                      <td
-                        className="import-money"
-                        title={
-                          marginPct <= 0 || priceRole === 'pvp'
+                      </td></Tooltip>
+                      <Tooltip content={marginPct <= 0 || priceRole === 'pvp'
                             ? 'Igual al valor del archivo'
-                            : 'Calculado con el margen'
-                        }
+                            : 'Calculado con el margen'}><td
+                        className="import-money"
                       >
                         {money(priced.pvp)}
-                      </td>
+                      </td></Tooltip>
                       <td className="import-date">
-                        <input
+                        <Input
                           aria-label={`Caducidad de ${row.code} (opcional)`}
                           type="date"
                           value={row.expiry}
@@ -519,7 +561,9 @@ export function ImportDialog({
                                     ))}
                                   </ul>
                                 ) : null}
-                                {view.action ? <span className="ui-tooltip-note">{view.action}</span> : null}
+                                {view.action ? (
+                                  <span className="ui-tooltip-note">{view.action}</span>
+                                ) : null}
                               </>
                             }
                           >

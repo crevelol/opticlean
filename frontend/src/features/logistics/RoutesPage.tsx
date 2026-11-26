@@ -4,7 +4,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
 import { client, orderWeight, product } from '../../shared/lib/inventory';
-import { Badge, Btn, Empty, PageHead } from '../../shared/components/ui';
+import { Badge, Btn, Empty, PageHead, Button } from '../../shared/components/ui';
+import { SegmentedControl } from '../../shared/components/Tabs';
 import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import { RouteMap } from './RouteMap';
@@ -20,6 +21,8 @@ import {
   type Truck,
 } from './fleet';
 import '../../styles/logistics.css';
+import { Checkbox } from '../../shared/components/Checkbox';
+import { Input, Textarea } from '../../shared/components/Input';
 
 export function RoutesPage() {
   const { state, applyResponse, toast } = useAppState();
@@ -104,10 +107,7 @@ export function RoutesPage() {
 
   const stops = [...pendingStops, ...doneStops];
   const allActive = activeOrders(state);
-  const current =
-    pendingStops.find((o) => o.id === stopId) ??
-    pendingStops[0] ??
-    null;
+  const current = pendingStops.find((o) => o.id === stopId) ?? pendingStops[0] ?? null;
   const load = truckLoad(state, truck, allActive);
   const done = doneStops.length;
   const pending = pendingStops.length;
@@ -178,31 +178,25 @@ export function RoutesPage() {
         }
       />
 
-      <div className="log-route-tabs" role="tablist" aria-label="Vehículos">
-        {fleet.map((t) => {
+      <SegmentedControl
+        label="Vehículos"
+        value={truck.id}
+        onValueChange={(id) => {
+          setTruckId(id);
+          setStopId(null);
+          setChecked({});
+        }}
+        items={fleet.map((t) => {
           const n = routeOrders(state, t.plate).length;
           const d = deliveredToday(state, t.plate, today).length;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={truck.id === t.id}
-              className={truck.id === t.id ? 'is-active' : ''}
-              onClick={() => {
-                setTruckId(t.id);
-                setStopId(null);
-                setChecked({});
-              }}
-            >
-              {t.label} · {t.city}
-              {n ? <span className="log-tab-pill">{n}</span> : null}
-              {!n && d ? <span className="log-tab-badge">Hecho</span> : null}
-              {!n && !d ? <span className="log-tab-badge">Libre</span> : null}
-            </button>
-          );
+          return {
+            value: t.id,
+            label: `${t.label} · ${t.city}`,
+            count: n ? n : d ? 'Hecho' : 'Libre',
+          };
         })}
-      </div>
+        className="log-route-filter"
+      />
 
       <div className="log-route-statusbar">
         <Badge
@@ -346,13 +340,7 @@ export function RoutesPage() {
                   const p = product(state, l.productId);
                   return (
                     <label key={key} className="log-check-item">
-                      <input
-                        type="checkbox"
-                        checked={!!checked[key]}
-                        onChange={() =>
-                          setChecked((prev) => ({ ...prev, [key]: !prev[key] }))
-                        }
-                      />
+                      <Checkbox checked={!!checked[key]} onCheckedChange={() => setChecked((prev) => ({ ...prev, [key]: !prev[key] }))} />
                       <span>
                         {p?.name ?? l.productId} × {l.qty}
                         <small>
@@ -418,9 +406,9 @@ export function RoutesPage() {
 
       <p className="log-route-footnote">
         Las entregas e incidencias se guardan en el servidor y alimentan el{' '}
-        <button type="button" className="linkish" onClick={() => navigate('/logistica/historial')}>
+        <Button variant="link" className="linkish" onClick={() => navigate('/logistica/historial')}>
           Historial de rutas
-        </button>{' '}
+        </Button>{' '}
         y la trazabilidad.
       </p>
 
@@ -441,7 +429,7 @@ export function RoutesPage() {
           <form id="route-delivery-form" onSubmit={submitDelivery}>
             <div className="field">
               <label htmlFor="route-person">Quien recibe</label>
-              <input
+              <Input
                 id="route-person"
                 name="person"
                 required
@@ -463,7 +451,7 @@ export function RoutesPage() {
             ) : null}
             <div className="field">
               <label htmlFor="route-notes">Observaciones</label>
-              <textarea id="route-notes" name="notes" />
+              <Textarea id="route-notes" name="notes" />
             </div>
             {error ? <div className="form-error visible">{error}</div> : null}
           </form>
@@ -500,7 +488,7 @@ export function RoutesPage() {
             </div>
             <div className="field">
               <label htmlFor="route-inc-notes">Detalle</label>
-              <textarea id="route-inc-notes" name="notes" />
+              <Textarea id="route-inc-notes" name="notes" />
             </div>
             {error ? <div className="form-error visible">{error}</div> : null}
           </form>

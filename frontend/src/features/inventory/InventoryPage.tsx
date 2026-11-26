@@ -7,8 +7,10 @@ import { activeWarehouseId, num } from '../../shared/lib/inventory';
 import { childrenStatus, componentsOf, isRaw } from '../../shared/lib/bom';
 import { downloadCSV } from '../../shared/lib/csv';
 import { expiryAlerts } from '../../shared/lib/wholesale';
-import { Badge, Btn, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
+import { Badge, Btn, Kpi, KpiGrid, PageHead, Button } from '../../shared/components/ui';
+import { Menu } from '../../shared/components/Menu';
 import { Icon } from '../../shared/components/Icon';
+import { SegmentedControl } from '../../shared/components/Tabs';
 import type { AppState, Metrics } from '../../shared/types';
 import { InventoryDetailPanel } from './InventoryDetailPanel';
 import { InventoryOverview } from './InventoryOverview';
@@ -23,6 +25,10 @@ import {
   type InventorySort,
 } from './inventoryModel';
 import '../../styles/inventory.css';
+import { Checkbox } from '../../shared/components/Checkbox';
+import { ChipGroup } from '../../shared/components/Chip';
+import { IconButton } from '../../shared/components/IconButton';
+import { SearchInput } from '../../shared/components/SearchInput';
 
 const PAGE_CHUNK = 10;
 const statusOptions: { value: InventoryFilter; label: string }[] = [
@@ -74,12 +80,10 @@ export function InventoryWorkspace({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [filtersOpen, setFiltersOpen] = useState(() => Boolean(params.get('proveedor')));
-  const [createOpen, setCreateOpen] = useState(false);
   const [view, setView] = useState<'table' | 'lines'>('table');
   const [visibleCount, setVisibleCount] = useState(PAGE_CHUNK);
   const [whBusy, setWhBusy] = useState(false);
   const catalogRef = useRef<HTMLElement>(null);
-  const createRef = useRef<HTMLDivElement>(null);
 
   const query = params.get('q') ?? '';
   const category = params.get('linea') ?? '';
@@ -142,6 +146,8 @@ export function InventoryWorkspace({
     allRows.find((row) => row.product.id === selectedId);
   const allVisibleChecked =
     visibleRows.length > 0 && visibleRows.every((r) => checked[r.product.id]);
+  const someVisibleChecked =
+    !allVisibleChecked && visibleRows.some((r) => checked[r.product.id]);
 
   const updateParams = (patch: Record<string, string>) => {
     setParams(
@@ -170,14 +176,6 @@ export function InventoryWorkspace({
   useEffect(() => {
     setVisibleCount(PAGE_CHUNK);
   }, [query, category, supplier, status, kind, sort]);
-
-  useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (!createRef.current?.contains(e.target as Node)) setCreateOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, []);
 
   const exportRows = () => {
     downloadCSV('OPTICLEAN_Inventario_filtrado.csv', [
@@ -271,42 +269,29 @@ export function InventoryWorkspace({
             <Btn icon="download" disabled={!rows.length} onClick={exportRows}>
               Exportar vista
             </Btn>
-            <div className="inv-create" ref={createRef}>
-              <button
-                type="button"
-                className="btn primary inv-create-btn"
-                onClick={() => setCreateOpen((o) => !o)}
-                aria-expanded={createOpen}
-              >
-                <Icon name="plus" />
-                Crear
-                <Icon name="chevron" />
-              </button>
-              {createOpen ? (
-                <div className="inv-create-menu" role="menu">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setCreateOpen(false);
-                      setEditProduct('');
-                    }}
-                  >
-                    Nuevo producto
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setCreateOpen(false);
-                      navigate('/recepcion/nueva');
-                    }}
-                  >
-                    Registrar entrada
-                  </button>
-                </div>
-              ) : null}
-            </div>
+            <Menu
+              label="Crear"
+              trigger={
+                <Button variant="primary" icon="plus" className="inv-create-btn">
+                  Crear
+                  <Icon name="chevron" className="ui-menu-chevron" />
+                </Button>
+              }
+              items={[
+                {
+                  label: 'Nuevo producto',
+                  icon: 'box',
+                  hint: 'Ficha de producto o insumo',
+                  onSelect: () => setEditProduct(''),
+                },
+                {
+                  label: 'Registrar entrada',
+                  icon: 'receive',
+                  hint: 'Recepción de mercadería',
+                  onSelect: () => navigate('/recepcion/nueva'),
+                },
+              ]}
+            />
           </div>
         }
       >
@@ -399,15 +384,12 @@ export function InventoryWorkspace({
               Al preparar se usa FEFO: primero el lote que vence antes.
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => {
+          <Button variant="link" onClick={() => {
               updateParams({ estado: 'expiring', orden: 'expiry', tipo: '' });
               catalogRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }}
-          >
+            }}>
             Ver caducidades <Icon name="arrow" />
-          </button>
+          </Button>
         </div>
       ) : null}
 
@@ -417,15 +399,12 @@ export function InventoryWorkspace({
           <span>
             <strong>{linkedBlocked.length}</strong> productos vinculados a insumos bajo mínimo
           </span>
-          <button
-            type="button"
-            onClick={() => {
+          <Button variant="link" onClick={() => {
               updateParams({ estado: 'attention', tipo: '' });
               catalogRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }}
-          >
+            }}>
             Ver afectados <Icon name="arrow" />
-          </button>
+          </Button>
         </div>
       ) : null}
 
@@ -456,44 +435,19 @@ export function InventoryWorkspace({
             <h2 id="inv-products-heading">
               Catálogo <span>{allRows.length}</span>
             </h2>
-            <div className="inv-view-toggle" role="group" aria-label="Vista">
-              <button
-                type="button"
-                className={view === 'table' ? 'active' : ''}
-                onClick={() => setView('table')}
-              >
-                Tabla
-              </button>
-              <button
-                type="button"
-                className={view === 'lines' ? 'active' : ''}
-                onClick={() => setView('lines')}
-              >
-                Por líneas
-              </button>
-            </div>
+            <SegmentedControl
+              label="Vista"
+              value={view}
+              onValueChange={setView}
+              items={[
+                { value: 'table', label: 'Tabla' },
+                { value: 'lines', label: 'Por líneas' },
+              ]}
+            />
           </div>
 
           <div className="inv-toolbar">
-            <div className="inv-search">
-              <Icon name="search" />
-              <input
-                type="search"
-                aria-label="Buscar en inventario"
-                placeholder="Buscar producto, insumo, código o ubicación…"
-                value={query}
-                onChange={(event) => updateParams({ q: event.target.value })}
-              />
-              {query ? (
-                <button
-                  type="button"
-                  aria-label="Borrar búsqueda"
-                  onClick={() => updateParams({ q: '' })}
-                >
-                  <Icon name="close" />
-                </button>
-              ) : null}
-            </div>
+            <SearchInput className="inv-search" aria-label="Buscar en inventario" placeholder="Buscar producto, insumo, código o ubicación…" value={query} onChange={(event) => updateParams({ q: event.target.value })} />
             <label className="inv-select">
               <span>Tipo</span>
               <Select
@@ -518,15 +472,15 @@ export function InventoryWorkspace({
                 ))}
               </Select>
             </label>
-            <button
-              type="button"
+            <Button
               className={`inv-more-filters ${filtersOpen || supplier ? 'is-active' : ''}`}
               aria-expanded={filtersOpen}
+              data-state={filtersOpen ? 'open' : 'closed'}
               onClick={() => setFiltersOpen((open) => !open)}
             >
               Más filtros
-              <Icon name="chevron" />
-            </button>
+              <Icon name="chevron" className="ui-menu-chevron" />
+            </Button>
             <label className="inv-select inv-sort-select">
               <span>Orden</span>
               <Select
@@ -562,26 +516,21 @@ export function InventoryWorkspace({
                 </Select>
               </label>
               {hasFilters ? (
-                <button type="button" className="inv-text-button" onClick={resetFilters}>
+                <Button variant="link" className="inv-text-button" onClick={resetFilters}>
                   <Icon name="close" /> Limpiar filtros
-                </button>
+                </Button>
               ) : null}
             </div>
           ) : null}
 
-          <div className="inv-quick-filters" role="group" aria-label="Filtros rápidos">
-            {quickFilters.map((filter) => (
-              <button
-                type="button"
-                key={filter.value}
-                className={status === filter.value ? 'active' : ''}
-                aria-pressed={status === filter.value}
-                onClick={() => updateParams({ estado: filter.value === 'all' ? '' : filter.value })}
-              >
-                {filter.label} <em>{filter.count}</em>
-              </button>
-            ))}
-          </div>
+          <ChipGroup
+            type="single"
+            label="Filtros rápidos"
+            className="inv-quick-filters"
+            value={status}
+            onValueChange={(value) => updateParams({ estado: value === 'all' ? '' : value })}
+            items={quickFilters.map((filter) => ({ value: filter.value, label: filter.label, count: filter.count }))}
+          />
 
           {view === 'table' ? (
             rows.length ? (
@@ -591,12 +540,7 @@ export function InventoryWorkspace({
                     <thead>
                       <tr>
                         <th className="inv-col-check">
-                          <input
-                            type="checkbox"
-                            checked={allVisibleChecked}
-                            onChange={toggleAllVisible}
-                            aria-label="Seleccionar visibles"
-                          />
+                          <Checkbox checked={allVisibleChecked} indeterminate={someVisibleChecked} onCheckedChange={() => toggleAllVisible()} aria-label="Seleccionar visibles" />
                         </th>
                         <th scope="col">Producto / Insumo</th>
                         <th scope="col">Estado</th>
@@ -633,17 +577,10 @@ export function InventoryWorkspace({
                               } ${isRaw(row.product) ? 'inv-row-raw' : ''}`}
                             >
                               <td className="inv-col-check">
-                                <input
-                                  type="checkbox"
-                                  checked={!!checked[row.product.id]}
-                                  onChange={() =>
-                                    setChecked((c) => ({
+                                <Checkbox checked={!!checked[row.product.id]} onCheckedChange={() => setChecked((c) => ({
                                       ...c,
                                       [row.product.id]: !c[row.product.id],
-                                    }))
-                                  }
-                                  aria-label={`Seleccionar ${row.product.name}`}
-                                />
+                                    }))} aria-label={`Seleccionar ${row.product.name}`} />
                               </td>
                               <td>
                                 <div className="inv-table-product-wrap">
@@ -711,25 +648,11 @@ export function InventoryWorkspace({
                               </td>
                               <td className="inv-col-actions">
                                 <div className="inv-table-actions">
-                                  <button
-                                    type="button"
-                                    className="inv-receive-btn"
-                                    onClick={() => receive(row.product.id)}
-                                  >
+                                  <Button size="small" className="inv-receive-btn" onClick={() => receive(row.product.id)}>
                                     <Icon name="receive" />
                                     Recibir
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="inv-more-btn"
-                                    title="Más acciones"
-                                    aria-label={`Más acciones de ${row.product.name}`}
-                                    onClick={() => selectProduct(row.product.id)}
-                                  >
-                                    <span />
-                                    <span />
-                                    <span />
-                                  </button>
+                                  </Button>
+                                  <IconButton icon="more" label={`Más acciones de ${row.product.name}`} className="inv-more-btn" onClick={() => selectProduct(row.product.id)} />
                                 </div>
                               </td>
                             </tr>
@@ -788,13 +711,9 @@ export function InventoryWorkspace({
                     Mostrando {visibleRows.length} de {rows.length} ítems
                   </span>
                   {visibleCount < rows.length ? (
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => setVisibleCount((n) => n + PAGE_CHUNK)}
-                    >
+                    <Button type="button" onClick={() => setVisibleCount((n) => n + PAGE_CHUNK)}>
                       Cargar más
-                    </button>
+                    </Button>
                   ) : null}
                 </div>
               </>

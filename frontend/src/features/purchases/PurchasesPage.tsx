@@ -9,13 +9,28 @@ import { can } from '../../shared/auth/permissions';
 import { isRaw } from '../../shared/lib/bom';
 import { packsOf, purchaseLines } from '../../shared/lib/wholesale';
 import { ImportDialog } from '../imports/ImportDialog';
-import { buildForecast, suggestedPurchaseQty, type ConfidenceLevel } from '../../shared/lib/forecast';
-import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead, ProductCell } from '../../shared/components/ui';
+import {
+  buildForecast,
+  suggestedPurchaseQty,
+  type ConfidenceLevel,
+} from '../../shared/lib/forecast';
+import {
+  Badge,
+  Btn,
+  Empty,
+  Kpi,
+  KpiGrid,
+  PageHead,
+  ProductCell,
+  Button,
+} from '../../shared/components/ui';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import { dateShort, num } from '../../shared/lib/inventory';
 import { Icon } from '../../shared/components/Icon';
 import { ReceivePurchaseDialog } from './ReceivePurchaseDialog';
 import '../../styles/forecast.css';
+import { Tooltip } from '../../shared/components/Tooltip';
+import { Input, Textarea } from '../../shared/components/Input';
 
 const confidenceLabel: Record<ConfidenceLevel, string> = {
   low: 'Aprendiendo',
@@ -34,7 +49,9 @@ export function PurchasesPage() {
   const [prefillProduct, setPrefillProduct] = useState('');
   const [prefillQty, setPrefillQty] = useState(12);
   const [supplierId, setSupplierId] = useState('');
-  const [lines, setLines] = useState<Array<{ productId: string; qty: number; packCode: string; unitPrice: number }>>([]);
+  const [lines, setLines] = useState<
+    Array<{ productId: string; qty: number; packCode: string; unitPrice: number }>
+  >([]);
   const [error, setError] = useState('');
   const [receivingId, setReceivingId] = useState('');
   const [closing, setClosing] = useState<{ id: string; reason: string } | null>(null);
@@ -46,7 +63,13 @@ export function PurchasesPage() {
     const focus = (location.state as { focus?: string } | null)?.focus;
     if (!focus) return;
     setFocusId(focus);
-    window.setTimeout(() => document.getElementById(`po-${focus}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50);
+    window.setTimeout(
+      () =>
+        document
+          .getElementById(`po-${focus}`)
+          ?.scrollIntoView({ block: 'center', behavior: 'smooth' }),
+      50,
+    );
   }, [location.state]);
 
   useEffect(() => {
@@ -136,7 +159,14 @@ export function PurchasesPage() {
     setPrefillProduct(id);
     setPrefillQty(amount);
     setSupplierId(item?.supplierId ?? state.suppliers?.[0]?.id ?? '');
-    setLines([{ productId: id, qty: Math.max(1, Math.round(amount)), packCode: 'unidad', unitPrice: item?.price ?? 0 }]);
+    setLines([
+      {
+        productId: id,
+        qty: Math.max(1, Math.round(amount)),
+        packCode: 'unidad',
+        unitPrice: item?.price ?? 0,
+      },
+    ]);
     setModalOpen(true);
     setError('');
   };
@@ -165,9 +195,28 @@ export function PurchasesPage() {
       />
 
       <KpiGrid>
-        <Kpi label="Urgente ahora" tone={urgent.length ? 'danger' : 'default'} value={urgent.length} unit="SKU" foot="Quiebre o riesgo de producción" icon="alert" />
-        <Kpi label="Pronóstico pronto" value={soon.length} unit="SKU" foot={`Lead time ${forecast.leadDays} días`} icon="calendar" />
-        <Kpi label="Riesgo producción" value={forecast.productionRisks.length} unit="" foot="BOM / materia prima" icon="layers" />
+        <Kpi
+          label="Urgente ahora"
+          tone={urgent.length ? 'danger' : 'default'}
+          value={urgent.length}
+          unit="SKU"
+          foot="Quiebre o riesgo de producción"
+          icon="alert"
+        />
+        <Kpi
+          label="Pronóstico pronto"
+          value={soon.length}
+          unit="SKU"
+          foot={`Lead time ${forecast.leadDays} días`}
+          icon="calendar"
+        />
+        <Kpi
+          label="Riesgo producción"
+          value={forecast.productionRisks.length}
+          unit=""
+          foot="BOM / materia prima"
+          icon="layers"
+        />
         <Kpi
           label="Aprendizaje del modelo"
           value={`${forecast.learningScore}%`}
@@ -183,7 +232,9 @@ export function PurchasesPage() {
           <strong>Previsión adaptativa</strong>
           <p>{forecast.insight}</p>
         </div>
-        <Btn icon="chart" onClick={() => navigate('/reportes')}>Ver reportes</Btn>
+        <Btn icon="chart" onClick={() => navigate('/reportes')}>
+          Ver reportes
+        </Btn>
       </section>
 
       <section className="panel fc-panel">
@@ -207,10 +258,23 @@ export function PurchasesPage() {
               </thead>
               <tbody>
                 {forecast.recommendations.slice(0, 16).map((row) => (
-                  <tr key={row.productId} className={row.productionRisk ? 'fc-row-risk' : row.urgency === 'now' ? 'fc-row-now' : ''}>
+                  <tr
+                    key={row.productId}
+                    className={
+                      row.productionRisk ? 'fc-row-risk' : row.urgency === 'now' ? 'fc-row-now' : ''
+                    }
+                  >
                     <td>
-                      <span className={`fc-urgency fc-urgency-${row.productionRisk ? 'risk' : row.urgency}`}>
-                        {row.productionRisk ? 'Producción' : row.urgency === 'now' ? 'Ahora' : row.urgency === 'soon' ? 'Pronto' : 'Vigilancia'}
+                      <span
+                        className={`fc-urgency fc-urgency-${row.productionRisk ? 'risk' : row.urgency}`}
+                      >
+                        {row.productionRisk
+                          ? 'Producción'
+                          : row.urgency === 'now'
+                            ? 'Ahora'
+                            : row.urgency === 'soon'
+                              ? 'Pronto'
+                              : 'Vigilancia'}
                       </span>
                     </td>
                     <td>
@@ -220,15 +284,22 @@ export function PurchasesPage() {
                         category={`${row.kind === 'raw' ? 'Insumo' : 'Producto'} · ${row.category}`}
                       />
                       {row.blocksParents > 0 && (
-                        <small className="fc-parents">Bloquea {row.blocksParents}: {row.parentNames.slice(0, 2).join(', ')}{row.parentNames.length > 2 ? '…' : ''}</small>
+                        <small className="fc-parents">
+                          Bloquea {row.blocksParents}: {row.parentNames.slice(0, 2).join(', ')}
+                          {row.parentNames.length > 2 ? '…' : ''}
+                        </small>
                       )}
                     </td>
                     <td>
                       <strong>{row.daysCover === null ? '—' : `${row.daysCover}d`}</strong>
-                      <small className="sub">{num(row.available)} disp. · mín. {num(row.min)}</small>
-                      <div className="fc-learn" title={`Aprendizaje ${(row.learningWeight * 100).toFixed(0)}%`}>
-                        <span style={{ width: `${Math.max(8, row.learningWeight * 100)}%` }} />
-                      </div>
+                      <small className="sub">
+                        {num(row.available)} disp. · mín. {num(row.min)}
+                      </small>
+                      <Tooltip content={`Aprendizaje ${(row.learningWeight * 100).toFixed(0)}%`}>
+                        <div className="fc-learn">
+                          <span style={{ width: `${Math.max(8, row.learningWeight * 100)}%` }} />
+                        </div>
+                      </Tooltip>
                     </td>
                     <td>
                       <strong>{num(row.suggestedQty)}</strong>
@@ -242,7 +313,11 @@ export function PurchasesPage() {
                     <td className="fc-reason">{row.reason}</td>
                     <td>
                       {canManage ? (
-                        <Btn variant="small" icon="plus" onClick={() => openNew(row.productId, row.suggestedQty || undefined)}>
+                        <Btn
+                          variant="small"
+                          icon="plus"
+                          onClick={() => openNew(row.productId, row.suggestedQty || undefined)}
+                        >
                           Solicitar
                         </Btn>
                       ) : null}
@@ -253,7 +328,10 @@ export function PurchasesPage() {
             </table>
           </div>
         ) : (
-          <Empty title="Sin recomendaciones" desc="El inventario cubre el horizonte. El modelo sigue aprendiendo en segundo plano." />
+          <Empty
+            title="Sin recomendaciones"
+            desc="El inventario cubre el horizonte. El modelo sigue aprendiendo en segundo plano."
+          />
         )}
       </section>
 
@@ -282,7 +360,11 @@ export function PurchasesPage() {
                   const supplier = state.suppliers?.find((item) => item.id === o.supplierId);
                   const isAdmin = user?.role === 'admin';
                   return (
-                    <tr key={o.id} id={`po-${o.id}`} className={focusId === o.id ? 'is-new' : undefined}>
+                    <tr
+                      key={o.id}
+                      id={`po-${o.id}`}
+                      className={focusId === o.id ? 'is-new' : undefined}
+                    >
                       <td>
                         <strong>{o.id}</strong>
                         <span className="sub">{dateShort(o.date)}</span>
@@ -292,14 +374,20 @@ export function PurchasesPage() {
                             {o.orderIds.map((id, i) => (
                               <span key={id}>
                                 {i ? ', ' : ''}
-                                <button type="button" className="fx-link" onClick={() => navigate('/pedidos', { state: { open: id } })}>
+                                <Button
+                                  variant="link"
+                                  className="fx-link"
+                                  onClick={() => navigate('/pedidos', { state: { open: id } })}
+                                >
                                   {id}
-                                </button>
+                                </Button>
                               </span>
                             ))}
                           </span>
                         ) : null}
-                        {o.closeReason ? <span className="sub">Cerrada: {o.closeReason}</span> : null}
+                        {o.closeReason ? (
+                          <span className="sub">Cerrada: {o.closeReason}</span>
+                        ) : null}
                       </td>
                       <td>{supplier?.name ?? 'Sin proveedor'}</td>
                       <td>
@@ -322,12 +410,20 @@ export function PurchasesPage() {
                       <td style={{ whiteSpace: 'nowrap' }}>
                         {open && canManage ? (
                           <>
-                            <Btn variant="small" icon="receive" onClick={() => setReceivingId(o.id)}>
+                            <Btn
+                              variant="small"
+                              icon="receive"
+                              onClick={() => setReceivingId(o.id)}
+                            >
                               Recibir
                             </Btn>{' '}
                             {status === 'Parcial' ? (
                               isAdmin ? (
-                                <Btn variant="small" icon="check" onClick={() => setClosing({ id: o.id, reason: '' })}>
+                                <Btn
+                                  variant="small"
+                                  icon="check"
+                                  onClick={() => setClosing({ id: o.id, reason: '' })}
+                                >
                                   Cerrar con faltante
                                 </Btn>
                               ) : null
@@ -346,7 +442,10 @@ export function PurchasesPage() {
             </table>
           </div>
         ) : (
-          <Empty title="Sin solicitudes" desc="Crea la primera desde una recomendación del modelo." />
+          <Empty
+            title="Sin solicitudes"
+            desc="Crea la primera desde una recomendación del modelo."
+          />
         )}
       </section>
 
@@ -366,7 +465,12 @@ export function PurchasesPage() {
           footer={
             <>
               <Btn onClick={() => setClosing(null)}>Volver</Btn>
-              <Btn variant="primary" icon="check" disabled={!closing.reason.trim()} onClick={() => void closeShort()}>
+              <Btn
+                variant="primary"
+                icon="check"
+                disabled={!closing.reason.trim()}
+                onClick={() => void closeShort()}
+              >
                 Cerrar orden
               </Btn>
             </>
@@ -374,7 +478,7 @@ export function PurchasesPage() {
         >
           <div className="field full">
             <label htmlFor="po-close-reason">Motivo</label>
-            <input
+            <Input
               id="po-close-reason"
               value={closing.reason}
               placeholder="Ej.: el proveedor no tiene más stock"
@@ -390,14 +494,23 @@ export function PurchasesPage() {
           subtitle="Cantidad prellenada por la previsión adaptativa (puedes ajustarla)."
           onClose={() => setModalOpen(false)}
           footer={
-            <ModalActions onCancel={() => setModalOpen(false)} submitLabel="Registrar" formId="purchase-form" icon="save" />
+            <ModalActions
+              onCancel={() => setModalOpen(false)}
+              submitLabel="Registrar"
+              formId="purchase-form"
+              icon="save"
+            />
           }
         >
           <form id="purchase-form" onSubmit={submit} key={`${prefillProduct}-${prefillQty}`}>
             <div className="form-grid">
               <div className="field full">
                 <label htmlFor="pur-supplier">Proveedor</label>
-                <Select id="pur-supplier" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+                <Select
+                  id="pur-supplier"
+                  value={supplierId}
+                  onChange={(e) => setSupplierId(e.target.value)}
+                >
                   <option value="">Sin proveedor</option>
                   {(state.suppliers ?? []).map((supplier) => (
                     <option key={supplier.id} value={supplier.id}>
@@ -422,7 +535,11 @@ export function PurchasesPage() {
                           setLines((current) =>
                             current.map((row, i) =>
                               i === index
-                                ? { ...row, productId: e.target.value, unitPrice: next?.price ?? row.unitPrice }
+                                ? {
+                                    ...row,
+                                    productId: e.target.value,
+                                    unitPrice: next?.price ?? row.unitPrice,
+                                  }
                                 : row,
                             ),
                           );
@@ -434,14 +551,16 @@ export function PurchasesPage() {
                           </option>
                         ))}
                       </Select>
-                      <input
+                      <Input
                         aria-label={`Cantidad ${index + 1}`}
                         type="number"
                         min={1}
                         value={line.qty}
                         onChange={(e) =>
                           setLines((current) =>
-                            current.map((row, i) => (i === index ? { ...row, qty: Number(e.target.value) } : row)),
+                            current.map((row, i) =>
+                              i === index ? { ...row, qty: Number(e.target.value) } : row,
+                            ),
                           )
                         }
                         required
@@ -451,7 +570,9 @@ export function PurchasesPage() {
                         value={line.packCode}
                         onChange={(e) =>
                           setLines((current) =>
-                            current.map((row, i) => (i === index ? { ...row, packCode: e.target.value } : row)),
+                            current.map((row, i) =>
+                              i === index ? { ...row, packCode: e.target.value } : row,
+                            ),
                           )
                         }
                       >
@@ -461,7 +582,7 @@ export function PurchasesPage() {
                           </option>
                         ))}
                       </Select>
-                      <input
+                      <Input
                         aria-label={`Precio ${index + 1}`}
                         type="number"
                         min={0}
@@ -469,7 +590,9 @@ export function PurchasesPage() {
                         value={line.unitPrice}
                         onChange={(e) =>
                           setLines((current) =>
-                            current.map((row, i) => (i === index ? { ...row, unitPrice: Number(e.target.value) } : row)),
+                            current.map((row, i) =>
+                              i === index ? { ...row, unitPrice: Number(e.target.value) } : row,
+                            ),
                           )
                         }
                       />
@@ -479,16 +602,21 @@ export function PurchasesPage() {
               })}
               <div className="field">
                 <label htmlFor="pur-date">Fecha</label>
-                <input id="pur-date" name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
+                <Input
+                  id="pur-date"
+                  name="date"
+                  type="date"
+                  defaultValue={new Date().toISOString().slice(0, 10)}
+                  required
+                />
               </div>
               <div className="field">
                 <label htmlFor="pur-expected">Llegada esperada</label>
-                <input id="pur-expected" name="expectedDate" type="date" />
+                <Input id="pur-expected" name="expectedDate" type="date" />
               </div>
               <div className="field full">
-                <button
+                <Button
                   type="button"
-                  className="btn"
                   onClick={() => {
                     const item = state.products[0];
                     if (!item) return;
@@ -499,16 +627,18 @@ export function PurchasesPage() {
                   }}
                 >
                   Añadir línea
-                </button>
+                </Button>
               </div>
               <div className="field full">
                 <label htmlFor="pur-notes">Observaciones</label>
-                <textarea
+                <Textarea
                   id="pur-notes"
                   name="notes"
                   maxLength={300}
                   defaultValue={
-                    forecast.recommendations.find((r) => r.productId === prefillProduct)?.reason?.slice(0, 280) ?? ''
+                    forecast.recommendations
+                      .find((r) => r.productId === prefillProduct)
+                      ?.reason?.slice(0, 280) ?? ''
                   }
                 />
               </div>
@@ -532,37 +662,52 @@ export function PurchasesPage() {
           title="Nuevo proveedor"
           subtitle="RUC, contacto y tiempo de entrega para las compras al por mayor."
           onClose={() => setSupplierOpen(false)}
-          footer={<ModalActions onCancel={() => setSupplierOpen(false)} submitLabel="Guardar" formId="supplier-form" icon="save" />}
+          footer={
+            <ModalActions
+              onCancel={() => setSupplierOpen(false)}
+              submitLabel="Guardar"
+              formId="supplier-form"
+              icon="save"
+            />
+          }
         >
           <form id="supplier-form" onSubmit={(e) => void saveSupplier(e)}>
             <div className="form-grid">
               <div className="field full">
                 <label htmlFor="sup-name">Nombre</label>
-                <input id="sup-name" name="name" required />
+                <Input id="sup-name" name="name" required />
               </div>
               <div className="field">
                 <label htmlFor="sup-tax">RUC</label>
-                <input id="sup-tax" name="taxId" inputMode="numeric" pattern="\d{13}" minLength={13} maxLength={13} required />
+                <Input
+                  id="sup-tax"
+                  name="taxId"
+                  inputMode="numeric"
+                  pattern="\d{13}"
+                  minLength={13}
+                  maxLength={13}
+                  required
+                />
               </div>
               <div className="field">
                 <label htmlFor="sup-lead">Días de entrega</label>
-                <input id="sup-lead" name="leadTimeDays" type="number" min={0} defaultValue={7} />
+                <Input id="sup-lead" name="leadTimeDays" type="number" min={0} defaultValue={7} />
               </div>
               <div className="field">
                 <label htmlFor="sup-contact">Contacto</label>
-                <input id="sup-contact" name="contact" />
+                <Input id="sup-contact" name="contact" />
               </div>
               <div className="field">
                 <label htmlFor="sup-phone">Teléfono</label>
-                <input id="sup-phone" name="phone" />
+                <Input id="sup-phone" name="phone" />
               </div>
               <div className="field full">
                 <label htmlFor="sup-email">Correo</label>
-                <input id="sup-email" name="email" type="email" />
+                <Input id="sup-email" name="email" type="email" />
               </div>
               <div className="field full">
                 <label htmlFor="sup-terms">Condiciones</label>
-                <input id="sup-terms" name="terms" placeholder="Crédito 30 días, pedido mínimo…" />
+                <Input id="sup-terms" name="terms" placeholder="Crédito 30 días, pedido mínimo…" />
               </div>
             </div>
           </form>

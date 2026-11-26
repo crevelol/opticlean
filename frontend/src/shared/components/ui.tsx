@@ -135,7 +135,7 @@ export function Badge({ text, color = '' }: { text: ReactNode; color?: Tone | st
   return <span className={cx('badge', color)}>{text}</span>;
 }
 
-export type ButtonVariant = 'secondary' | 'primary' | 'dark' | 'danger' | 'green' | 'ghost';
+export type ButtonVariant = 'secondary' | 'primary' | 'dark' | 'danger' | 'green' | 'ghost' | 'link';
 export type ButtonSize = 'small' | 'medium' | 'large';
 
 type ButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'> & {

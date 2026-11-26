@@ -3,10 +3,13 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { product, dateShort, time } from '../../shared/lib/inventory';
 import { exportEvents } from '../../shared/lib/csv';
-import { Badge, Btn, Empty, PageHead } from '../../shared/components/ui';
+import { Badge, Btn, Empty, PageHead, Button } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
+import { SegmentedControl } from '../../shared/components/Tabs';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import '../../styles/traceability.css';
+import { ChipGroup } from '../../shared/components/Chip';
+import { SearchInput } from '../../shared/components/SearchInput';
 
 const TYPE_FILTERS = [
   { id: 'all', label: 'Todos' },
@@ -81,23 +84,22 @@ export function TraceabilityPage() {
       />
 
       {user?.role === 'admin' ? (
-        <div className="segmented" role="group" aria-label="Historial" style={{ marginBottom: 12 }}>
-          <button type="button" className={view === 'moves' ? 'active' : ''} aria-pressed={view === 'moves'} onClick={() => setView('moves')}>
-            Movimientos
-          </button>
-          <button type="button" className={view === 'changes' ? 'active' : ''} aria-pressed={view === 'changes'} onClick={() => setView('changes')}>
-            Cambios de precio y crédito
-          </button>
-        </div>
+        <SegmentedControl
+          label="Historial"
+          value={view}
+          onValueChange={setView}
+          className="trz-view-switch"
+          items={[
+            { value: 'moves', label: 'Movimientos' },
+            { value: 'changes', label: 'Cambios de precio y crédito' },
+          ]}
+        />
       ) : null}
 
       {view === 'changes' ? (
         <section className="panel trz-panel">
           <div className="trz-toolbar">
-            <div className="search-input trz-search">
-              <Icon name="search" />
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar producto, cliente, campo o usuario…" />
-            </div>
+            <SearchInput className="search-input trz-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar producto, cliente, campo o usuario…" aria-label="Buscar producto, cliente, campo o usuario" />
           </div>
           {(() => {
             const q = query.trim().toLowerCase();
@@ -133,29 +135,18 @@ export function TraceabilityPage() {
 
       <section className="panel trz-panel" style={view !== 'moves' ? { display: 'none' } : undefined}>
         <div className="trz-toolbar">
-          <div className="search-input trz-search">
-            <Icon name="search" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar producto, pedido, lote, placa…"
-            />
-          </div>
+          <SearchInput className="search-input trz-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar producto, pedido, lote, placa…" aria-label="Buscar producto, pedido, lote, placa" />
           <Badge text={`${events.length} movimientos`} color="blue" />
         </div>
 
-        <div className="trz-filters" role="group" aria-label="Tipo de movimiento">
-          {TYPE_FILTERS.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              className={type === f.id ? 'active' : ''}
-              onClick={() => setType(f.id)}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+        <ChipGroup
+          type="single"
+          label="Tipo de movimiento"
+          className="trz-filters"
+          value={type}
+          onValueChange={setType}
+          items={TYPE_FILTERS.map((item) => ({ value: item.id, label: item.label }))}
+        />
 
         {events.length ? (
           <div className="timeline trz-timeline">
@@ -181,20 +172,12 @@ export function TraceabilityPage() {
                     </small>
                     {isRoute && e.ref ? (
                       <div className="trz-actions">
-                        <button
-                          type="button"
-                          className="trz-link"
-                          onClick={() => navigate('/logistica/historial')}
-                        >
+                        <Button variant="link" className="trz-link" onClick={() => navigate('/logistica/historial')}>
                           Ver en rutas
-                        </button>
-                        <button
-                          type="button"
-                          className="trz-link"
-                          onClick={() => navigate('/pedidos')}
-                        >
+                        </Button>
+                        <Button variant="link" className="trz-link" onClick={() => navigate('/pedidos')}>
                           Ir a pedidos
-                        </button>
+                        </Button>
                       </div>
                     ) : null}
                   </div>

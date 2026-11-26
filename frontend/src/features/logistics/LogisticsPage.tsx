@@ -11,7 +11,7 @@ import {
   product,
   statusColor,
 } from '../../shared/lib/inventory';
-import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
+import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead, Button } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import type { Order } from '../../shared/types';
@@ -37,6 +37,10 @@ import {
   type Truck,
 } from './fleet';
 import '../../styles/logistics.css';
+import { Checkbox } from '../../shared/components/Checkbox';
+import { Input, Textarea } from '../../shared/components/Input';
+import { SearchInput } from '../../shared/components/SearchInput';
+import { SegmentedControl, TabPanel, Tabs } from '../../shared/components/Tabs';
 
 type MainTab = 'distribucion' | 'rutas' | 'flota';
 
@@ -71,7 +75,7 @@ export function LogisticsPage() {
 
   const applyFleet = (trucks: Truck[]) => {
     setFleet(trucks);
-    setSelectedTruck((cur) => (trucks.some((t) => t.id === cur) ? cur : trucks[0]?.id ?? ''));
+    setSelectedTruck((cur) => (trucks.some((t) => t.id === cur) ? cur : (trucks[0]?.id ?? '')));
     setFleetReady(true);
   };
 
@@ -412,44 +416,22 @@ export function LogisticsPage() {
         }
       />
 
-      <div className="log-main-tabs" role="tablist" aria-label="Secciones de logística">
-        <button
-          type="button"
-          role="tab"
-          className={mainTab === 'distribucion' ? 'is-active' : ''}
-          aria-selected={mainTab === 'distribucion'}
-          onClick={() => setMainTab('distribucion')}
-        >
-          <Icon name="truck" />
-          Distribución
-        </button>
-        <button
-          type="button"
-          role="tab"
-          className={mainTab === 'rutas' ? 'is-active' : ''}
-          aria-selected={mainTab === 'rutas'}
-          onClick={() => setMainTab('rutas')}
-        >
-          <Icon name="route" />
-          Rutas
-        </button>
-        <button
-          type="button"
-          role="tab"
-          className={mainTab === 'flota' ? 'is-active' : ''}
-          aria-selected={mainTab === 'flota'}
-          onClick={() => setMainTab('flota')}
-        >
-          <Icon name="truck" />
-          Flota
-        </button>
-      </div>
+      <Tabs
+        label="Secciones de logística"
+        value={mainTab}
+        onValueChange={setMainTab}
+        items={[
+          { value: 'distribucion', label: 'Distribución', icon: 'truck' },
+          { value: 'rutas', label: 'Rutas', icon: 'route' },
+          { value: 'flota', label: 'Flota', icon: 'truck' },
+        ]}
+      >
 
-      {mainTab === 'flota' ? (
-        <FleetManagePanel onFleetChange={applyFleet} />
-      ) : null}
+      <TabPanel value="flota">
+<FleetManagePanel onFleetChange={applyFleet} />
+</TabPanel>
 
-      {mainTab === 'rutas' ? (
+      <TabPanel value="rutas">
         <section className="log-panel log-routes-tab" aria-label="Rutas previstas">
           <div className="log-trucks-head">
             <h3>
@@ -530,461 +512,430 @@ export function LogisticsPage() {
             </ul>
           )}
         </section>
-      ) : null}
+</TabPanel>
 
-      {mainTab === 'distribucion' ? (
+      <TabPanel value="distribucion">
         <>
-      <KpiGrid label="Resumen de distribución">
-        <Kpi
-          label="Total de pedidos"
-          icon="orders"
-          value={activeOrders.length}
-          caption="en operación"
-        />
-        <Kpi
-          label="Volumen total"
-          icon="box"
-          value={totalVolume.toFixed(1)}
-          unit="m³"
-          caption={`de ${fleetMaxVolume} m³`}
-        />
-        <Kpi
-          label="Peso total"
-          icon="truck"
-          value={Math.round(totalWeight).toLocaleString('es-EC')}
-          unit="kg"
-          caption={`de ${fleetMaxWeight.toLocaleString('es-EC')} kg`}
-        />
-        <Kpi
-          label="Tiempo estimado"
-          icon="route"
-          value={fmtHours(avgEta)}
-          caption="promedio de entrega"
-        />
-      </KpiGrid>
-
-      <div className="log-layout">
-        <section className="log-panel" aria-label="Pedidos por ciudad">
-          <header>
-            <h2>Pedidos por ciudad / sector</h2>
-            <p>
-              En Pendientes usa <strong>Marcar listo</strong>. Luego arrastra los Listos al camión o
-              usa IA autoasignar.
-            </p>
-          </header>
-
-          <div className="log-list-tabs" role="tablist" aria-label="Estado de pedidos">
-            <button
-              type="button"
-              role="tab"
-              className={listTab === 'pendientes' ? 'is-active' : ''}
-              aria-selected={listTab === 'pendientes'}
-              onClick={() => setListTab('pendientes')}
-            >
-              Pendientes <span>{tabCounts.pendientes}</span>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              className={listTab === 'listos' ? 'is-active' : ''}
-              aria-selected={listTab === 'listos'}
-              onClick={() => setListTab('listos')}
-            >
-              Listos <span>{tabCounts.listos}</span>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              className={listTab === 'en_ruta' ? 'is-active' : ''}
-              aria-selected={listTab === 'en_ruta'}
-              onClick={() => setListTab('en_ruta')}
-            >
-              En ruta <span>{tabCounts.enRuta}</span>
-            </button>
-          </div>
-
-          <label className="log-search">
-            <Icon name="search" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar ciudad o sector..."
-              aria-label="Buscar ciudad o sector"
+          <KpiGrid label="Resumen de distribución">
+            <Kpi
+              label="Total de pedidos"
+              icon="orders"
+              value={activeOrders.length}
+              caption="en operación"
             />
-          </label>
+            <Kpi
+              label="Volumen total"
+              icon="box"
+              value={totalVolume.toFixed(1)}
+              unit="m³"
+              caption={`de ${fleetMaxVolume} m³`}
+            />
+            <Kpi
+              label="Peso total"
+              icon="truck"
+              value={Math.round(totalWeight).toLocaleString('es-EC')}
+              unit="kg"
+              caption={`de ${fleetMaxWeight.toLocaleString('es-EC')} kg`}
+            />
+            <Kpi
+              label="Tiempo estimado"
+              icon="route"
+              value={fmtHours(avgEta)}
+              caption="promedio de entrega"
+            />
+          </KpiGrid>
 
-          {grouped.length ? (
-            <ul className="log-cities">
-              {grouped.map(([city, orders]) => {
-                const open = openCities[city] ?? true;
-                return (
-                  <li key={city} className={`log-city ${open ? 'is-open' : ''}`}>
-                    <button
-                      type="button"
-                      className="log-city-toggle"
-                      onClick={() => setOpenCities((prev) => ({ ...prev, [city]: !open }))}
-                    >
-                      <Icon name="chevron" className="log-city-chevron" />
-                      <strong>{city}</strong>
-                      <span className="log-city-count">
-                        {orders.length} {orders.length === 1 ? 'pedido' : 'pedidos'}
-                      </span>
-                    </button>
-                    {open ? (
-                      <ul className="log-orders">
-                        {orders.map((o) => {
-                          const selectable = o.status === 'Preparado' && !stagedIds.has(o.id);
-                          const selected = selectedOrders.includes(o.id);
-                          const pkgs = packagesOf(o);
-                          return (
-                            <li
-                              key={o.id}
-                              className={`log-order ${selected ? 'is-selected' : ''} ${draggingId === o.id ? 'is-dragging' : ''} ${selectable ? 'is-draggable' : ''}`}
-                              draggable={selectable}
-                              onDragStart={(e) => {
-                                if (!selectable) return;
-                                setDraggingId(o.id);
-                                e.dataTransfer.setData('text/plain', o.id);
-                                e.dataTransfer.effectAllowed = 'move';
-                                if (!selectedOrders.includes(o.id)) {
-                                  setSelectedOrders((prev) => [...prev, o.id]);
-                                }
-                              }}
-                              onDragEnd={() => {
-                                setDraggingId(null);
-                                setDropTarget(null);
-                              }}
-                            >
-                              <input
-                                className="log-order-check"
-                                type="checkbox"
-                                checked={selected}
-                                disabled={!selectable}
-                                onClick={(e) => e.stopPropagation()}
-                                onChange={() => toggleOrder(o.id)}
-                                aria-label={`Seleccionar ${o.id}`}
-                              />
-                              <button
-                                type="button"
-                                className="log-order-main"
-                                onClick={() => setDetailId(o.id)}
-                              >
-                                <span>
-                                  <strong>Pedido {o.id.replace('PED-', '#')}</strong>
-                                  <small>
-                                    {sectorOf(state, o)} · {client(state, o.clientId)?.name} ·{' '}
-                                    {orderWeight(state, o).toFixed(1)} kg
-                                  </small>
-                                </span>
-                                <span className="log-order-meta">
-                                  <span className={`log-status log-status-${statusTone(o.status)}`}>
-                                    {statusLabel(o.status)}
-                                  </span>
-                                  <em>
-                                    {pkgs} {pkgs === 1 ? 'paquete' : 'paquetes'}
-                                  </em>
-                                </span>
-                              </button>
-                              {o.status === 'Por preparar' ? (
-                                <button
-                                  type="button"
-                                  className="log-order-ready btn small primary"
-                                  disabled={preparingId === o.id}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void markReady(o.id);
+          <div className="log-layout">
+            <section className="log-panel" aria-label="Pedidos por ciudad">
+              <header>
+                <h2>Pedidos por ciudad / sector</h2>
+                <p>
+                  En Pendientes usa <strong>Marcar listo</strong>. Luego arrastra los Listos al
+                  camión o usa IA autoasignar.
+                </p>
+              </header>
+
+              <SegmentedControl
+                label="Estado de pedidos"
+                full
+                value={listTab}
+                onValueChange={setListTab}
+                items={[
+                  { value: 'pendientes', label: 'Pendientes', count: tabCounts.pendientes },
+                  { value: 'listos', label: 'Listos', count: tabCounts.listos },
+                  { value: 'en_ruta', label: 'En ruta', count: tabCounts.enRuta },
+                ]}
+                className="log-list-filter"
+              />
+
+              <SearchInput className="log-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar ciudad o sector..." aria-label="Buscar ciudad o sector" />
+
+              {grouped.length ? (
+                <ul className="log-cities">
+                  {grouped.map(([city, orders]) => {
+                    const open = openCities[city] ?? true;
+                    return (
+                      <li key={city} className={`log-city ${open ? 'is-open' : ''}`}>
+                        <button
+                          type="button"
+                          className="log-city-toggle"
+                          onClick={() => setOpenCities((prev) => ({ ...prev, [city]: !open }))}
+                        >
+                          <Icon name="chevron" className="log-city-chevron" />
+                          <strong>{city}</strong>
+                          <span className="log-city-count">
+                            {orders.length} {orders.length === 1 ? 'pedido' : 'pedidos'}
+                          </span>
+                        </button>
+                        {open ? (
+                          <ul className="log-orders">
+                            {orders.map((o) => {
+                              const selectable = o.status === 'Preparado' && !stagedIds.has(o.id);
+                              const selected = selectedOrders.includes(o.id);
+                              const pkgs = packagesOf(o);
+                              return (
+                                <li
+                                  key={o.id}
+                                  className={`log-order ${selected ? 'is-selected' : ''} ${draggingId === o.id ? 'is-dragging' : ''} ${selectable ? 'is-draggable' : ''}`}
+                                  draggable={selectable}
+                                  onDragStart={(e) => {
+                                    if (!selectable) return;
+                                    setDraggingId(o.id);
+                                    e.dataTransfer.setData('text/plain', o.id);
+                                    e.dataTransfer.effectAllowed = 'move';
+                                    if (!selectedOrders.includes(o.id)) {
+                                      setSelectedOrders((prev) => [...prev, o.id]);
+                                    }
+                                  }}
+                                  onDragEnd={() => {
+                                    setDraggingId(null);
+                                    setDropTarget(null);
                                   }}
                                 >
-                                  <Icon name="check" />
-                                  {preparingId === o.id ? 'Preparando…' : 'Marcar listo'}
-                                </button>
-                              ) : null}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="log-empty">
-              {listTab === 'listos'
-                ? 'No hay pedidos listos por asignar.'
-                : listTab === 'pendientes'
-                  ? 'No hay pedidos pendientes de preparar.'
-                  : 'No hay pedidos en ruta.'}
-            </p>
-          )}
-        </section>
+                                  <Checkbox className="log-order-check" checked={selected} disabled={!selectable} onClick={(e) => e.stopPropagation()} onCheckedChange={() => toggleOrder(o.id)} aria-label={`Seleccionar ${o.id}`} />
+                                  <button
+                                    type="button"
+                                    className="log-order-main"
+                                    onClick={() => setDetailId(o.id)}
+                                  >
+                                    <span>
+                                      <strong>Pedido {o.id.replace('PED-', '#')}</strong>
+                                      <small>
+                                        {sectorOf(state, o)} · {client(state, o.clientId)?.name} ·{' '}
+                                        {orderWeight(state, o).toFixed(1)} kg
+                                      </small>
+                                    </span>
+                                    <span className="log-order-meta">
+                                      <span
+                                        className={`log-status log-status-${statusTone(o.status)}`}
+                                      >
+                                        {statusLabel(o.status)}
+                                      </span>
+                                      <em>
+                                        {pkgs} {pkgs === 1 ? 'paquete' : 'paquetes'}
+                                      </em>
+                                    </span>
+                                  </button>
+                                  {o.status === 'Por preparar' ? (
+                                    <Button variant="primary" size="small" className="log-order-ready" type="button" disabled={preparingId === o.id} onClick={(e) => {
+                                        e.stopPropagation();
+                                        void markReady(o.id);
+                                      }}>
+                                      <Icon name="check" />
+                                      {preparingId === o.id ? 'Preparando…' : 'Marcar listo'}
+                                    </Button>
+                                  ) : null}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="log-empty">
+                  {listTab === 'listos'
+                    ? 'No hay pedidos listos por asignar.'
+                    : listTab === 'pendientes'
+                      ? 'No hay pedidos pendientes de preparar.'
+                      : 'No hay pedidos en ruta.'}
+                </p>
+              )}
+            </section>
 
-        <aside className="log-side">
-          <section className="log-assign" aria-label="Resumen de la asignación">
-            <h3>Resumen de la asignación</h3>
-            <div className="log-assign-row">
-              <div>
-                <span>Volumen asignado</span>
-                <strong>
-                  {assignedVolume.toFixed(1)} m³ · {volPct}%
-                </strong>
-              </div>
-              <div
-                className={`log-bar ${volPct >= 95 ? 'is-red' : volPct > 55 ? 'is-amber' : 'is-green'}`}
-              >
-                <span style={{ width: `${volPct}%` }} />
-              </div>
-            </div>
-            <div className="log-assign-row">
-              <div>
-                <span>Peso asignado</span>
-                <strong>
-                  {Math.round(assignedWeight).toLocaleString('es-EC')} kg · {kgPct}%
-                </strong>
-              </div>
-              <div
-                className={`log-bar ${kgPct >= 95 ? 'is-red' : kgPct > 55 ? 'is-amber' : 'is-green'}`}
-              >
-                <span style={{ width: `${kgPct}%` }} />
-              </div>
-            </div>
-          </section>
+            <aside className="log-side">
+              <section className="log-assign" aria-label="Resumen de la asignación">
+                <h3>Resumen de la asignación</h3>
+                <div className="log-assign-row">
+                  <div>
+                    <span>Volumen asignado</span>
+                    <strong>
+                      {assignedVolume.toFixed(1)} m³ · {volPct}%
+                    </strong>
+                  </div>
+                  <div
+                    className={`log-bar ${volPct >= 95 ? 'is-red' : volPct > 55 ? 'is-amber' : 'is-green'}`}
+                  >
+                    <span style={{ width: `${volPct}%` }} />
+                  </div>
+                </div>
+                <div className="log-assign-row">
+                  <div>
+                    <span>Peso asignado</span>
+                    <strong>
+                      {Math.round(assignedWeight).toLocaleString('es-EC')} kg · {kgPct}%
+                    </strong>
+                  </div>
+                  <div
+                    className={`log-bar ${kgPct >= 95 ? 'is-red' : kgPct > 55 ? 'is-amber' : 'is-green'}`}
+                  >
+                    <span style={{ width: `${kgPct}%` }} />
+                  </div>
+                </div>
+              </section>
 
-          <section className="log-panel log-trucks" aria-label="Camiones disponibles">
-            <div className="log-trucks-head">
-              <h3>
-                <Icon name="truck" />
-                Vehículos disponibles
-              </h3>
-              <button
-                type="button"
-                className="log-filter-btn"
-                onClick={() => setMainTab('flota')}
-              >
-                <Icon name="settings" />
-                Gestión de flota
-              </button>
-            </div>
-            {fleetReady && !fleet.length ? (
-              <Empty
-                title="Sin vehículos"
-                desc="Agrega camiones en Gestión de flota para asignar pedidos."
-              />
-            ) : null}
-            <ul className="log-truck-list">
-              {fleet.map((t) => {
-                const load = truckLoad(t);
-                const active = selectedTruck === t.id;
-                const tone =
-                  load.status === 'full' ? 'red' : load.status === 'partial' ? 'amber' : 'green';
-                const isDrop = dropTarget === t.id;
-                return (
-                  <li key={t.id}>
-                    <div
-                      className={`log-truck log-truck-${tone} ${active ? 'is-active' : ''} ${isDrop ? 'is-drop-target' : ''}`}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setSelectedTruck(t.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          setSelectedTruck(t.id);
-                        }
-                      }}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = 'move';
-                        setDropTarget(t.id);
-                        setSelectedTruck(t.id);
-                      }}
-                      onDragLeave={() => {
-                        setDropTarget((prev) => (prev === t.id ? null : prev));
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        const dropped = e.dataTransfer.getData('text/plain');
-                        const ids = readySelected.includes(dropped)
-                          ? readySelected
-                          : dropped
-                            ? [...readySelected, dropped]
-                            : readySelected;
-                        stageToTruck(t.id, ids);
-                      }}
-                    >
-                      <div className="log-truck-top">
-                        <div className="log-truck-title">
-                          <span className={`log-truck-icon log-truck-icon-${tone}`}>
-                            <Icon name={vehicleIconName(t)} />
-                          </span>
-                          <strong>
-                            {t.label} · {vehicleKindLabel(t)} - {t.city}
-                          </strong>
-                        </div>
-                        <span className={`log-truck-badge ${load.status}`}>
-                          <i aria-hidden />
-                          {load.label}
-                        </span>
-                      </div>
-
-                      <div className="log-truck-metrics">
-                        <div>
-                          <span>Capacidad (kg)</span>
-                          <strong>{t.maxKg.toLocaleString('es-EC')}</strong>
-                        </div>
-                        <div>
-                          <span>Volumen (m³)</span>
-                          <strong>{t.maxM3}</strong>
-                        </div>
-                        <div>
-                          <span>Costo por km</span>
-                          <strong>
-                            ${t.costPerKm.toFixed(2)}
-                            {t.costFromRules ? '/km*' : '/km'}
-                          </strong>
-                        </div>
-                        <div>
-                          <span>Odómetro</span>
-                          <strong>{(t.odometerKm ?? 0).toLocaleString('es-EC')} km</strong>
-                        </div>
-                      </div>
-                      <p className="log-truck-zones">
-                        <strong>Zonas:</strong>{' '}
-                        {t.allowedSectors?.length
-                          ? t.allowedSectors.join(', ')
-                          : 'Sin restricción de sector'}
-                      </p>
-
-                      <div className={`log-truck-bar log-bar is-${tone}`}>
-                        <span style={{ width: `${Math.max(load.pct, load.kg > 0 ? 2 : 0)}%` }} />
-                      </div>
-                      <div className="log-truck-foot">
-                        <em>
-                          {load.kg.toLocaleString('es-EC')} kg | {load.m3.toFixed(1)} m³
-                          {load.pending.length ? ` · ${load.pending.length} en carga` : ''}
-                        </em>
-                        <strong>{load.pct}%</strong>
-                      </div>
-                      {isDrop ? (
-                        <p className="log-drop-hint">Suelta aquí para cargar en el camión</p>
-                      ) : null}
-
-                      {active ? (
-                        <div className="log-truck-actions">
-                          {readySelected.length ? (
-                            <Btn icon="plus" onClick={() => stageToTruck(t.id, readySelected)}>
-                              Cargar seleccionados
-                            </Btn>
-                          ) : null}
-                          <Btn
-                            icon="orders"
-                            onClick={() => {
+              <section className="log-panel log-trucks" aria-label="Camiones disponibles">
+                <div className="log-trucks-head">
+                  <h3>
+                    <Icon name="truck" />
+                    Vehículos disponibles
+                  </h3>
+                  <Button size="small" className="log-filter-btn" onClick={() => setMainTab('flota')}>
+                    <Icon name="settings" />
+                    Gestión de flota
+                  </Button>
+                </div>
+                {fleetReady && !fleet.length ? (
+                  <Empty
+                    title="Sin vehículos"
+                    desc="Agrega camiones en Gestión de flota para asignar pedidos."
+                  />
+                ) : null}
+                <ul className="log-truck-list">
+                  {fleet.map((t) => {
+                    const load = truckLoad(t);
+                    const active = selectedTruck === t.id;
+                    const tone =
+                      load.status === 'full'
+                        ? 'red'
+                        : load.status === 'partial'
+                          ? 'amber'
+                          : 'green';
+                    const isDrop = dropTarget === t.id;
+                    return (
+                      <li key={t.id}>
+                        <div
+                          className={`log-truck log-truck-${tone} ${active ? 'is-active' : ''} ${isDrop ? 'is-drop-target' : ''}`}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setSelectedTruck(t.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
                               setSelectedTruck(t.id);
-                              setPedidosTruckId(t.id);
-                            }}
-                          >
-                            Pedidos ({load.pending.length + load.orders.length})
-                          </Btn>
-                          <Btn
-                            variant="primary"
-                            icon="truck"
-                            disabled={!load.pending.length || assigning}
-                            onClick={() => void sendTruck(t.id)}
-                          >
-                            {assigning ? 'Enviando…' : 'Enviar camión'}
-                          </Btn>
-                          {load.orders
-                            .filter((o) => o.status === 'En ruta' || o.status === 'Incidencia')
-                            .slice(0, 1)
-                            .map((o) => (
+                            }
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'move';
+                            setDropTarget(t.id);
+                            setSelectedTruck(t.id);
+                          }}
+                          onDragLeave={() => {
+                            setDropTarget((prev) => (prev === t.id ? null : prev));
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            const dropped = e.dataTransfer.getData('text/plain');
+                            const ids = readySelected.includes(dropped)
+                              ? readySelected
+                              : dropped
+                                ? [...readySelected, dropped]
+                                : readySelected;
+                            stageToTruck(t.id, ids);
+                          }}
+                        >
+                          <div className="log-truck-top">
+                            <div className="log-truck-title">
+                              <span className={`log-truck-icon log-truck-icon-${tone}`}>
+                                <Icon name={vehicleIconName(t)} />
+                              </span>
+                              <strong>
+                                {t.label} · {vehicleKindLabel(t)} - {t.city}
+                              </strong>
+                            </div>
+                            <span className={`log-truck-badge ${load.status}`}>
+                              <i aria-hidden />
+                              {load.label}
+                            </span>
+                          </div>
+
+                          <div className="log-truck-metrics">
+                            <div>
+                              <span>Capacidad (kg)</span>
+                              <strong>{t.maxKg.toLocaleString('es-EC')}</strong>
+                            </div>
+                            <div>
+                              <span>Volumen (m³)</span>
+                              <strong>{t.maxM3}</strong>
+                            </div>
+                            <div>
+                              <span>Costo por km</span>
+                              <strong>
+                                ${t.costPerKm.toFixed(2)}
+                                {t.costFromRules ? '/km*' : '/km'}
+                              </strong>
+                            </div>
+                            <div>
+                              <span>Odómetro</span>
+                              <strong>{(t.odometerKm ?? 0).toLocaleString('es-EC')} km</strong>
+                            </div>
+                          </div>
+                          <p className="log-truck-zones">
+                            <strong>Zonas:</strong>{' '}
+                            {t.allowedSectors?.length
+                              ? t.allowedSectors.join(', ')
+                              : 'Sin restricción de sector'}
+                          </p>
+
+                          <div className={`log-truck-bar log-bar is-${tone}`}>
+                            <span
+                              style={{ width: `${Math.max(load.pct, load.kg > 0 ? 2 : 0)}%` }}
+                            />
+                          </div>
+                          <div className="log-truck-foot">
+                            <em>
+                              {load.kg.toLocaleString('es-EC')} kg | {load.m3.toFixed(1)} m³
+                              {load.pending.length ? ` · ${load.pending.length} en carga` : ''}
+                            </em>
+                            <strong>{load.pct}%</strong>
+                          </div>
+                          {isDrop ? (
+                            <p className="log-drop-hint">Suelta aquí para cargar en el camión</p>
+                          ) : null}
+
+                          {active ? (
+                            <div className="log-truck-actions">
+                              {readySelected.length ? (
+                                <Btn icon="plus" onClick={() => stageToTruck(t.id, readySelected)}>
+                                  Cargar seleccionados
+                                </Btn>
+                              ) : null}
                               <Btn
-                                key={o.id}
-                                icon="check"
-                                variant="green"
+                                icon="orders"
                                 onClick={() => {
-                                  setError('');
-                                  setDeliveryOrder(o.id);
+                                  setSelectedTruck(t.id);
+                                  setPedidosTruckId(t.id);
                                 }}
                               >
-                                Confirmar entrega
+                                Pedidos ({load.pending.length + load.orders.length})
                               </Btn>
-                            ))}
-                          {load.orders.some((o) => o.status === 'En ruta') ? (
-                            <Btn
-                              icon="alert"
-                              onClick={() => {
-                                const o = load.orders.find((x) => x.status === 'En ruta');
-                                if (!o) return;
-                                setError('');
-                                setIncidentOrder(o.id);
-                              }}
-                            >
-                              Novedad
-                            </Btn>
+                              <Btn
+                                variant="primary"
+                                icon="truck"
+                                disabled={!load.pending.length || assigning}
+                                onClick={() => void sendTruck(t.id)}
+                              >
+                                {assigning ? 'Enviando…' : 'Enviar camión'}
+                              </Btn>
+                              {load.orders
+                                .filter((o) => o.status === 'En ruta' || o.status === 'Incidencia')
+                                .slice(0, 1)
+                                .map((o) => (
+                                  <Btn
+                                    key={o.id}
+                                    icon="check"
+                                    variant="green"
+                                    onClick={() => {
+                                      setError('');
+                                      setDeliveryOrder(o.id);
+                                    }}
+                                  >
+                                    Confirmar entrega
+                                  </Btn>
+                                ))}
+                              {load.orders.some((o) => o.status === 'En ruta') ? (
+                                <Btn
+                                  icon="alert"
+                                  onClick={() => {
+                                    const o = load.orders.find((x) => x.status === 'En ruta');
+                                    if (!o) return;
+                                    setError('');
+                                    setIncidentOrder(o.id);
+                                  }}
+                                >
+                                  Novedad
+                                </Btn>
+                              ) : null}
+                            </div>
                           ) : null}
                         </div>
-                      ) : null}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
 
-          <section className="log-panel log-routes" aria-label="Rutas previstas">
-            <div className="log-trucks-head">
-              <h3>
-                <Icon name="route" />
-                Rutas previstas
-              </h3>
-              <div className="log-routes-actions">
-                <Btn icon="route" onClick={() => setMainTab('rutas')}>
-                  Ver todas
-                </Btn>
-                <Btn icon="history" onClick={() => navigate('/logistica/historial')}>
-                  Historial
-                </Btn>
-              </div>
-            </div>
-            {!fleet.length ? (
-              <Empty
-                title="Sin vista previa"
-                desc="Cuando tengas vehículos y pedidos asignados, aquí verás las rutas."
-              />
-            ) : (
-            <ul className="log-planned-list">
-              {fleet.map((t) => (
-                <li key={t.id} className="log-planned-card">
-                  <div className="log-planned-row">
-                    <span className="log-planned-icon" aria-hidden>
-                      <Icon name="route" />
-                    </span>
-                    <div className="log-planned-copy">
-                      <strong>Ruta prevista</strong>
-                      <small>
-                        {fmtHours(t.etaHours)} · {moneyFmt(truckRouteCost(t))} estimados
-                      </small>
-                    </div>
-                    <button
-                      type="button"
-                      className="log-planned-link"
-                      onClick={() => navigate('/logistica/rutas', { state: { truckId: t.id } })}
-                    >
-                      Ver ruta
-                      <Icon name="external" />
-                    </button>
+              <section className="log-panel log-routes" aria-label="Rutas previstas">
+                <div className="log-trucks-head">
+                  <h3>
+                    <Icon name="route" />
+                    Rutas previstas
+                  </h3>
+                  <div className="log-routes-actions">
+                    <Btn icon="route" onClick={() => setMainTab('rutas')}>
+                      Ver todas
+                    </Btn>
+                    <Btn icon="history" onClick={() => navigate('/logistica/historial')}>
+                      Historial
+                    </Btn>
                   </div>
-                  <p className="log-planned-meta">
-                    {t.label} · {vehicleKindLabel(t)} · {t.city}
-                  </p>
-                </li>
-              ))}
-            </ul>
-            )}
-          </section>
-        </aside>
-      </div>
+                </div>
+                {!fleet.length ? (
+                  <Empty
+                    title="Sin vista previa"
+                    desc="Cuando tengas vehículos y pedidos asignados, aquí verás las rutas."
+                  />
+                ) : (
+                  <ul className="log-planned-list">
+                    {fleet.map((t) => (
+                      <li key={t.id} className="log-planned-card">
+                        <div className="log-planned-row">
+                          <span className="log-planned-icon" aria-hidden>
+                            <Icon name="route" />
+                          </span>
+                          <div className="log-planned-copy">
+                            <strong>Ruta prevista</strong>
+                            <small>
+                              {fmtHours(t.etaHours)} · {moneyFmt(truckRouteCost(t))} estimados
+                            </small>
+                          </div>
+                          <button
+                            type="button"
+                            className="log-planned-link"
+                            onClick={() =>
+                              navigate('/logistica/rutas', { state: { truckId: t.id } })
+                            }
+                          >
+                            Ver ruta
+                            <Icon name="external" />
+                          </button>
+                        </div>
+                        <p className="log-planned-meta">
+                          {t.label} · {vehicleKindLabel(t)} · {t.city}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            </aside>
+          </div>
         </>
-      ) : null}
+</TabPanel>
+      </Tabs>
 
       {detail ? (
         <Modal
@@ -1224,15 +1175,15 @@ export function LogisticsPage() {
             <input type="hidden" name="orderId" value={deliveryOrder} />
             <div className="field">
               <label htmlFor="delivery-person">Quien recibe</label>
-              <input id="delivery-person" name="person" required />
+              <Input id="delivery-person" name="person" required />
             </div>
             <div className="field">
               <label htmlFor="delivery-code">Código que dicta el cliente</label>
-              <input id="delivery-code" name="code" inputMode="numeric" autoComplete="off" />
+              <Input id="delivery-code" name="code" inputMode="numeric" autoComplete="off" />
             </div>
             <div className="field">
               <label htmlFor="delivery-notes">Observaciones</label>
-              <textarea id="delivery-notes" name="notes" />
+              <Textarea id="delivery-notes" name="notes" />
             </div>
             {error ? <div className="form-error visible">{error}</div> : null}
           </form>
@@ -1265,7 +1216,7 @@ export function LogisticsPage() {
             </div>
             <div className="field">
               <label htmlFor="incident-notes">Detalle</label>
-              <textarea id="incident-notes" name="notes" />
+              <Textarea id="incident-notes" name="notes" />
             </div>
             {error ? <div className="form-error visible">{error}</div> : null}
           </form>
@@ -1301,8 +1252,8 @@ export function LogisticsPage() {
                   </h4>
                   <small>
                     Cap. {t?.maxKg.toLocaleString('es-EC')} kg / {t?.maxM3} m³ · ${t?.costPerKm}/km
-                    {t?.costPerTrip ? ` + ${moneyFmt(t.costPerTrip)}/viaje` : ''}
-                    · {ids.length} pedido(s)
+                    {t?.costPerTrip ? ` + ${moneyFmt(t.costPerTrip)}/viaje` : ''}· {ids.length}{' '}
+                    pedido(s)
                   </small>
                   <ul>
                     {items.map((a) => (
@@ -1337,7 +1288,6 @@ export function LogisticsPage() {
           </div>
         </Modal>
       ) : null}
-
     </div>
   );
 }

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Select } from '../../shared/components/Select';
-import { Icon } from '../../shared/components/Icon';
 import type { AppState, Location, WarehouseLayout } from '../../shared/types';
 import { scopedLots } from '../../shared/lib/inventory';
 import { WarehouseFloorPlan, type RackStats } from './WarehouseFloorPlan';
+import { Tooltip } from '../../shared/components/Tooltip';
+import { ChipGroup } from '../../shared/components/Chip';
+import { IconButton } from '../../shared/components/IconButton';
 
 type Props = {
   state: AppState;
@@ -101,41 +103,47 @@ export function WarehousePositioning({ state, layout, locations, selectedLoc, le
         </Select>
       </div>
 
-      <div className="positioning-filters" role="group" aria-label="Filtrar ubicaciones por disponibilidad">
-        {filters.map((filter) => <button key={filter.id} type="button" aria-pressed={availability === filter.id} className={`is-${filter.id}${availability === filter.id ? ' active' : ''}`} onClick={() => {
-          setAvailability(filter.id);
-          const next = levelLocations.find((location) => isVisible(location, filter.id)) ?? rackLocations.find((location) => isVisible(location, filter.id));
+      <ChipGroup
+        type="single"
+        label="Filtrar ubicaciones por disponibilidad"
+        className="positioning-filters"
+        value={availability}
+        onValueChange={(id) => {
+          setAvailability(id);
+          const next =
+            levelLocations.find((location) => isVisible(location, id)) ??
+            rackLocations.find((location) => isVisible(location, id));
           if (next && !(next.id === selectedLoc)) {
-            const stillOk = rackLocations.some((location) => location.id === selectedLoc && isVisible(location, filter.id));
+            const stillOk = rackLocations.some((location) => location.id === selectedLoc && isVisible(location, id));
             if (!stillOk) onSelect(next.id);
           }
-        }}>{filter.label}<span>{rackLocations.filter((location) => isVisible(location, filter.id)).length}</span></button>)}
-      </div>
+        }}
+        items={filters.map((filter) => ({
+          value: filter.id,
+          label: filter.label,
+          count: rackLocations.filter((location) => isVisible(location, filter.id)).length,
+          tone: filter.id === 'free' ? 'success' : filter.id === 'occupied' ? 'info' : filter.id === 'full' ? 'warning' : undefined,
+        }))}
+      />
 
       <div className="level-pager" role="navigation" aria-label="Niveles del rack">
-        <button type="button" className="level-pager-arrow" aria-label="Nivel anterior" disabled={level !== 'all' || shownLevel <= 1} onClick={() => goToLevel(shownLevel - 1)}>
-          <Icon name="chevron-left" />
-        </button>
+        <IconButton icon="chevron-left" label="Nivel anterior" className="level-pager-arrow" disabled={level !== 'all' || shownLevel <= 1} onClick={() => goToLevel(shownLevel - 1)} />
         <div className="level-pager-pages">
           {levelNumbers.map((value) => {
             const info = levelStats(value);
             const active = value === shownLevel;
-            return <button
-              key={value}
+            return <Tooltip key={value} content={`Nivel ${value}: ${info.occupied}/${info.total} ocupadas`}><button
               type="button"
               aria-current={active ? 'page' : undefined}
               disabled={level !== 'all' && !active}
               className={`${active ? 'active' : ''}${query && info.hits ? ' has-hits' : ''}`}
               onClick={() => goToLevel(value)}
-              title={`Nivel ${value}: ${info.occupied}/${info.total} ocupadas`}
             >
               N{value}
-            </button>;
+            </button></Tooltip>;
           })}
         </div>
-        <button type="button" className="level-pager-arrow" aria-label="Nivel siguiente" disabled={level !== 'all' || shownLevel >= layout.levels} onClick={() => goToLevel(shownLevel + 1)}>
-          <Icon name="chevron" />
-        </button>
+        <IconButton icon="chevron" label="Nivel siguiente" className="level-pager-arrow" disabled={level !== 'all' || shownLevel >= layout.levels} onClick={() => goToLevel(shownLevel + 1)} />
       </div>
 
       <section className="positioning-level" aria-label={`Nivel ${shownLevel}`}>
@@ -154,20 +162,18 @@ export function WarehousePositioning({ state, layout, locations, selectedLoc, le
                   const item = firstProducts.get(location.id);
                   const dimmed = !isVisible(location);
                   const stateClass = quantity === 0 ? 'is-free' : quantity >= location.capacity ? 'is-full' : 'is-stock';
-                  return <button
-                    key={location.id}
+                  return <Tooltip key={location.id} content={`${location.id} · ${item?.name ?? 'Disponible'} · ${quantity}/${location.capacity} u.`}><button
                     type="button"
                     className={`position-cell ${stateClass} ${location.id === selectedLoc ? 'is-selected' : ''} ${dimmed ? 'is-dimmed' : ''} ${pickLocs.has(location.id) ? 'is-picking' : ''}`}
                     aria-pressed={location.id === selectedLoc}
                     aria-label={`${location.id}, ${quantity === 0 ? 'libre' : `${quantity} de ${location.capacity} unidades`}${item ? `, ${item.name}` : ''}. Doble clic para ver detalle.`}
-                    title={`${location.id} · ${item?.name ?? 'Disponible'} · ${quantity}/${location.capacity} u.`}
                     onClick={() => onSelect(location.id)}
                     onDoubleClick={() => onOpenDetail(location.id)}
                   >
                     <span className="cell-number">{String(location.pos).padStart(2, '0')}{face ? ` · ${face}` : ''}</span>
                     <span className="cell-quantity">{quantity ? `${quantity} u.` : 'Libre'}</span>
                     <span className="cell-product">{item?.name ?? `${location.capacity} u. disp.`}</span>
-                  </button>;
+                  </button></Tooltip>;
                 })}
               </div>
             </div>)}

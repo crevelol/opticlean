@@ -4,9 +4,13 @@ import { api, type ManagedUser } from '../../shared/api/client';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
+import { SegmentedControl } from '../../shared/components/Tabs';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import { Icon } from '../../shared/components/Icon';
 import { roleLabel } from '../../shared/auth/permissions';
+import { Switch } from '../../shared/components/Checkbox';
+import { Select } from '../../shared/components/Select';
+import { Input } from '../../shared/components/Input';
 
 const ROLES = ['ops', 'dispatch', 'driver', 'admin'] as const;
 
@@ -39,10 +43,7 @@ export function UsersPage() {
     void load();
   }, [load]);
 
-  const bodegueros = useMemo(
-    () => users.filter((u) => u.role === 'ops' && u.active),
-    [users],
-  );
+  const bodegueros = useMemo(() => users.filter((u) => u.role === 'ops' && u.active), [users]);
 
   const filtered = useMemo(() => {
     if (roleFilter === 'all') return users;
@@ -71,7 +72,7 @@ export function UsersPage() {
           email: payload.email,
           role: payload.role,
           password: payload.password || undefined,
-          truckPlate: payload.role === 'driver' ? payload.truckPlate ?? null : null,
+          truckPlate: payload.role === 'driver' ? (payload.truckPlate ?? null) : null,
           active: payload.active,
         });
         toast('Usuario actualizado.');
@@ -168,25 +169,16 @@ export function UsersPage() {
             <Icon name="users" />
             Equipo
           </span>
-          <div className="dash-tabs" role="tablist">
-            <button
-              type="button"
-              className={roleFilter === 'all' ? 'active' : ''}
-              onClick={() => setRoleFilter('all')}
-            >
-              Todos
-            </button>
-            {ROLES.map((r) => (
-              <button
-                key={r}
-                type="button"
-                className={roleFilter === r ? 'active' : ''}
-                onClick={() => setRoleFilter(r)}
-              >
-                {roleLabel[r]}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            label="Filtrar por rol"
+            size="small"
+            value={roleFilter}
+            onValueChange={setRoleFilter}
+            items={[
+              { value: 'all' as const, label: 'Todos' },
+              ...ROLES.map((r) => ({ value: r, label: roleLabel[r] })),
+            ]}
+          />
         </div>
 
         {loading ? (
@@ -247,9 +239,7 @@ export function UsersPage() {
                         ) : (
                           <Btn
                             variant="small"
-                            onClick={() =>
-                              void api.updateUser(u.id, { active: true }).then(load)
-                            }
+                            onClick={() => void api.updateUser(u.id, { active: true }).then(load)}
                           >
                             Activar
                           </Btn>
@@ -288,11 +278,11 @@ export function UsersPage() {
           <form id="user-form" onSubmit={(e) => void onSubmit(e)} className="form-grid">
             <label className="field full">
               <span>Nombre</span>
-              <input name="name" required defaultValue={edit?.name ?? ''} />
+              <Input name="name" required defaultValue={edit?.name ?? ''} />
             </label>
             <label className="field full">
               <span>Correo</span>
-              <input
+              <Input
                 name="email"
                 type="email"
                 required
@@ -302,17 +292,17 @@ export function UsersPage() {
             </label>
             <label className="field">
               <span>Rol</span>
-              <select name="role" defaultValue={edit?.role ?? 'ops'} id="user-role">
+              <Select name="role" defaultValue={edit?.role ?? 'ops'} id="user-role">
                 {ROLES.map((r) => (
                   <option key={r} value={r}>
                     {roleLabel[r]}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span>Placa (conductor)</span>
-              <input
+              <Input
                 name="truckPlate"
                 defaultValue={edit?.truckPlate ?? ''}
                 placeholder="GBA-2041"
@@ -320,7 +310,7 @@ export function UsersPage() {
             </label>
             <label className="field full">
               <span>{edit ? 'Nueva contraseña (opcional)' : 'Contraseña'}</span>
-              <input
+              <Input
                 name="password"
                 type="password"
                 minLength={8}
@@ -330,13 +320,11 @@ export function UsersPage() {
               />
             </label>
             {edit ? (
-              <label className="field full" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="checkbox"
-                  name="active"
-                  defaultChecked={edit.active}
-                  value="1"
-                />
+              <label
+                className="field full"
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+              >
+                <Switch name="active" defaultChecked={edit.active} value="1" />
                 <span>Usuario activo</span>
               </label>
             ) : null}

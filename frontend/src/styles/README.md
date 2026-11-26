@@ -32,21 +32,56 @@ igual, todo valor visual sale de [`tokens.css`](./tokens.css).
 
    | Componente   | Clase base   | Notas                                                                   |
    | ------------ | ------------ | ----------------------------------------------------------------------- |
-   | `Button`     | `.btn`       | Estilo **glass** común (degradado translúcido, blur, brillo superior, sombra de color). `variant`: secondary · primary · dark · danger · green · ghost — `size`: small · medium · large — `full` Para una variante nueva, define solo las variables `--btn-*` |
+   | `Button`     | `.btn`       | Estilo **glass** común (degradado translúcido, blur, brillo superior, sombra de color). `variant`: secondary · primary · dark · danger · green · ghost · **link** (acción de texto en línea: «Ver más», «Revisar…») — `size`: small · medium · large — `full` Para una variante nueva, define solo las variables `--btn-*` |
    | `Badge`      | `.badge`     | `color`: blue · green · amber · red · purple                            |
    | `Panel`      | `.panel`     | `title`, `subtitle`, `icon`, `actions`, `padded`                        |
    | `Field`      | `.field`     | `label`, `hint`, `error`, `full` (dentro de `.form-grid`)               |
    | `PageHead`   | `.page-head` | **Obligatoria en toda pantalla.** `eyebrow`, `title`, `desc`, `actions`; `children` para selectores de contexto bajo el título |
-   | `SearchInput`| `.search-field` | Buscador con icono dentro, limpiar animado y atajo `/` (`shortcut`)  |
+   | `Input` / `Textarea` | `.ui-input` | Texto, número, fecha, correo, contraseña. `size="small"`, `prefix`/`suffix` para unidades (USD, kg, u.); `aria-invalid` pinta el error. Úsalos dentro de `Field` o `.field` |
+   | `NumberStepper` | `.ui-stepper` | Cantidad con − / +; `min`, `max`, `step`, `label` (accesible) |
+   | `SearchInput` | `.search-field` | **Todo buscador.** Icono dentro, ✕ animado, Escape limpia, atajo `/` opcional (`shortcut`). Funciona con `value`/`onChange` igual que un input |
    | `KpiGrid` + `Kpi` | `.kpis` / `.kpi` | **Único diseño de indicadores.** `label`, `icon`, `value`, `unit`, `caption`; `tone` (primary/success/warning/danger), `progress` (0–100), `onClick`+`active` para usarlo como filtro |
-   | `Modal`      | `.modal`     | Diálogo con cabecera, cuerpo y pie                                      |
+   | `Dialog` / `Modal` | `.modal` | **Radix Dialog.** Foco atrapado y restaurado, Escape, clic fuera y ARIA ya resueltos. `size`: default · wide · fill; `busy` bloquea el cierre. Para cabeceras propias o drawers usa las piezas `DialogRoot` + `DialogContent` (`motionPreset="slide"`) + `DialogTitle` |
+   | `Select`     | `.ui-select` | **Radix Popover** + lista propia: búsqueda automática con >8 opciones, `<option>`/`<optgroup>` como hijos, `<select>` oculto para formularios. Funciona dentro de diálogos |
+   | `Tabs` + `TabPanel` | `.ui-tabs` | **Radix Tabs.** Cambian de PANEL. Línea inferior deslizante, flechas/Home/End, ARIA pestaña↔panel. Items: `value`, `label`, `icon`, `count` |
+   | `SegmentedControl` | `.ui-segmented` | **Radix Toggle Group.** Filtran o cambian la VISTA del mismo contenido (estado, Lista/Tarjetas, periodo). Pastilla glass deslizante; `size="small"`, `full`, `tone` por segmento |
+   | `Menu` + `MoreButton` | `.ui-menu` | **Radix Dropdown Menu.** Escape, clic fuera, flechas y foco devuelto al botón. `items`: `label`, `icon`, `hint`, `tone: 'danger'`, `onSelect`, `'separator'`. `MoreButton` es el "⋮" estándar de acciones de fila. Para el chevron de un botón que abre menú usa `<Icon name="chevron" className="ui-menu-chevron" />` |
+   | `Checkbox` | `.ui-checkbox` | **Radix Checkbox.** Seleccionar elementos u opciones puntuales. `checked`/`onCheckedChange(boolean)`, `indeterminate`, `label`, `hint`; con `name`/`value` sigue llegando a `FormData` |
+   | `Switch` | `.ui-switch` | **Radix Switch.** Activar/desactivar una configuración (Activo, Inspección…). Misma API que `Checkbox` |
+   | `Tooltip` | `.ui-tooltip` | **Radix Tooltip.** Sustituye al `title` nativo: aparece con hover **y con teclado**, se enlaza con `aria-describedby`. `content` vacío = sin tooltip; envuelve solo los botones deshabilitados para que también lo muestren. No uses `title=` en elementos para tooltips |
+   | `IconButton` | `.icon-btn` | Botón de solo icono. `icon` y `label` obligatorios (aria-label + tooltip automático). `variant`: ghost · secondary; `size`: small · medium |
+   | `Pagination` | `.ui-pagination` | «Mostrando a–b de n» + páginas (con «…» si son muchas). `page`, `pageCount`, `total`, `pageSize`, `onPageChange` |
+   | `ChipGroup` | `.ui-chip-group` | **Radix Toggle Group.** Píldoras de filtro: `type="single"` (siempre una activa) o `type="multiple"`. Items con `count`, `icon`, `leading` y `tone` (color del contador). Para pocas opciones compactas usa `SegmentedControl` |
+   | `RemovableChip` | `.ui-chip.is-static` | Etiqueta con ✕ para quitarla (`onRemove`) |
+   | `ActionBar` | `.ui-actionbar` | Barra de acciones fija al pie del contenido (documentos y formularios largos). `info` a la izquierda; botones como hijos, la acción principal al final |
+   | `WizardSteps` + `WizardFooter` | `.ui-wizard-*` | **Todo flujo por pasos.** Ver «Flujos por pasos» |
    | `Empty`      | `.empty-state` | Estado vacío                                                          |
 
    **No redefinas** altura, padding ni tamaño de letra de `.btn`, `.badge` o `.panel` dentro
    de un módulo: elige la variante/tamaño adecuado. Ajustes de layout (`width`, `flex`,
    márgenes) sí están bien.
 
-4. **Fuente:** Inter (cargada en `index.html`), con `--font-sans` y `--font-mono`.
+4. **No pongas la clase `page` dentro de una pantalla:** el shell ya aporta ese margen y
+   se duplicaría.
+
+5. **Fuente:** Inter (cargada en `index.html`), con `--font-sans` y `--font-mono`.
+
+## Flujos por pasos
+
+Todo formulario de creación por pasos usa [`Wizard.tsx`](../shared/components/Wizard.tsx):
+Recepción, Nuevo pedido, editor de bodega y ficha de producto son los ejemplos.
+
+| Pieza             | Para qué                                                                    |
+| ----------------- | --------------------------------------------------------------------------- |
+| `WizardSteps`     | Indicador. `steps` (`title`, `subtitle`), `current` (desde 0), `onSelect`. Por defecto solo se vuelve a pasos hechos; ajusta con `canSelect`, `isDone`, `hasError` |
+| `WizardFooter`    | «Paso x de n» · Cancelar o Atrás · `primary`. `info` sustituye el texto; los hijos son botones secundarios. Para enviar un formulario: `type: 'submit'` + `form` |
+| `useStepFocus`    | Devuelve la ref que recibe el foco al cambiar de paso: ponla en el título o en el contenedor del paso. Un formulario puede enfocar su primer campo en su lugar (ficha de producto) |
+| `useDiscardGuard` | `guard(salir)` pide confirmación si hay cambios; renderiza `dialog`. Pasa por él Cancelar, «Volver» y los enlaces que salen del flujo |
+
+- Dentro de un modal usa `variant="dialog"` en las dos piezas.
+- Cada paso valida antes de avanzar; si el botón queda deshabilitado, di por qué en `info`.
+- Un documento de una sola página (p. ej. la cotización) no es un wizard: usa `ActionBar`.
+- `useDiscardGuard` no intercepta el menú lateral (haría falta un data router).
 
 ## Layout
 
@@ -103,3 +138,5 @@ con los presets de [shared/motion/presets.ts](../shared/motion/presets.ts):
 
 `MotionConfig reducedMotion="user"` (en `main.tsx`) respeta la preferencia de
 "reducir movimiento" del sistema. En CSS usa `--duration-*` y `--ease-*`.
+
+   **Capas animadas:** todo diálogo, drawer o desplegable entra **y sale** animado, y la entrada es el espejo exacto de la salida (`layer` en `shared/motion/presets.ts`: misma duración, curva y valores). La salida la hace `<ExitGhost>` (`shared/motion/ExitGhost.tsx`): al desmontarse la capa deja una copia inerte que se desvanece, así funciona aunque la pantalla la cierre de golpe (`{open ? <Modal/> : null}`). Si creas una capa nueva, coloca un `<ExitGhost>` dentro. **No uses `<input>`/`<textarea>` sueltos** (salvo rango, color, archivo u ocultos): usa `Input`, `Textarea`, `NumberStepper` o `SearchInput`. **No uses `<button>` sueltos** para acciones: usa `Button`, `IconButton` o `Menu`. Solo las tarjetas, filas o celdas clicables (que no se ven como botón) pueden ser `<button>` con estilo propio. No implementes a mano trampas de foco, listeners de Escape ni bloqueo de scroll: usa estos componentes.

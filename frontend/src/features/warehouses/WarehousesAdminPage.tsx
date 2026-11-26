@@ -17,6 +17,10 @@ import { WarehouseDrawer, type DrawerConfirm } from './WarehouseDrawer';
 import { useWarehouseRows } from './warehouseRows';
 import '../../styles/warehouses-admin.css';
 import '../../styles/warehouses-list.css';
+import { ChipGroup } from '../../shared/components/Chip';
+import { Input, Textarea } from '../../shared/components/Input';
+import { SearchInput } from '../../shared/components/SearchInput';
+import { WizardFooter, WizardSteps, useDiscardGuard } from '../../shared/components/Wizard';
 
 type Draft = Omit<WarehouseSite, 'id' | 'racks'> & { id?: string; notes: string };
 type FieldErrors = Partial<Record<'code' | 'name', string>>;
@@ -24,6 +28,11 @@ type ListFilter = 'all' | 'Operativa' | 'Inactiva' | 'attention';
 // Keep unfinished work when navigating to another screen during this session.
 const draftCache = new Map<string, Draft>();
 const fold = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+const STEPS = [
+  { title: 'Datos de la bodega', subtitle: 'Código y nombre' },
+  { title: 'Distribución', subtitle: 'Racks y capacidad' },
+  { title: 'Revisión', subtitle: 'Antes de guardar' },
+];
 const draftFor = (w?: WarehouseSite): Draft => ({
   ...(w ? { id: w.id } : {}), code: w?.code ?? '', name: w?.name ?? '',
   city: w?.city ?? '', address: w?.address ?? '', status: w?.status ?? 'Operativa', notes: w?.notes ?? '',
@@ -98,7 +107,6 @@ function WarehouseAdmin({ state }: { state: AppState }) {
   if (editId === 'new' || editing) {
     return <WarehouseEditor key={editId} state={state} warehouse={editing} initialStep={editing && params.get('step') === 'layout' ? 1 : 0} onCancel={() => setParams({})} onSaved={(id) => { setSavedId(id); setQuery(''); setFilter('all'); setParams({}); }} />;
   }
-  const chip = (key: ListFilter, label: string, warn = false) => <button type="button" className="whx-chip" data-filter={key} aria-pressed={filter === key} onClick={() => setFilter(key)}>{warn ? <span className="whx-warn-dot" /> : null}{label} <b>{counts[key]}</b></button>;
 
   return <div className="wh-admin">
     <PageHead eyebrow="Red logística" title="Tus bodegas" desc={rows.length ? `${rows.length} bodegas · ${counts.Operativa} operativas · ${num(totalUnits)} u. en inventario` : 'Organiza tus espacios, consulta su ocupación y elige dónde operar.'} actions={<Btn variant="primary" icon="plus" onClick={startNew}>Nueva bodega</Btn>} />
@@ -110,8 +118,22 @@ function WarehouseAdmin({ state }: { state: AppState }) {
     {rows.length ? <section className="whx-section" aria-labelledby="whx-list-title">
       <div className="whx-toolbar" ref={toolbar}>
         <h2 id="whx-list-title" className="whx-list-title">Todas las bodegas</h2>
-        <div className="whx-chips" role="group" aria-label="Filtrar bodegas">{chip('all', 'Todas')}{chip('Operativa', 'Operativas')}{chip('Inactiva', 'Inactivas')}{counts.attention ? chip('attention', 'Requieren atención', true) : null}</div>
-        <div className="search-input whx-search"><Icon name="search" /><input aria-label="Buscar bodegas" type="search" placeholder="Nombre, código o ciudad" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+        <ChipGroup
+          type="single"
+          label="Filtrar bodegas"
+          className="whx-chips"
+          value={filter}
+          onValueChange={setFilter}
+          items={[
+            { value: 'all' as ListFilter, label: 'Todas', count: counts.all },
+            { value: 'Operativa' as ListFilter, label: 'Operativas', count: counts.Operativa },
+            { value: 'Inactiva' as ListFilter, label: 'Inactivas', count: counts.Inactiva },
+            ...(counts.attention
+              ? [{ value: 'attention' as ListFilter, label: 'Requieren atención', count: counts.attention, tone: 'warning' as const, leading: <span className="whx-warn-dot" /> }]
+              : []),
+          ]}
+        />
+        <SearchInput className="search-input whx-search" aria-label="Buscar bodegas" placeholder="Nombre, código o ciudad" value={query} onChange={(e) => setQuery(e.target.value)} />
         <span className="wh-result-count" role="status">{filtered.length} de {rows.length}</span>
       </div>
       {filtered.length
@@ -169,18 +191,14 @@ function WarehouseEditor({ state, warehouse, initialStep = 0, onCancel, onSaved 
     if (dirty) draftCache.set(cacheKey, draft);
     else draftCache.delete(cacheKey);
   }, [cacheKey, draft, dirty]);
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty]);
   const update = <K extends keyof Draft>(key: K, value: Draft[K]) => { setDraft((d) => ({ ...d, [key]: value })); setError(''); };
+  const discard = useDiscardGuard(dirty);
   const cancel = () => {
-    if (!saving && (!dirty || window.confirm('Tienes cambios sin guardar. ¿Quieres descartarlos y volver a tus bodegas?'))) {
+    if (saving) return;
+    discard.guard(() => {
       draftCache.delete(cacheKey);
       onCancel();
-    }
+    });
   };
   const validateDetails = () => {
     setAttempted(true);
@@ -219,17 +237,28 @@ function WarehouseEditor({ state, warehouse, initialStep = 0, onCancel, onSaved 
   return <div className="wh-admin wh-editor">
     <PageHead eyebrow={warehouse ? `Bodegas / ${warehouse.code}` : 'Bodegas / Nueva bodega'} title={warehouse ? 'Editar bodega' : 'Crea tu bodega'} desc="Define sus datos, organiza el espacio y revisa todo antes de guardar." actions={<Btn icon="back" onClick={cancel} disabled={saving}>Volver a bodegas</Btn>} />
     {restored ? <div className="wh-notice" role="status"><Icon name="history" /> Recuperamos los cambios que dejaste pendientes en esta sesión.</div> : null}
-    <nav className="wh-steps" aria-label="Pasos de configuración">{['Datos de la bodega', 'Distribución', 'Revisión'].map((label, index) => <button type="button" key={label} className={step === index ? 'current' : step > index ? 'complete' : ''} aria-current={step === index ? 'step' : undefined} disabled={saving} onClick={() => goTo(index)}><span>{step > index ? <Icon name="check" /> : index + 1}</span><strong>{label}</strong></button>)}</nav>
+    <WizardSteps
+      label="Pasos de configuración"
+      steps={STEPS}
+      current={step}
+      onSelect={goTo}
+      canSelect={() => true}
+      hasError={(index) =>
+        (index === 0 && attempted && Object.keys(fieldErrors).length > 0) ||
+        (index === 1 && !!layoutError)
+      }
+      disabled={saving}
+    />
     <form onSubmit={(e) => void submit(e)} noValidate aria-busy={saving}>
       <fieldset className="wh-editor-fields" disabled={saving}>
-        <div className="wh-step-heading"><div><h2 tabIndex={-1} ref={heading}>{['Empecemos por lo esencial', 'Diseña tu espacio', 'Todo listo para guardar'][step]}</h2><p>{['Solo el código y el nombre son obligatorios. Puedes completar el resto después.', 'Elige una distribución inicial y ajusta sus dimensiones. La vista previa se actualiza al instante.', 'Comprueba los datos y la capacidad de tu bodega antes de confirmar.'][step]}</p></div><span>Paso {step + 1} de 3</span></div>
+        <div className="wh-step-heading"><div><h2 tabIndex={-1} ref={heading}>{['Empecemos por lo esencial', 'Diseña tu espacio', 'Todo listo para guardar'][step]}</h2><p>{['Solo el código y el nombre son obligatorios. Puedes completar el resto después.', 'Elige una distribución inicial y ajusta sus dimensiones. La vista previa se actualiza al instante.', 'Comprueba los datos y la capacidad de tu bodega antes de confirmar.'][step]}</p></div></div>
         {step === 0 ? <section className="panel wh-details"><div className="form-grid panel-body">
-          <div className="field"><label htmlFor="wh-code">Código <span aria-hidden="true">*</span></label><input id="wh-code" required value={draft.code} placeholder="Ej. BOD-QTO-02" autoComplete="off" spellCheck={false} aria-invalid={!!showError('code')} aria-describedby="wh-code-help" onBlur={() => setTouched((v) => ({ ...v, code: 'true' }))} onChange={(e) => update('code', e.target.value.toUpperCase())} /><small id="wh-code-help" className={showError('code') ? 'wh-field-error' : ''}>{showError('code') || 'Un código único y fácil de reconocer.'}</small></div>
-          <div className="field"><label htmlFor="wh-name">Nombre <span aria-hidden="true">*</span></label><input id="wh-name" required value={draft.name} placeholder="Ej. Bodega norte" autoComplete="off" aria-invalid={!!showError('name')} aria-describedby="wh-name-help" onBlur={() => setTouched((v) => ({ ...v, name: 'true' }))} onChange={(e) => update('name', e.target.value)} /><small id="wh-name-help" className={showError('name') ? 'wh-field-error' : ''}>{showError('name') || 'Así aparecerá en el listado y en la operación.'}</small></div>
-          <div className="field"><label htmlFor="wh-city">Ciudad <span>(opcional)</span></label><input id="wh-city" value={draft.city} placeholder="Ej. Quito" autoComplete="address-level2" onChange={(e) => update('city', e.target.value)} /></div>
-          <div className="field"><label htmlFor="wh-address">Dirección <span>(opcional)</span></label><input id="wh-address" value={draft.address} placeholder="Calle, número o referencia" autoComplete="street-address" onChange={(e) => update('address', e.target.value)} /></div>
+          <div className="field"><label htmlFor="wh-code">Código <span aria-hidden="true">*</span></label><Input id="wh-code" required value={draft.code} placeholder="Ej. BOD-QTO-02" autoComplete="off" spellCheck={false} aria-invalid={!!showError('code')} aria-describedby="wh-code-help" onBlur={() => setTouched((v) => ({ ...v, code: 'true' }))} onChange={(e) => update('code', e.target.value.toUpperCase())} /><small id="wh-code-help" className={showError('code') ? 'wh-field-error' : ''}>{showError('code') || 'Un código único y fácil de reconocer.'}</small></div>
+          <div className="field"><label htmlFor="wh-name">Nombre <span aria-hidden="true">*</span></label><Input id="wh-name" required value={draft.name} placeholder="Ej. Bodega norte" autoComplete="off" aria-invalid={!!showError('name')} aria-describedby="wh-name-help" onBlur={() => setTouched((v) => ({ ...v, name: 'true' }))} onChange={(e) => update('name', e.target.value)} /><small id="wh-name-help" className={showError('name') ? 'wh-field-error' : ''}>{showError('name') || 'Así aparecerá en el listado y en la operación.'}</small></div>
+          <div className="field"><label htmlFor="wh-city">Ciudad <span>(opcional)</span></label><Input id="wh-city" value={draft.city} placeholder="Ej. Quito" autoComplete="address-level2" onChange={(e) => update('city', e.target.value)} /></div>
+          <div className="field"><label htmlFor="wh-address">Dirección <span>(opcional)</span></label><Input id="wh-address" value={draft.address} placeholder="Calle, número o referencia" autoComplete="street-address" onChange={(e) => update('address', e.target.value)} /></div>
           <div className="field full"><label htmlFor="wh-status">Estado</label><Select id="wh-status" value={draft.status} aria-describedby="wh-status-help" onChange={(e) => update('status', e.target.value as WarehouseSite['status'])}><option>Operativa</option><option disabled={isActive}>Inactiva</option></Select><small id="wh-status-help">{isActive ? 'Esta bodega está en uso. Selecciona otra para operar antes de inactivarla.' : draft.status === 'Operativa' ? 'Disponible para seleccionarla y trabajar con su inventario.' : 'Se guarda en el catálogo, pero no se puede seleccionar para operar.'}</small></div>
-          <div className="field full"><label htmlFor="wh-notes">Notas <span>(opcional)</span></label><textarea id="wh-notes" value={draft.notes} placeholder="Indicaciones de acceso o información útil para el equipo" maxLength={300} onChange={(e) => update('notes', e.target.value)} /><small className="wh-counter">{draft.notes.length}/300 caracteres</small></div>
+          <div className="field full"><label htmlFor="wh-notes">Notas <span>(opcional)</span></label><Textarea id="wh-notes" value={draft.notes} placeholder="Indicaciones de acceso o información útil para el equipo" maxLength={300} onChange={(e) => update('notes', e.target.value)} /><small className="wh-counter">{draft.notes.length}/300 caracteres</small></div>
         </div></section> : null}
         {step === 1 ? <>{lots.length ? <div className="wh-notice"><Icon name="info" /><span>Esta bodega tiene {num(lots.reduce((n, lot) => n + lot.qty, 0))} unidades. El diseño debe conservar sus ubicaciones y capacidad.</span></div> : null}{layoutError ? <div className="wh-error" role="alert">{layoutError}</div> : null}<WarehouseDesigner draft={draft} onChange={(layout) => update('layout', layout)} /></> : null}
         {step === 2 ? <div className="wh-review">
@@ -240,7 +269,29 @@ function WarehouseEditor({ state, warehouse, initialStep = 0, onCancel, onSaved 
         </div> : null}
       </fieldset>
       {error ? <div className="wh-error" role="alert">{error} Tus cambios siguen en el formulario; puedes corregirlos y reintentar.</div> : null}
-      <div className="wh-editor-footer"><div className="wh-footer-summary"><strong>{num(summary.totalCells)} ubicaciones · {num(summary.capacityUnits)} u.</strong><span>{dirty ? 'Cambios sin guardar' : 'Configura tu bodega a tu ritmo'}</span></div><div className="button-row"><Btn onClick={step === 0 ? cancel : () => goTo(step - 1)} disabled={saving}>{step === 0 ? 'Cancelar' : 'Atrás'}</Btn><Btn type="submit" variant="primary" icon={step === 2 ? 'save' : 'arrow'} disabled={saving || (step > 0 && !!layoutError)}>{saving ? 'Guardando…' : step === 0 ? 'Continuar al diseño' : step === 1 ? 'Revisar bodega' : warehouse ? 'Guardar cambios' : 'Crear bodega'}</Btn></div></div>
+      <WizardFooter
+        step={step}
+        total={STEPS.length}
+        onBack={() => goTo(step - 1)}
+        onCancel={cancel}
+        info={`Paso ${step + 1} de ${STEPS.length} · ${num(summary.totalCells)} ubicaciones · ${num(summary.capacityUnits)} u.${dirty ? ' · Cambios sin guardar' : ''}`}
+        primary={{
+          type: 'submit',
+          label:
+            step === 0
+              ? 'Continuar al diseño'
+              : step === 1
+                ? 'Revisar bodega'
+                : warehouse
+                  ? 'Guardar cambios'
+                  : 'Crear bodega',
+          icon: step === 2 ? 'save' : 'arrow',
+          disabled: step > 0 && !!layoutError,
+          busy: saving,
+          busyLabel: 'Guardando…',
+        }}
+      />
     </form>
+    {discard.dialog}
   </div>;
 }

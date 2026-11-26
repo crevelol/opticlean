@@ -9,6 +9,8 @@ import { Icon } from '../../shared/components/Icon';
 import { YAW_MAX, YAW_MIN } from '../warehouse/iso';
 import { WarehouseFloorPlan } from '../warehouse/WarehouseFloorPlan';
 import '../../styles/warehouse-designer-controls.css';
+import { Switch } from '../../shared/components/Checkbox';
+import { Input } from '../../shared/components/Input';
 
 type Props = {
   draft: Partial<WarehouseSite> & { layout: WarehouseLayout };
@@ -61,7 +63,7 @@ function LayoutControl({ field, value, onChange }: {
     <div className="designer-dimension">
       <div className="designer-dimension-head">
         <label htmlFor={id}>{field.label}</label>
-        <input
+        <Input
           id={id}
           type="number"
           min={field.min}
@@ -151,11 +153,7 @@ export function WarehouseDesigner({ draft, onChange }: Props) {
             ))}
           </div>
           <label className="designer-depth-toggle">
-            <input
-              type="checkbox"
-              checked={layout.depthFaces === 2}
-              onChange={(event) => onChange({ ...layout, depthFaces: event.target.checked ? 2 : 1 })}
-            />
+            <Switch checked={layout.depthFaces === 2} onCheckedChange={(checked) => onChange({ ...layout, depthFaces: checked ? 2 : 1 })} />
             <span>
               <strong>Doble profundidad</strong>
               <small>Crea una ubicación delantera y otra trasera por casilla. Duplica las ubicaciones disponibles.</small>

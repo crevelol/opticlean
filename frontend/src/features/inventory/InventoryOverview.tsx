@@ -3,6 +3,7 @@ import { num } from '../../shared/lib/inventory';
 import { childrenStatus, isRaw, summarizeByLine } from '../../shared/lib/bom';
 import type { AppState } from '../../shared/types';
 import type { InventoryRow } from './inventoryModel';
+import { Button } from '../../shared/components/ui';
 
 const lineTone = (category: string) => {
   const map: Record<string, string> = {
@@ -86,15 +87,15 @@ export function InventoryOverview({
         </button>
         <div className="inv-critical-meter" role="presentation"><span style={{ width: `${coverage}%` }} /></div>
         <div className="inv-critical-actions">
-          <button type="button" onClick={() => onReceive(row.product.id)}>
+          <Button size="small" onClick={() => onReceive(row.product.id)}>
             <Icon name="receive" /> Recibir
-          </button>
-          <button type="button" onClick={() => onPurchase(row.product.id, gap || row.product.min || 12)}>
+          </Button>
+          <Button size="small" onClick={() => onPurchase(row.product.id, gap || row.product.min || 12)}>
             <Icon name="cart" /> Comprar
-          </button>
-          <button type="button" onClick={() => onSelectProduct(row.product.id)}>
+          </Button>
+          <Button variant="link" onClick={() => onSelectProduct(row.product.id)}>
             Detalle <Icon name="arrow" />
-          </button>
+          </Button>
         </div>
       </li>
     );
@@ -144,9 +145,9 @@ export function InventoryOverview({
               <span className="inv-critical-kicker">Reposición</span>
               <h3>Productos críticos <strong>{finishedCritical.length}</strong></h3>
             </div>
-            <button type="button" className="inv-text-button" onClick={() => onFilterAttention('finished')}>
+            <Button variant="link" className="inv-text-button" onClick={() => onFilterAttention('finished')}>
               Ver todos <Icon name="arrow" />
-            </button>
+            </Button>
           </header>
           {finishedCritical.length ? (
             <ul>{finishedCritical.map((row) => renderCriticalItem(row))}</ul>
@@ -161,9 +162,9 @@ export function InventoryOverview({
               <span className="inv-critical-kicker">Materia prima</span>
               <h3>Insumos críticos <strong>{rawCritical.length}</strong></h3>
             </div>
-            <button type="button" className="inv-text-button" onClick={() => onFilterAttention('raw')}>
+            <Button variant="link" className="inv-text-button" onClick={() => onFilterAttention('raw')}>
               Ver todos <Icon name="arrow" />
-            </button>
+            </Button>
           </header>
           {rawCritical.length ? (
             <ul>{rawCritical.map((row) => renderCriticalItem(row, true))}</ul>

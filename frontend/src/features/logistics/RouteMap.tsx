@@ -5,6 +5,7 @@ import type { AppState, Order } from '../../shared/types';
 import { client } from '../../shared/lib/inventory';
 import { depotGeo, stopGeo } from './fleet';
 import { fetchStreetRoute, type LatLng } from './osrmRoute';
+import { Button } from '../../shared/components/ui';
 
 const stopIcon = (n: number, active: boolean) =>
   L.divIcon({
@@ -201,9 +202,9 @@ export function RouteMap({
   return (
     <div className="log-map log-map-live">
       {showFullButton ? (
-        <button type="button" className="log-map-full" onClick={onFullRoute}>
+        <Button variant="link" className="log-map-full" onClick={onFullRoute}>
           Ver ruta completa
-        </button>
+        </Button>
       ) : null}
       {routing ? <div className="log-map-routing">Calculando calles…</div> : null}
       {routeMeta ? (

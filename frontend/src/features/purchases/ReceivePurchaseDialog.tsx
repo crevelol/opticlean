@@ -6,6 +6,9 @@ import { purchaseLines } from '../../shared/lib/wholesale';
 import { Modal } from '../../shared/components/Modal';
 import { Btn } from '../../shared/components/ui';
 import type { AppState, Purchase } from '../../shared/types';
+import { Checkbox } from '../../shared/components/Checkbox';
+import { Select } from '../../shared/components/Select';
+import { Input } from '../../shared/components/Input';
 
 type Row = {
   productId: string;
@@ -150,7 +153,7 @@ export function ReceivePurchaseDialog({ state, purchase, onClose }: { state: App
                       </td>
                       <td className="num">{row.pending}</td>
                       <td className="num">
-                        <input
+                        <Input
                           id={`rp-qty-${i}`}
                           className="fx-qty"
                           type="number"
@@ -162,7 +165,7 @@ export function ReceivePurchaseDialog({ state, purchase, onClose }: { state: App
                         />
                       </td>
                       <td>
-                        <input
+                        <Input
                           id={`rp-batch-${i}`}
                           className="fx-batch"
                           value={row.batch}
@@ -172,7 +175,7 @@ export function ReceivePurchaseDialog({ state, purchase, onClose }: { state: App
                         />
                       </td>
                       <td>
-                        <input
+                        <Input
                           id={`rp-exp-${i}`}
                           type="date"
                           min={today}
@@ -186,7 +189,7 @@ export function ReceivePurchaseDialog({ state, purchase, onClose }: { state: App
                         />
                       </td>
                       <td>
-                        <select
+                        <Select
                           id={`rp-loc-${i}`}
                           value={row.loc}
                           aria-label={`Ubicación de ${name}`}
@@ -198,16 +201,11 @@ export function ReceivePurchaseDialog({ state, purchase, onClose }: { state: App
                               {id}
                             </option>
                           ))}
-                        </select>
+                        </Select>
                       </td>
                       <td>
                         <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                          <input
-                            id={`rp-insp-${i}`}
-                            type="checkbox"
-                            checked={row.inspect}
-                            onChange={(e) => update(i, { inspect: e.target.checked })}
-                          />
+                          <Checkbox id={`rp-insp-${i}`} checked={row.inspect} onCheckedChange={(checked) => update(i, { inspect: checked })} />
                           Retener
                         </label>
                       </td>

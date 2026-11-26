@@ -3,11 +3,13 @@ import { useSearchParams } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
 import { money } from '../../shared/lib/inventory';
-import { Btn, Empty, PageHead } from '../../shared/components/ui';
+import { Btn, Empty, PageHead, Button } from '../../shared/components/ui';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import { Select } from '../../shared/components/Select';
 import type { AppState, Supplier } from '../../shared/types';
 import '../../styles/clients.css';
+import { Input } from '../../shared/components/Input';
+import { SearchInput } from '../../shared/components/SearchInput';
 
 function debtOf(state: AppState, supplierId: string) {
   return (state.supplierBills ?? [])
@@ -89,7 +91,7 @@ export function SuppliersPage() {
   const formSupplier = editing;
 
   return (
-    <div className="page">
+    <div>
       <PageHead
         eyebrow="Abastecimiento"
         title="Proveedores"
@@ -109,15 +111,13 @@ export function SuppliersPage() {
         }
       />
       <div className="cli-toolbar">
-        <div className="cli-search">
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar por nombre o RUC…"
-            aria-label="Buscar proveedores"
-          />
-        </div>
+        <SearchInput
+          className="cli-search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Buscar por nombre o RUC…"
+          aria-label="Buscar proveedores"
+        />
       </div>
       {rows.length ? (
         <div className="table-scroll">
@@ -136,9 +136,9 @@ export function SuppliersPage() {
               {rows.map(({ supplier, debt }) => (
                 <tr key={supplier.id} className={selectedId === supplier.id ? 'is-selected' : ''}>
                   <td>
-                    <button type="button" className="fx-link" onClick={() => setSelectedId(supplier.id)}>
+                    <Button variant="link" className="fx-link" onClick={() => setSelectedId(supplier.id)}>
                       {supplier.name}
-                    </button>
+                    </Button>
                   </td>
                   <td>{supplier.taxId || 'Sin RUC'}</td>
                   <td>{supplier.contact || supplier.phone || supplier.email || '—'}</td>
@@ -226,9 +226,9 @@ export function SuppliersPage() {
                   <option key={item.id} value={item.id}>{item.name}</option>
                 ))}
               </Select>
-              <input name="supplierSku" required placeholder="Código del proveedor" aria-label="Código del proveedor" />
-              <input name="unitCost" type="number" min={0} step="0.01" required placeholder="Costo" aria-label="Costo" />
-              <input name="minQty" type="number" min={1} step={1} required placeholder="Mínimo" aria-label="Pedido mínimo" />
+              <Input name="supplierSku" required placeholder="Código del proveedor" aria-label="Código del proveedor" />
+              <Input name="unitCost" type="number" min={0} step="0.01" required placeholder="Costo" aria-label="Costo" />
+              <Input name="minQty" type="number" min={1} step={1} required placeholder="Mínimo" aria-label="Pedido mínimo" />
             </div>
             <Btn type="submit" size="small">Agregar al catálogo</Btn>
           </form>
@@ -259,11 +259,11 @@ export function SuppliersPage() {
             <div className="form-grid">
               <div className="field full">
                 <label htmlFor="sup-name">Nombre</label>
-                <input id="sup-name" name="name" defaultValue={formSupplier?.name} required />
+                <Input id="sup-name" name="name" defaultValue={formSupplier?.name} required />
               </div>
               <div className="field">
                 <label htmlFor="sup-tax">RUC</label>
-                <input
+                <Input
                   id="sup-tax"
                   name="taxId"
                   inputMode="numeric"
@@ -276,23 +276,23 @@ export function SuppliersPage() {
               </div>
               <div className="field">
                 <label htmlFor="sup-lead">Días de entrega</label>
-                <input id="sup-lead" name="leadTimeDays" type="number" min={0} defaultValue={formSupplier?.leadTimeDays ?? 7} />
+                <Input id="sup-lead" name="leadTimeDays" type="number" min={0} defaultValue={formSupplier?.leadTimeDays ?? 7} />
               </div>
               <div className="field">
                 <label htmlFor="sup-contact">Contacto</label>
-                <input id="sup-contact" name="contact" defaultValue={formSupplier?.contact} />
+                <Input id="sup-contact" name="contact" defaultValue={formSupplier?.contact} />
               </div>
               <div className="field">
                 <label htmlFor="sup-phone">Teléfono</label>
-                <input id="sup-phone" name="phone" defaultValue={formSupplier?.phone} />
+                <Input id="sup-phone" name="phone" defaultValue={formSupplier?.phone} />
               </div>
               <div className="field full">
                 <label htmlFor="sup-email">Correo</label>
-                <input id="sup-email" name="email" type="email" defaultValue={formSupplier?.email} />
+                <Input id="sup-email" name="email" type="email" defaultValue={formSupplier?.email} />
               </div>
               <div className="field full">
                 <label htmlFor="sup-terms">Condiciones</label>
-                <input id="sup-terms" name="terms" defaultValue={formSupplier?.terms} placeholder="Crédito 30 días, pedido mínimo…" />
+                <Input id="sup-terms" name="terms" defaultValue={formSupplier?.terms} placeholder="Crédito 30 días, pedido mínimo…" />
               </div>
             </div>
             {error ? <div className="form-error visible">{error}</div> : null}

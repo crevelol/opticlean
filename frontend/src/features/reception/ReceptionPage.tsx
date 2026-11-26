@@ -4,8 +4,12 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
 import { activeWarehouseId, available, product, qtyAt, stock } from '../../shared/lib/inventory';
-import { buildWarehouseGeometry, faceLabel, normalizeLayout } from '../../shared/lib/warehouseLayout';
-import { Btn, PageHead, cx } from '../../shared/components/ui';
+import {
+  buildWarehouseGeometry,
+  faceLabel,
+  normalizeLayout,
+} from '../../shared/lib/warehouseLayout';
+import { Btn, PageHead, cx, Button } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal } from '../../shared/components/Modal';
 import { WarehouseEmbed } from '../warehouse/WarehouseEmbed';
@@ -14,6 +18,9 @@ import { useAuth } from '../../shared/hooks/AuthProvider';
 import { packsOf, pendingUnits, purchaseIncludes } from '../../shared/lib/wholesale';
 import '../../styles/warehouse-positioning.css';
 import '../../styles/reception.css';
+import { WizardFooter, WizardSteps, useDiscardGuard, useStepFocus } from '../../shared/components/Wizard';
+import { Checkbox } from '../../shared/components/Checkbox';
+import { Input } from '../../shared/components/Input';
 
 const steps = [
   { title: 'Producto', subtitle: 'Qué llega y de quién' },
@@ -24,7 +31,11 @@ const steps = [
 
 const expiryLabel = (d: string) =>
   d
-    ? new Date(`${d}T12:00:00`).toLocaleDateString('es-EC', { day: '2-digit', month: 'short', year: 'numeric' })
+    ? new Date(`${d}T12:00:00`).toLocaleDateString('es-EC', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
     : 'Sin fecha';
 
 /** Registro de una recepción en cuatro pasos, con resumen lateral. */
@@ -33,7 +44,12 @@ export function ReceptionNewPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const routeState =
-    (location.state as { loc?: string; productId?: string; purchaseId?: string; qty?: number } | null) ?? {};
+    (location.state as {
+      loc?: string;
+      productId?: string;
+      purchaseId?: string;
+      qty?: number;
+    } | null) ?? {};
   const prefillLoc = routeState.loc;
   const [step, setStep] = useState(0);
   const [productId, setProductId] = useState(routeState.productId ?? state?.products[0]?.id ?? '');
@@ -41,7 +57,9 @@ export function ReceptionNewPage() {
   const [packCode, setPackCode] = useState('unidad');
   const [purchaseId, setPurchaseId] = useState(routeState.purchaseId ?? '');
   const openPurchases = (state?.purchases ?? []).filter(
-    (p) => purchaseIncludes(p, productId) && (!p.status || p.status === 'Abierta' || p.status === 'Parcial'),
+    (p) =>
+      purchaseIncludes(p, productId) &&
+      (!p.status || p.status === 'Abierta' || p.status === 'Parcial'),
   );
   const [supplier, setSupplier] = useState('');
   const { user } = useAuth();
@@ -61,7 +79,7 @@ export function ReceptionNewPage() {
   const [mapOpen, setMapOpen] = useState(false);
   const [mapPick, setMapPick] = useState('');
   const saveLock = useRef(false);
-  const headingRef = useRef<HTMLHeadingElement>(null);
+  const headingRef = useStepFocus(step);
 
   const warehouseId = state ? activeWarehouseId(state) : '';
   const warehouse = state?.warehouses.find((item) => item.id === warehouseId);
@@ -77,7 +95,12 @@ export function ReceptionNewPage() {
   const packs = packsOf(selectedProduct);
   const pack = packs.find((item) => item.code === packCode) ?? packs[0];
   const stockQty = Math.round(qty * (pack?.units ?? 1));
-  const validQty = Number.isInteger(qty) && qty > 0 && Number.isInteger(stockQty) && stockQty > 0 && stockQty <= capacity;
+  const validQty =
+    Number.isInteger(qty) &&
+    qty > 0 &&
+    Number.isInteger(stockQty) &&
+    stockQty > 0 &&
+    stockQty <= capacity;
   const [suggestionKey, setSuggestionKey] = useState('');
   const currentKey = `${warehouseId}:${productId}:${stockQty}`;
   const ready = !loading && suggestionKey === currentKey && validQty;
@@ -124,16 +147,19 @@ export function ReceptionNewPage() {
         if (cancelled) return;
         setSuggestions([]);
         setLoading(false);
-        setLookupError(err instanceof Error ? err.message : 'No se pudieron consultar las ubicaciones.');
+        setLookupError(
+          err instanceof Error ? err.message : 'No se pudieron consultar las ubicaciones.',
+        );
       });
     return () => {
       cancelled = true;
     };
   }, [productId, stockQty, prefillLoc, validQty, currentKey, attempt, state?.lots]);
 
-  useEffect(() => {
-    headingRef.current?.focus({ preventScroll: true });
-  }, [step]);
+  // Hay trabajo que perder en cuanto se avanza o se escribe algo propio de este ingreso.
+  const discard = useDiscardGuard(
+    !saving && (step > 0 || !!batch.trim() || !!expiry || !!reason),
+  );
 
   if (!state) return null;
 
@@ -141,7 +167,9 @@ export function ReceptionNewPage() {
   const occupiedAfter = selected ? occupiedNow + stockQty : 0;
   const freeNow = selected ? selected.capacity - occupiedNow : 0;
   const fillNow = selected ? Math.min(100, Math.round((occupiedNow / selected.capacity) * 100)) : 0;
-  const fillAfter = selected ? Math.min(100, Math.round((occupiedAfter / selected.capacity) * 100)) : 0;
+  const fillAfter = selected
+    ? Math.min(100, Math.round((occupiedAfter / selected.capacity) * 100))
+    : 0;
   const todayIso = new Date().toISOString().slice(0, 10);
 
   const expires = selectedProduct?.perishable !== false;
@@ -208,8 +236,16 @@ export function ReceptionNewPage() {
 
   const review: Array<{ k: string; v: React.ReactNode; step: number }> = [
     { k: 'Producto', v: `${productId} · ${selectedProduct?.name ?? ''}`, step: 0 },
-    { k: 'Orden de compra', v: purchaseId || `Sin orden de compra · ${reason || 'falta motivo'}`, step: 0 },
-    { k: 'Inspección', v: inspect ? 'Queda retenido hasta liberarlo' : 'Disponible al registrar', step: 1 },
+    {
+      k: 'Orden de compra',
+      v: purchaseId || `Sin orden de compra · ${reason || 'falta motivo'}`,
+      step: 0,
+    },
+    {
+      k: 'Inspección',
+      v: inspect ? 'Queda retenido hasta liberarlo' : 'Disponible al registrar',
+      step: 1,
+    },
     { k: 'Proveedor', v: supplier, step: 0 },
     {
       k: 'Cantidad',
@@ -236,37 +272,20 @@ export function ReceptionNewPage() {
         title="Registrar recepción"
         desc="Completa los pasos y confirma el ingreso a bodega."
         actions={
-          <Btn icon="arrow" onClick={() => navigate('/recepcion')}>
+          <Btn icon="arrow" onClick={() => discard.guard(() => navigate('/recepcion'))}>
             Ver recepciones
           </Btn>
         }
       />
 
-      <nav className="panel reception-stepper" aria-label="Pasos de la recepción">
-        <ol>
-          {steps.map((item, index) => {
-            const status = index === step ? 'current' : index < step ? 'done' : 'todo';
-            return (
-              <li key={item.title} className={`reception-step is-${status}`}>
-                <button
-                  type="button"
-                  onClick={() => goTo(index)}
-                  disabled={saving || index > maxReachable}
-                  aria-current={index === step ? 'step' : undefined}
-                >
-                  <span className="reception-step-dot" aria-hidden="true">
-                    {status === 'done' ? <Icon name="check" /> : index + 1}
-                  </span>
-                  <span className="reception-step-text">
-                    <strong>{item.title}</strong>
-                    <small>{item.subtitle}</small>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
+      <WizardSteps
+        label="Pasos de la recepción"
+        steps={steps}
+        current={step}
+        onSelect={goTo}
+        canSelect={(index) => index <= maxReachable}
+        disabled={saving}
+      />
 
       <form className="reception-layout" id="receive-form" onSubmit={onSubmit} noValidate>
         <div className="panel reception-form">
@@ -274,12 +293,21 @@ export function ReceptionNewPage() {
             <div className="form-section reception-step-panel" key={step}>
               <h3 ref={headingRef} tabIndex={-1}>
                 <Icon name={['box', 'receive', 'pin', 'check'][step]} />
-                {['¿Qué producto llega?', 'Cantidad recibida', 'Elige dónde se guarda', 'Revisa antes de registrar'][step]}
+                {
+                  [
+                    '¿Qué producto llega?',
+                    'Cantidad recibida',
+                    'Elige dónde se guarda',
+                    'Revisa antes de registrar',
+                  ][step]
+                }
               </h3>
 
               {step === 0 ? (
                 <>
-                  <p className="section-note">Si llega con orden de compra, elígela y se completa el proveedor.</p>
+                  <p className="section-note">
+                    Si llega con orden de compra, elígela y se completa el proveedor.
+                  </p>
                   <div className="form-grid">
                     <div className="field full">
                       <label htmlFor="rec-product">Producto</label>
@@ -301,7 +329,11 @@ export function ReceptionNewPage() {
                     </div>
                     <div className="field">
                       <label htmlFor="rec-po">Orden de compra</label>
-                      <Select id="rec-po" value={purchaseId} onChange={(e) => setPurchaseId(e.target.value)}>
+                      <Select
+                        id="rec-po"
+                        value={purchaseId}
+                        onChange={(e) => setPurchaseId(e.target.value)}
+                      >
                         <option value="">Sin orden de compra</option>
                         {openPurchases.map((p) => (
                           <option key={p.id} value={p.id}>
@@ -309,12 +341,19 @@ export function ReceptionNewPage() {
                           </option>
                         ))}
                       </Select>
-                      {!openPurchases.length ? <small>No hay órdenes abiertas para este producto.</small> : null}
+                      {!openPurchases.length ? (
+                        <small>No hay órdenes abiertas para este producto.</small>
+                      ) : null}
                     </div>
                     {!purchaseId ? (
                       <div className="field">
                         <label htmlFor="rec-reason">Motivo del ingreso sin orden</label>
-                        <Select id="rec-reason" value={reason} disabled={!isAdmin} onChange={(e) => setReason(e.target.value)}>
+                        <Select
+                          id="rec-reason"
+                          value={reason}
+                          disabled={!isAdmin}
+                          onChange={(e) => setReason(e.target.value)}
+                        >
                           <option value="">Elegir motivo…</option>
                           {RECEIPT_REASONS.map((r) => (
                             <option key={r} value={r}>
@@ -331,7 +370,7 @@ export function ReceptionNewPage() {
                     ) : null}
                     <div className="field">
                       <label htmlFor="rec-supplier">Proveedor</label>
-                      <input
+                      <Input
                         id="rec-supplier"
                         value={supplier}
                         onChange={(e) => setSupplier(e.target.value)}
@@ -344,7 +383,9 @@ export function ReceptionNewPage() {
 
               {step === 1 ? (
                 <>
-                  <p className="section-note">Cuenta los empaques físicos. Las unidades de stock se calculan solas.</p>
+                  <p className="section-note">
+                    Cuenta los empaques físicos. Las unidades de stock se calculan solas.
+                  </p>
                   <div className="form-grid">
                     <div className="field">
                       <label htmlFor="rec-pack">Empaque recibido</label>
@@ -362,7 +403,7 @@ export function ReceptionNewPage() {
                     </div>
                     <div className="field">
                       <label htmlFor="rec-qty">Cantidad de empaques</label>
-                      <input
+                      <Input
                         id="rec-qty"
                         type="number"
                         min={1}
@@ -387,8 +428,8 @@ export function ReceptionNewPage() {
                         </>
                       ) : stockQty > capacity ? (
                         <span>
-                          {stockQty} u. supera la capacidad de una casilla ({capacity} u.). Registra la recepción en
-                          partes.
+                          {stockQty} u. supera la capacidad de una casilla ({capacity} u.). Registra
+                          la recepción en partes.
                         </span>
                       ) : (
                         <span>Ingresa una cantidad entera mayor a cero.</span>
@@ -396,7 +437,7 @@ export function ReceptionNewPage() {
                     </div>
                     <div className="field">
                       <label htmlFor="rec-batch">Lote</label>
-                      <input
+                      <Input
                         id="rec-batch"
                         value={batch}
                         onChange={(e) => setBatch(e.target.value)}
@@ -406,8 +447,10 @@ export function ReceptionNewPage() {
                       <small>Tal como aparece en la etiqueta del proveedor.</small>
                     </div>
                     <div className="field">
-                      <label htmlFor="rec-expiry">{expires ? 'Vencimiento' : 'Vencimiento (no caduca)'}</label>
-                      <input
+                      <label htmlFor="rec-expiry">
+                        {expires ? 'Vencimiento' : 'Vencimiento (no caduca)'}
+                      </label>
+                      <Input
                         id="rec-expiry"
                         type="date"
                         value={expiry}
@@ -415,14 +458,27 @@ export function ReceptionNewPage() {
                         min={todayIso}
                         required={expires}
                       />
-                      <small>{expires ? 'Se despacha primero lo que vence antes.' : 'Este producto no caduca. La fecha queda vacía.'}</small>
+                      <small>
+                        {expires
+                          ? 'Se despacha primero lo que vence antes.'
+                          : 'Este producto no caduca. La fecha queda vacía.'}
+                      </small>
                     </div>
                     <div className="field">
-                      <label htmlFor="rec-inspect" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <input id="rec-inspect" type="checkbox" checked={inspect} onChange={(e) => setInspect(e.target.checked)} />
+                      <label
+                        htmlFor="rec-inspect"
+                        style={{ display: 'flex', gap: 8, alignItems: 'center' }}
+                      >
+                        <Checkbox
+                          id="rec-inspect"
+                          checked={inspect}
+                          onCheckedChange={(checked) => setInspect(checked)}
+                        />
                         Recibir a inspección de calidad
                       </label>
-                      <small>El lote queda retenido y no se vende hasta que administración lo libere.</small>
+                      <small>
+                        El lote queda retenido y no se vende hasta que administración lo libere.
+                      </small>
                     </div>
                   </div>
                 </>
@@ -440,12 +496,14 @@ export function ReceptionNewPage() {
 
                   {ready && prefillLoc && !suggestions.some((item) => item.id === prefillLoc) ? (
                     <p className="wh-notice" role="status">
-                      La ubicación {prefillLoc} no admite este producto o cantidad. Elige otra opción.
+                      La ubicación {prefillLoc} no admite este producto o cantidad. Elige otra
+                      opción.
                     </p>
                   ) : null}
                   {lookupError ? (
                     <div className="wh-error" role="alert">
-                      {lookupError} <Btn onClick={() => setAttempt((value) => value + 1)}>Reintentar</Btn>
+                      {lookupError}{' '}
+                      <Btn onClick={() => setAttempt((value) => value + 1)}>Reintentar</Btn>
                     </div>
                   ) : null}
                   {ready && !suggestions.length && !lookupError ? (
@@ -455,7 +513,11 @@ export function ReceptionNewPage() {
                   ) : null}
 
                   {ready && visibleSuggestions.length ? (
-                    <div className="reception-loc-list" role="radiogroup" aria-label="Ubicaciones compatibles">
+                    <div
+                      className="reception-loc-list"
+                      role="radiogroup"
+                      aria-label="Ubicaciones compatibles"
+                    >
                       {visibleSuggestions.map((l, index) => {
                         const used = qtyAt(state, l.id);
                         const free = l.capacity - used;
@@ -513,16 +575,22 @@ export function ReceptionNewPage() {
 
               {step === 3 ? (
                 <>
-                  <p className="section-note">Al confirmar se suma al inventario y queda la trazabilidad del lote.</p>
+                  <p className="section-note">
+                    Al confirmar se suma al inventario y queda la trazabilidad del lote.
+                  </p>
                   <dl className="reception-review">
                     {review.map((row) => (
                       <div key={row.k}>
                         <dt>{row.k}</dt>
                         <dd>
                           <span>{row.v}</span>
-                          <button type="button" className="reception-edit" onClick={() => setStep(row.step)}>
+                          <Button
+                            variant="link"
+                            className="reception-edit"
+                            onClick={() => setStep(row.step)}
+                          >
                             Editar
-                          </button>
+                          </Button>
                         </dd>
                       </div>
                     ))}
@@ -537,27 +605,6 @@ export function ReceptionNewPage() {
               ) : null}
             </div>
 
-            <div className="reception-step-actions">
-              {step > 0 ? (
-                <Btn icon="back" onClick={() => setStep(step - 1)}>
-                  Anterior
-                </Btn>
-              ) : (
-                <Btn variant="ghost" onClick={() => navigate('/recepcion')}>
-                  Cancelar
-                </Btn>
-              )}
-              {step < steps.length - 1 ? (
-                <button type="submit" className="btn primary" disabled={!stepValid[step]}>
-                  Siguiente
-                </button>
-              ) : (
-                <button type="submit" className="btn primary" disabled={!canSubmit}>
-                  <Icon name="check" />
-                  {saving ? 'Registrando…' : 'Confirmar recepción'}
-                </button>
-              )}
-            </div>
           </fieldset>
         </div>
 
@@ -606,7 +653,9 @@ export function ReceptionNewPage() {
                     <span>Rack {selected.rack}</span>
                     <span>Nivel {selected.level}</span>
                     <span>Pos {selected.pos}</span>
-                    {selected.face ? <span className="face">{faceLabel(selected.face)}</span> : null}
+                    {selected.face ? (
+                      <span className="face">{faceLabel(selected.face)}</span>
+                    ) : null}
                   </div>
                   <div className="reception-fill">
                     <div className="reception-fill-head">
@@ -639,13 +688,30 @@ export function ReceptionNewPage() {
               </ul>
 
               <p className="reception-hint">
-                {warehouse ? `${warehouse.name} · ${warehouse.city}` : 'Bodega activa'} · se actualiza inventario y
-                trazabilidad
+                {warehouse ? `${warehouse.name} · ${warehouse.city}` : 'Bodega activa'} · se
+                actualiza inventario y trazabilidad
               </p>
             </div>
           </section>
         </aside>
       </form>
+
+      <WizardFooter
+        step={step}
+        total={steps.length}
+        onBack={() => setStep(step - 1)}
+        onCancel={() => discard.guard(() => navigate('/recepcion'))}
+        primary={{
+          type: 'submit',
+          form: 'receive-form',
+          label: step < steps.length - 1 ? 'Siguiente' : 'Confirmar recepción',
+          icon: step < steps.length - 1 ? 'arrow' : 'check',
+          disabled: step < steps.length - 1 ? !stepValid[step] : !canSubmit,
+          busy: saving,
+          busyLabel: 'Registrando…',
+        }}
+      />
+      {discard.dialog}
 
       {mapOpen ? (
         <Modal
@@ -682,7 +748,9 @@ export function ReceptionNewPage() {
             />
             <p className="reception-map-selected">
               Seleccionada: <strong>{mapFocus}</strong>
-              {suggestions.some((s) => s.id === mapFocus) ? <em> · sugerida para este ingreso</em> : null}
+              {suggestions.some((s) => s.id === mapFocus) ? (
+                <em> · sugerida para este ingreso</em>
+              ) : null}
             </p>
           </div>
         </Modal>

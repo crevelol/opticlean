@@ -54,7 +54,7 @@ export function QuotesPage() {
   };
 
   return (
-    <div className="page">
+    <div>
       <PageHead
         eyebrow="Ventas"
         title="Cotizaciones"
