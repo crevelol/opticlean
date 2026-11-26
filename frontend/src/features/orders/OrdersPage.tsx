@@ -3,15 +3,34 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import { api } from '../../shared/api/client';
-import { client, invoiceBalance, money, orderValue, orderWeight, product, statusColor } from '../../shared/lib/inventory';
-import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead } from '../../shared/components/ui';
+import {
+  client,
+  invoiceBalance,
+  money,
+  orderValue,
+  orderWeight,
+  product,
+  statusColor,
+} from '../../shared/lib/inventory';
+import { Badge, Btn, Empty, Kpi, KpiGrid, PageHead, Button } from '../../shared/components/ui';
+import { SegmentedControl } from '../../shared/components/Tabs';
 import { Select } from '../../shared/components/Select';
 import { Modal } from '../../shared/components/Modal';
 import { Icon } from '../../shared/components/Icon';
 import { AssignPicker } from './AssignPicker';
 import '../../styles/orders.css';
+import { Pagination } from '../../shared/components/Pagination';
+import { Input } from '../../shared/components/Input';
 
-const tabs = ['Todos', 'Esperando stock', 'Por preparar', 'Preparado', 'En ruta', 'Entregado', 'Incidencia'] as const;
+const tabs = [
+  'Todos',
+  'Esperando stock',
+  'Por preparar',
+  'Preparado',
+  'En ruta',
+  'Entregado',
+  'Incidencia',
+] as const;
 const PAGE_SIZE = 8;
 
 function isLiveOrder(id: string) {
@@ -115,8 +134,6 @@ export function OrdersPage() {
   const pageCount = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const pageList = list.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-  const rangeFrom = list.length ? (safePage - 1) * PAGE_SIZE + 1 : 0;
-  const rangeTo = Math.min(safePage * PAGE_SIZE, list.length);
   const detail = detailId ? liveOrders.find((o) => o.id === detailId) : null;
   const detailClient = detail ? client(state, detail.clientId) : null;
   const detailTotal = detail ? orderValue(state, detail) : 0;
@@ -185,15 +202,19 @@ export function OrdersPage() {
       />
 
       <KpiGrid>
-        <Kpi label="En operación" value={counts.todos} unit="pedidos" foot="Sin historial demo" icon="orders" />
+        <Kpi
+          label="En operación"
+          value={counts.todos}
+          unit="pedidos"
+          foot="Sin historial demo"
+          icon="orders"
+        />
         <Kpi
           label="Por preparar"
           value={counts.porPreparar}
           unit=""
           foot={
-            user?.role === 'admin'
-              ? `${counts.sinAsignar} sin asignar`
-              : 'Pendientes de picking'
+            user?.role === 'admin' ? `${counts.sinAsignar} sin asignar` : 'Pendientes de picking'
           }
           icon="box"
         />
@@ -218,21 +239,13 @@ export function OrdersPage() {
         />
       </KpiGrid>
 
-      <div className="tabs" role="tablist" aria-label="Estado de pedidos">
-        {tabs.map((t) => (
-          <button
-            key={t}
-            type="button"
-            role="tab"
-            className={tab === t ? 'active' : ''}
-            aria-selected={tab === t}
-            onClick={() => setTab(t)}
-          >
-            {t}
-            <small>{tabCount(t)}</small>
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        label="Estado de pedidos"
+        value={tab}
+        onValueChange={setTab}
+        items={tabs.map((t) => ({ value: t, label: t, count: tabCount(t) }))}
+        className="ord-status-filter"
+      />
 
       <section className="panel">
         {list.length ? (
@@ -272,7 +285,8 @@ export function OrdersPage() {
                       <td>
                         <strong>{money(orderValue(state, o))}</strong>
                         <small>
-                          {o.lines.length + (o.kits?.length ?? 0)} ítems · {orderWeight(state, o).toFixed(0)} kg
+                          {o.lines.length + (o.kits?.length ?? 0)} ítems ·{' '}
+                          {orderWeight(state, o).toFixed(0)} kg
                         </small>
                       </td>
                       <td>
@@ -304,43 +318,21 @@ export function OrdersPage() {
             </table>
           </div>
         ) : (
-          <Empty title="No hay pedidos en este estado" desc="Cambia de pestaña o crea un nuevo pedido." />
+          <Empty
+            title="No hay pedidos en este estado"
+            desc="Cambia de pestaña o crea un nuevo pedido."
+          />
         )}
         {list.length ? (
-          <div className="ord-pagination" aria-label="Paginación de pedidos">
-            <span>
-              Mostrando {rangeFrom}–{rangeTo} de {list.length}
-            </span>
-            <div>
-              <button
-                type="button"
-                disabled={safePage <= 1}
-                aria-label="Página anterior"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                <Icon name="back" />
-              </button>
-              {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  className={n === safePage ? 'is-active' : ''}
-                  aria-current={n === safePage ? 'page' : undefined}
-                  onClick={() => setPage(n)}
-                >
-                  {n}
-                </button>
-              ))}
-              <button
-                type="button"
-                disabled={safePage >= pageCount}
-                aria-label="Página siguiente"
-                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-              >
-                <Icon name="arrow" />
-              </button>
-            </div>
-          </div>
+          <Pagination
+            label="Paginación de pedidos"
+            className="ord-pagination"
+            page={safePage}
+            pageCount={pageCount}
+            total={list.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+          />
         ) : null}
       </section>
 
@@ -352,7 +344,8 @@ export function OrdersPage() {
           footer={
             <div className="ord-actions">
               <Btn onClick={() => setDetailId(null)}>Cerrar</Btn>
-              {canCancel && ['Esperando stock', 'Por preparar', 'Preparado'].includes(detail.status) ? (
+              {canCancel &&
+              ['Esperando stock', 'Por preparar', 'Preparado'].includes(detail.status) ? (
                 <Btn icon="close" onClick={() => setCancelling({ id: detail.id, reason: '' })}>
                   Cancelar pedido
                 </Btn>
@@ -387,7 +380,10 @@ export function OrdersPage() {
           <div className="ord-detail">
             <div className="ord-detail-top">
               <Badge text={detail.status} color={statusColor(detail.status)} />
-              <Badge text={detail.priority} color={detail.priority === 'Alta' ? 'amber' : 'muted'} />
+              <Badge
+                text={detail.priority}
+                color={detail.priority === 'Alta' ? 'amber' : 'muted'}
+              />
               {detail.vehicle ? <Badge text={detail.vehicle} color="blue" /> : null}
             </div>
             {detail.status === 'Esperando stock' ? (
@@ -397,7 +393,10 @@ export function OrdersPage() {
                   <strong>Esperando stock</strong>
                   <p>
                     {(detail.shortages ?? [])
-                      .map((s) => `Faltan ${s.qty} u. de ${product(state, s.productId)?.name ?? s.productId}`)
+                      .map(
+                        (s) =>
+                          `Faltan ${s.qty} u. de ${product(state, s.productId)?.name ?? s.productId}`,
+                      )
                       .join(' · ') || 'Falta mercadería para completar el pedido.'}
                     . Pasa a «Por preparar» automáticamente al recibir.
                   </p>
@@ -407,9 +406,13 @@ export function OrdersPage() {
                       {detail.purchaseIds.map((id, i) => (
                         <span key={id}>
                           {i ? ', ' : ''}
-                          <button type="button" className="fx-link" onClick={() => navigate('/compras', { state: { focus: id } })}>
+                          <Button
+                            variant="link"
+                            className="fx-link"
+                            onClick={() => navigate('/compras', { state: { focus: id } })}
+                          >
                             {id}
-                          </button>
+                          </Button>
                         </span>
                       ))}
                     </p>
@@ -450,7 +453,10 @@ export function OrdersPage() {
               <article>
                 <span>Ítems</span>
                 <strong>
-                  {detail.lines.length + (detail.kits?.length ?? 0)} líneas · {detail.lines.reduce((n, l) => n + l.qty, 0) + (detail.kits ?? []).reduce((n, kit) => n + kit.qty, 0)} u.
+                  {detail.lines.length + (detail.kits?.length ?? 0)} líneas ·{' '}
+                  {detail.lines.reduce((n, l) => n + l.qty, 0) +
+                    (detail.kits ?? []).reduce((n, kit) => n + kit.qty, 0)}{' '}
+                  u.
                 </strong>
               </article>
             </div>
@@ -462,9 +468,14 @@ export function OrdersPage() {
             ) : null}
 
             {detail.deliveredTo ? (
-              <div className="ord-notes" style={{ background: '#eefaf4', borderColor: '#b7e0cb', color: '#1f7a4d' }}>
+              <div
+                className="ord-notes"
+                style={{ background: '#eefaf4', borderColor: '#b7e0cb', color: '#1f7a4d' }}
+              >
                 Entregado a {detail.deliveredTo}
-                {detail.deliveredAt ? ` · ${new Date(detail.deliveredAt).toLocaleString('es-EC')}` : ''}
+                {detail.deliveredAt
+                  ? ` · ${new Date(detail.deliveredAt).toLocaleString('es-EC')}`
+                  : ''}
               </div>
             ) : null}
 
@@ -489,7 +500,8 @@ export function OrdersPage() {
                     <div>
                       <strong>{p?.name ?? l.productId}</strong>
                       <small>
-                        {l.productId} · {p?.category ?? 'Producto'} · {money(p?.price ?? 0)} c/u × {l.qty}
+                        {l.productId} · {p?.category ?? 'Producto'} · {money(p?.price ?? 0)} c/u ×{' '}
+                        {l.qty}
                       </small>
                     </div>
                     <em>{money(lineTotal)}</em>
@@ -511,7 +523,10 @@ export function OrdersPage() {
                     {' · '}
                     total {money(detailInvoice.total)} · saldo {money(detailBalance)}
                     {detailInvoice.lines.some((line) => line.batch)
-                      ? ` · lotes ${detailInvoice.lines.map((line) => line.batch).filter(Boolean).join(', ')}`
+                      ? ` · lotes ${detailInvoice.lines
+                          .map((line) => line.batch)
+                          .filter(Boolean)
+                          .join(', ')}`
                       : ''}
                   </p>
                 ) : canBill ? (
@@ -544,7 +559,11 @@ export function OrdersPage() {
                     </div>
                     <div className="field">
                       <label htmlFor="ord-pay-method">Método</label>
-                      <Select id="ord-pay-method" value={payMethod} onChange={(event) => setPayMethod(event.target.value)}>
+                      <Select
+                        id="ord-pay-method"
+                        value={payMethod}
+                        onChange={(event) => setPayMethod(event.target.value)}
+                      >
                         <option>Transferencia</option>
                         <option>Efectivo</option>
                         <option>Cheque</option>
@@ -553,7 +572,12 @@ export function OrdersPage() {
                     </div>
                     <div className="field">
                       <label htmlFor="ord-pay-ref">Referencia</label>
-                      <input id="ord-pay-ref" value={payRef} onChange={(event) => setPayRef(event.target.value)} required />
+                      <input
+                        id="ord-pay-ref"
+                        value={payRef}
+                        onChange={(event) => setPayRef(event.target.value)}
+                        required
+                      />
                     </div>
                     <Btn type="submit" variant="primary" disabled={billBusy}>
                       Registrar abono
@@ -573,7 +597,12 @@ export function OrdersPage() {
           footer={
             <>
               <Btn onClick={() => setCancelling(null)}>Volver</Btn>
-              <Btn variant="primary" icon="close" disabled={cancelBusy || !cancelling.reason.trim()} onClick={() => void confirmCancel()}>
+              <Btn
+                variant="primary"
+                icon="close"
+                disabled={cancelBusy || !cancelling.reason.trim()}
+                onClick={() => void confirmCancel()}
+              >
                 Cancelar pedido
               </Btn>
             </>
@@ -581,7 +610,7 @@ export function OrdersPage() {
         >
           <div className="field full">
             <label htmlFor="ord-cancel-reason">Motivo</label>
-            <input
+            <Input
               id="ord-cancel-reason"
               value={cancelling.reason}
               placeholder="Ej.: el cliente ya no lo necesita"

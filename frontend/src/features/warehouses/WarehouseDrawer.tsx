@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useRef, useState } from 'react';
 import { Btn } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
+import { DialogContent, DialogRoot, DialogTitle } from '../../shared/components/Dialog';
 import { num } from '../../shared/lib/inventory';
 import { RackDetail, RackHeatmap } from './RackHeatmap';
 import { StatusPills } from './WarehouseList';
 import { CAPACITY_WARN, pct, type WarehouseRow } from './warehouseRows';
 import '../../styles/warehouses-list.css';
+import { Tooltip } from '../../shared/components/Tooltip';
+import { IconButton } from '../../shared/components/IconButton';
 
 export type DrawerConfirm = 'use' | 'delete' | null;
 
@@ -24,55 +26,53 @@ type Props = {
   onClose: () => void;
 };
 
-const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 export function WarehouseDrawer({ row, activeRow, confirm, pending, error, onConfirm, onUse, onDelete, onEdit, onOpenMap, onClose }: Props) {
   const { warehouse: w, summary, units, occupied, capacityPct, racks } = row;
   const layout = summary.layout;
   const isActive = activeRow?.warehouse.id === w.id;
   const [rackId, setRackId] = useState(racks[0]?.id ?? 'A');
   const rack = racks.find((r) => r.id === rackId) ?? racks[0];
-  const panel = useRef<HTMLElement>(null);
   const closeBtn = useRef<HTMLButtonElement>(null);
   const confirmRef = useRef<HTMLDivElement>(null);
   const hasStock = units > 0;
   const canDelete = !isActive && !hasStock;
 
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    closeBtn.current?.focus();
-    const body = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = body;
-      const rowEl = document.querySelector<HTMLElement>(`[data-wh-row="${CSS.escape(w.id)}"]`);
-      (rowEl ?? previous)?.focus?.();
-    };
-  }, [w.id]);
+  // Al cerrar, devuelve el foco a la fila de la bodega (si sigue en pantalla).
+  const restoreFocus = (event: Event) => {
+    const rowEl = document.querySelector<HTMLElement>(`[data-wh-row="${CSS.escape(w.id)}"]`);
+    if (rowEl) {
+      event.preventDefault();
+      rowEl.focus();
+    }
+  };
   useEffect(() => { if (confirm) confirmRef.current?.focus(); }, [confirm]);
 
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') {
-      event.stopPropagation();
-      if (confirm) onConfirm(null); else onClose();
-      return;
+  // Escape: primero cierra la confirmación abierta; si no hay, cierra el drawer.
+  const onEscape = (event: Event) => {
+    if (pending) return event.preventDefault();
+    if (confirm) {
+      event.preventDefault();
+      onConfirm(null);
     }
-    if (event.key !== 'Tab' || !panel.current) return;
-    const items = [...panel.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
-    if (!items.length) return;
-    const first = items[0];
-    const last = items[items.length - 1];
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   };
 
-  return createPortal(<div className="whx-drawer-root" onKeyDown={onKeyDown}>
-    <div className="whx-scrim" onClick={() => !pending && onClose()} />
-    <aside ref={panel} className="whx-drawer" role="dialog" aria-modal="true" aria-labelledby="whx-drawer-title" aria-busy={pending}>
+  return <DialogRoot onClose={onClose}>
+    <DialogContent
+      overlayClassName="whx-drawer-root"
+      className="whx-drawer"
+      motionPreset="sheet"
+      side="right"
+      noDescription
+      aria-busy={pending}
+      onOpenAutoFocus={(event) => { event.preventDefault(); closeBtn.current?.focus(); }}
+      onCloseAutoFocus={restoreFocus}
+      onEscapeKeyDown={onEscape}
+      onPointerDownOutside={(event) => { if (pending) event.preventDefault(); }}
+    >
       <header className="whx-d-head">
         <div className="whx-d-head-top">
-          <div><span className="whx-code">{w.code}</span><h2 id="whx-drawer-title">{w.name}</h2></div>
-          <button ref={closeBtn} type="button" className="icon-btn" aria-label="Cerrar detalles" onClick={onClose} disabled={pending}><Icon name="close" /></button>
+          <div><span className="whx-code">{w.code}</span><DialogTitle asChild><h2>{w.name}</h2></DialogTitle></div>
+          <IconButton icon="close" label="Cerrar detalles" ref={closeBtn} onClick={onClose} disabled={pending} />
         </div>
         <div className="whx-who-top"><StatusPills row={row} isActive={isActive} /></div>
       </header>
@@ -135,11 +135,11 @@ export function WarehouseDrawer({ row, activeRow, confirm, pending, error, onCon
       <footer className="whx-d-foot">
         {isActive
           ? <Btn variant="primary" icon="map" onClick={onOpenMap}>Abrir mapa</Btn>
-          : <Btn variant="primary" icon="swap" disabled={pending || w.status === 'Inactiva' || confirm === 'use'} title={w.status === 'Inactiva' ? 'Cambia su estado a Operativa en Editar para usarla' : undefined} onClick={() => onConfirm('use')}>Usar esta bodega</Btn>}
+          : <Tooltip content={w.status === 'Inactiva' ? 'Cambia su estado a Operativa en Editar para usarla' : undefined}><Btn variant="primary" icon="swap" disabled={pending || w.status === 'Inactiva' || confirm === 'use'} onClick={() => onConfirm('use')}>Usar esta bodega</Btn></Tooltip>}
         <Btn icon="edit" disabled={pending} onClick={() => onEdit()}>Editar</Btn>
         <Btn icon="grid" variant="ghost" disabled={pending} onClick={() => onEdit('layout')}>Distribución</Btn>
-        {!isActive ? <Btn variant="danger" icon="trash" disabled={pending || !canDelete || confirm === 'delete'} title={canDelete ? undefined : 'Revisa los requisitos de «Para eliminarla»'} onClick={() => onConfirm('delete')}>Eliminar</Btn> : null}
+        {!isActive ? <Tooltip content={canDelete ? undefined : 'Revisa los requisitos de «Para eliminarla»'}><Btn variant="danger" icon="trash" disabled={pending || !canDelete || confirm === 'delete'} onClick={() => onConfirm('delete')}>Eliminar</Btn></Tooltip> : null}
       </footer>
-    </aside>
-  </div>, document.body);
+    </DialogContent>
+  </DialogRoot>;
 }

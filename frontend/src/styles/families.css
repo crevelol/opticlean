@@ -98,26 +98,6 @@
   background: var(--amber-100);
   color: var(--amber-700);
 }
-
-.fam-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.fam-chips button {
-  border: 1px solid var(--slate-250);
-  background: var(--slate-0);
-  border-radius: var(--radius-full);
-  padding: 6px 10px;
-  font-size: var(--text-sm);
-  color: var(--slate-700);
-}
-.fam-chips button.is-on {
-  background: var(--blue-50);
-  border-color: var(--blue-300);
-  color: var(--blue-700);
-  font-weight: var(--weight-semibold);
-}
 .fam-check {
   display: flex;
   align-items: center;

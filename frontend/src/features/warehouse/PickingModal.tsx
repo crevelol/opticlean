@@ -2,6 +2,8 @@ import type { AppState } from '../../shared/types';
 import { dateShort, daysUntil, expiryTone, product } from '../../shared/lib/inventory';
 import { Modal } from '../../shared/components/Modal';
 import { Btn } from '../../shared/components/ui';
+import { Checkbox } from '../../shared/components/Checkbox';
+import { Tooltip } from '../../shared/components/Tooltip';
 
 export type PickLine = { id: string; loc: string; batch: string; qty: number; productId: string; expiry?: string; purchaseId?: string };
 
@@ -51,7 +53,7 @@ export function PickingModal({ state, orderId, plan, checked, onToggle, onLocate
               return (
                 <li key={line.id} className={isChecked ? 'is-checked' : ''}>
                   <label>
-                    <input type="checkbox" checked={isChecked} onChange={(event) => onToggle(line, event.target.checked)} />
+                    <Checkbox checked={isChecked} onCheckedChange={(checked) => onToggle(line, checked)} />
                     <span className="pick-modal-number">{index + 1}</span>
                     <span className="pick-modal-text">
                       <strong>{product(state, line.productId)?.name ?? line.productId}</strong>
@@ -68,9 +70,9 @@ export function PickingModal({ state, orderId, plan, checked, onToggle, onLocate
                       </small>
                     </span>
                   </label>
-                  <button type="button" className="pick-modal-loc" onClick={() => onLocate(line.loc)} title="Ver en el mapa">
+                  <Tooltip content={"Ver en el mapa"}><button type="button" className="pick-modal-loc" onClick={() => onLocate(line.loc)}>
                     {line.loc}
-                  </button>
+                  </button></Tooltip>
                 </li>
               );
             })}

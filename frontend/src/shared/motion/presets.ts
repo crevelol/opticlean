@@ -69,3 +69,18 @@ export const swap: Variants = {
   show: { opacity: 1, y: 0, transition: transition.base },
   exit: { opacity: 0, y: -6, transition: transition.fast },
 };
+
+/**
+ * Capas (diálogos, drawers, desplegables): la ENTRADA es el espejo exacto de
+ * la SALIDA (shared/motion/exitAnimation.ts → exitParts). Misma duración,
+ * misma curva simétrica y mismos valores, en sentido inverso.
+ */
+export const layer = {
+  transition: { duration: duration.base, ease: ease.inOut } satisfies Transition,
+  /** Sheets (paneles laterales): recorren más distancia, así que un poco más lentos. */
+  sheetTransition: { duration: duration.slow, ease: ease.inOut } satisfies Transition,
+  /** Desplazamientos/escala compartidos con exitParts. */
+  dialogScale: 0.97,
+  popoverOffset: 4,
+  popoverScale: 0.98,
+};

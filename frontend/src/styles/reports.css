@@ -10,69 +10,11 @@
   margin-bottom: 14px;
 }
 
-.rpt-period {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  padding: 4px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--slate-0);
-}
-
-.rpt-period button {
-  border: 0;
-  background: transparent;
-  color: var(--slate-650);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-  min-height: 30px;
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-}
-
-.rpt-period button[aria-pressed='true'] {
-  background: var(--slate-900);
-  color: var(--slate-0);
-}
-
 .rpt-classic {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-left: auto;
-}
-
-.rpt-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-
-.rpt-tabs button {
-  border: 1px solid var(--color-border);
-  background: var(--slate-0);
-  color: var(--slate-650);
-  border-radius: var(--radius-md);
-  min-height: 36px;
-  padding: 7px 12px;
-  font-size: var(--text-md);
-  font-weight: var(--weight-semibold);
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.rpt-tabs button[aria-selected='true'] {
-  background: var(--blue-50);
-  border-color: var(--blue-300);
-  color: var(--blue-700);
-}
-
-.rpt-tabs button .icon {
-  width: 15px;
-  height: 15px;
 }
 
 .rpt-insight {
@@ -255,13 +197,5 @@
   }
   .rpt-table {
     min-width: 0;
-  }
-  .rpt-tabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 4px;
-  }
-  .rpt-tabs button {
-    flex-shrink: 0;
   }
 }

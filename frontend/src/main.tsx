@@ -6,6 +6,7 @@ import { AppRoutes } from './app/routes';
 import { AuthProvider } from './shared/hooks/AuthProvider';
 import { AppStateProvider } from './shared/hooks/AppStateProvider';
 import { transition } from './shared/motion/presets';
+import { TooltipProvider } from './shared/components/Tooltip';
 import './styles/tokens.css';
 import './styles/global.css';
 import './styles/layout.css';
@@ -16,13 +17,15 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {/* reducedMotion="user": respeta la preferencia del sistema operativo */}
     <MotionConfig reducedMotion="user" transition={transition.base}>
-      <BrowserRouter>
-        <AuthProvider>
-          <AppStateProvider>
-            <AppRoutes />
-          </AppStateProvider>
-        </AuthProvider>
-      </BrowserRouter>
+      <TooltipProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <AppStateProvider>
+              <AppRoutes />
+            </AppStateProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
     </MotionConfig>
   </StrictMode>,
 );

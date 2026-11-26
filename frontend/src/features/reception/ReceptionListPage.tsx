@@ -2,12 +2,15 @@ import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { dateShort, daysUntil, expiryTone, product } from '../../shared/lib/inventory';
-import { Btn, Empty, Kpi, KpiGrid, PageHead, ProductCell, cx } from '../../shared/components/ui';
+import { Btn, Empty, Kpi, KpiGrid, PageHead, ProductCell, Button } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal } from '../../shared/components/Modal';
 import { api } from '../../shared/api/client';
 import { useAuth } from '../../shared/hooks/AuthProvider';
 import '../../styles/reception.css';
+import { ChipGroup } from '../../shared/components/Chip';
+import { Input } from '../../shared/components/Input';
+import { SearchInput } from '../../shared/components/SearchInput';
 
 type Period = 'all' | 'today' | '7d' | '30d';
 
@@ -122,29 +125,15 @@ export function ReceptionListPage() {
 
       <section className="panel reception-list">
         <div className="toolbar">
-          <div className="search-input">
-            <Icon name="search" />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar por producto, lote, proveedor o ubicación…"
-              aria-label="Buscar recepciones"
-            />
-          </div>
-          <div className="reception-chips" role="group" aria-label="Periodo">
-            {periods.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className={cx('reception-chip', period === p.id && 'is-active')}
-                aria-pressed={period === p.id}
-                onClick={() => setPeriod(p.id)}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+          <SearchInput className="search-input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por producto, lote, proveedor o ubicación…" aria-label="Buscar recepciones" />
+          <ChipGroup
+            type="single"
+            label="Periodo"
+            className="reception-chips"
+            value={period}
+            onValueChange={setPeriod}
+            items={periods.map((p) => ({ value: p.id, label: p.label }))}
+          />
         </div>
 
         {list.length ? (
@@ -181,9 +170,9 @@ export function ReceptionListPage() {
                       </td>
                       <td>
                         {r.purchaseId ? (
-                          <button type="button" className="fx-link" onClick={() => navigate('/compras', { state: { focus: r.purchaseId } })}>
+                          <Button variant="link" className="fx-link" onClick={() => navigate('/compras', { state: { focus: r.purchaseId } })}>
                             {r.purchaseId}
-                          </button>
+                          </Button>
                         ) : (
                           <span className="fx-chip">{r.reason ?? 'Sin orden'}</span>
                         )}
@@ -263,7 +252,7 @@ export function ReceptionListPage() {
           >
             <div className="field full">
               <label htmlFor="rec-reject-reason">Motivo del rechazo</label>
-              <input
+              <Input
                 id="rec-reject-reason"
                 value={rejecting.reason}
                 placeholder="Ej.: envase roto, sin hoja de seguridad"

@@ -13,12 +13,17 @@ import {
   outstandingReceivable,
   statusColor,
 } from '../../shared/lib/inventory';
-import { Badge, Btn, PageHead } from '../../shared/components/ui';
+import { Badge, Btn, PageHead, Button } from '../../shared/components/ui';
 import { resolveBusinessRules } from '../../shared/lib/businessRules';
-import { Icon } from '../../shared/components/Icon';
 import { Modal, ModalActions } from '../../shared/components/Modal';
 import type { Client, Order } from '../../shared/types';
 import '../../styles/clients.css';
+import { IconButton } from '../../shared/components/IconButton';
+import { Input } from '../../shared/components/Input';
+import { SearchInput } from '../../shared/components/SearchInput';
+import { SegmentedControl, TabPanel, Tabs } from '../../shared/components/Tabs';
+import { Menu, MoreButton } from '../../shared/components/Menu';
+import { Pagination } from '../../shared/components/Pagination';
 
 type CreditFilter = 'all' | 'ok' | 'tight' | 'full';
 type ViewMode = 'list' | 'cards';
@@ -26,7 +31,16 @@ type DetailTab = 'resumen' | 'pedidos' | 'credito' | 'cuenta';
 type SortMode = 'name' | 'orders' | 'credit';
 
 const PAGE_SIZE = 8;
-const CLIENT_TYPES = ['Corporativo', 'Hotelería', 'Salud', 'Restauración', 'Institucional', 'Retail', 'Industrial', 'Mayorista'];
+const CLIENT_TYPES = [
+  'Corporativo',
+  'Hotelería',
+  'Salud',
+  'Restauración',
+  'Institucional',
+  'Retail',
+  'Industrial',
+  'Mayorista',
+];
 
 function ClientFields({
   client,
@@ -43,11 +57,11 @@ function ClientFields({
     <div className="form-grid">
       <div className="field full">
         <label htmlFor={`${idPrefix}-name`}>Nombre</label>
-        <input id={`${idPrefix}-name`} name="name" defaultValue={client?.name} required />
+        <Input id={`${idPrefix}-name`} name="name" defaultValue={client?.name} required />
       </div>
       <div className="field">
         <label htmlFor={`${idPrefix}-tax`}>RUC</label>
-        <input
+        <Input
           id={`${idPrefix}-tax`}
           name="taxId"
           inputMode="numeric"
@@ -60,35 +74,44 @@ function ClientFields({
       </div>
       <div className="field">
         <label htmlFor={`${idPrefix}-person`}>Contacto</label>
-        <input id={`${idPrefix}-person`} name="contact" defaultValue={client?.contact} required />
+        <Input id={`${idPrefix}-person`} name="contact" defaultValue={client?.contact} required />
       </div>
       <div className="field">
         <label htmlFor={`${idPrefix}-phone`}>Teléfono</label>
-        <input id={`${idPrefix}-phone`} name="phone" defaultValue={client?.phone} />
+        <Input id={`${idPrefix}-phone`} name="phone" defaultValue={client?.phone} />
       </div>
       <div className="field">
         <label htmlFor={`${idPrefix}-type`}>Tipo de cliente</label>
         <Select id={`${idPrefix}-type`} name="type" defaultValue={client?.type || 'Corporativo'}>
-          {(client?.type && !CLIENT_TYPES.includes(client.type) ? [client.type, ...CLIENT_TYPES] : CLIENT_TYPES).map((type) => (
+          {(client?.type && !CLIENT_TYPES.includes(client.type)
+            ? [client.type, ...CLIENT_TYPES]
+            : CLIENT_TYPES
+          ).map((type) => (
             <option key={type}>{type}</option>
           ))}
         </Select>
       </div>
       <div className="field">
         <label htmlFor={`${idPrefix}-city`}>Ciudad de entrega</label>
-        <input id={`${idPrefix}-city`} name="city" defaultValue={client?.city} />
+        <Input id={`${idPrefix}-city`} name="city" defaultValue={client?.city} />
       </div>
       <div className="field full">
         <label htmlFor={`${idPrefix}-address`}>Dirección</label>
-        <input id={`${idPrefix}-address`} name="address" defaultValue={client?.address} required />
+        <Input id={`${idPrefix}-address`} name="address" defaultValue={client?.address} required />
       </div>
       <div className="field">
         <label htmlFor={`${idPrefix}-email`}>Correo</label>
-        <input id={`${idPrefix}-email`} name="email" type="email" defaultValue={client?.email} required />
+        <Input
+          id={`${idPrefix}-email`}
+          name="email"
+          type="email"
+          defaultValue={client?.email}
+          required
+        />
       </div>
       <div className="field">
         <label htmlFor={`${idPrefix}-cadence`}>Reposición cada (días)</label>
-        <input
+        <Input
           id={`${idPrefix}-cadence`}
           name="reorderEveryDays"
           type="number"
@@ -99,7 +122,7 @@ function ClientFields({
       </div>
       <div className="field">
         <label htmlFor={`${idPrefix}-margin`}>Margen de cotización (%)</label>
-        <input
+        <Input
           id={`${idPrefix}-margin`}
           name="marginPct"
           type="number"
@@ -114,7 +137,7 @@ function ClientFields({
         <>
           <div className="field">
             <label htmlFor={`${idPrefix}-credit`}>Límite de crédito (USD)</label>
-            <input
+            <Input
               id={`${idPrefix}-credit`}
               name="creditLimit"
               type="number"
@@ -126,7 +149,7 @@ function ClientFields({
           </div>
           <div className="field">
             <label htmlFor={`${idPrefix}-terms`}>Plazo de pago (días)</label>
-            <input
+            <Input
               id={`${idPrefix}-terms`}
               name="paymentTermsDays"
               type="number"
@@ -175,7 +198,6 @@ export function ClientsPage() {
   const [sort, setSort] = useState<SortMode>('name');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<DetailTab>('resumen');
-  const [menuId, setMenuId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
   const sectors = useMemo(
@@ -236,8 +258,6 @@ export function ClientsPage() {
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const pageRows = rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-  const rangeFrom = rows.length ? (safePage - 1) * PAGE_SIZE + 1 : 0;
-  const rangeTo = Math.min(safePage * PAGE_SIZE, rows.length);
 
   if (!state) return null;
 
@@ -332,7 +352,6 @@ export function ClientsPage() {
     setEditId(c.id);
     setCreditDraft(String(c.creditLimit ?? 0));
     setError('');
-    setMenuId(null);
   };
 
   return (
@@ -349,16 +368,7 @@ export function ClientsPage() {
       />
 
       <div className="cli-toolbar">
-        <div className="cli-search">
-          <Icon name="search" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar por nombre, RUC o contacto…"
-            aria-label="Buscar clientes"
-          />
-        </div>
+        <SearchInput className="cli-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por nombre, RUC o contacto…" aria-label="Buscar clientes" />
         <label className="cli-select">
           <span>Sector</span>
           <Select value={sector} onChange={(e) => setSector(e.target.value)}>
@@ -382,22 +392,15 @@ export function ClientsPage() {
             <option value="full">Cupo alto</option>
           </Select>
         </label>
-        <div className="cli-view-toggle" role="group" aria-label="Vista">
-          <button
-            type="button"
-            className={view === 'list' ? 'active' : ''}
-            onClick={() => setView('list')}
-          >
-            Lista
-          </button>
-          <button
-            type="button"
-            className={view === 'cards' ? 'active' : ''}
-            onClick={() => setView('cards')}
-          >
-            Tarjetas
-          </button>
-        </div>
+        <SegmentedControl
+          label="Vista"
+          value={view}
+          onValueChange={setView}
+          items={[
+            { value: 'list', label: 'Lista', icon: 'menu' },
+            { value: 'cards', label: 'Tarjetas', icon: 'grid' },
+          ]}
+        />
       </div>
 
       <div className="cli-workspace">
@@ -471,42 +474,21 @@ export function ClientsPage() {
                             >
                               Pedido
                             </Btn>
-                            <div className="cli-more-wrap">
-                              <button
-                                type="button"
-                                className="cli-more-btn"
-                                aria-label={`Más acciones de ${c.name}`}
-                                onClick={() => setMenuId(menuId === c.id ? null : c.id)}
-                              >
-                                <span />
-                                <span />
-                                <span />
-                              </button>
-                              {menuId === c.id ? (
-                                <div className="cli-more-menu" role="menu">
-                                  <button
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={() => {
-                                      setSelectedId(c.id);
-                                      setTab('resumen');
-                                      setMenuId(null);
-                                    }}
-                                  >
-                                    Ver ficha
-                                  </button>
-                                  {isAdmin ? (
-                                    <button
-                                      type="button"
-                                      role="menuitem"
-                                      onClick={() => openCredit(c)}
-                                    >
-                                      Editar crédito
-                                    </button>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                            </div>
+                            <Menu
+                              label={`Acciones de ${c.name}`}
+                              trigger={<MoreButton label={`Más acciones de ${c.name}`} />}
+                              items={[
+                                {
+                                  label: 'Ver ficha',
+                                  icon: 'eye',
+                                  onSelect: () => {
+                                    setSelectedId(c.id);
+                                    setTab('resumen');
+                                  },
+                                },
+                                isAdmin && { label: 'Editar crédito', icon: 'edit', onSelect: () => openCredit(c) },
+                              ]}
+                            />
                           </div>
                         </td>
                       </tr>
@@ -556,40 +538,15 @@ export function ClientsPage() {
           )}
 
           {rows.length ? (
-            <div className="cli-pagination" aria-label="Paginación de clientes">
-              <span>
-                Mostrando {rangeFrom}–{rangeTo} de {rows.length}
-              </span>
-              <div>
-                <button
-                  type="button"
-                  disabled={safePage <= 1}
-                  aria-label="Página anterior"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  <Icon name="back" />
-                </button>
-                {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    className={n === safePage ? 'is-active' : ''}
-                    aria-current={n === safePage ? 'page' : undefined}
-                    onClick={() => setPage(n)}
-                  >
-                    {n}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  disabled={safePage >= pageCount}
-                  aria-label="Página siguiente"
-                  onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-                >
-                  <Icon name="arrow" />
-                </button>
-              </div>
-            </div>
+            <Pagination
+              label="Paginación de clientes"
+              className="cli-pagination"
+              page={safePage}
+              pageCount={pageCount}
+              total={rows.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+            />
           ) : null}
         </section>
 
@@ -601,38 +558,23 @@ export function ClientsPage() {
                 <h2>{selected.client.name}</h2>
                 <Badge text={selected.client.type} color="blue" />
               </div>
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label="Cerrar ficha"
-                onClick={() => setSelectedId(null)}
-              >
-                <Icon name="close" />
-              </button>
+              <IconButton icon="close" label="Cerrar ficha" onClick={() => setSelectedId(null)} />
             </header>
 
-            <div className="cli-tabs" role="tablist">
-              {(
-                [
-                  ['resumen', 'Resumen'],
-                  ['pedidos', 'Pedidos'],
-                  ['cuenta', 'Estado de cuenta'],
-                  ['credito', 'Crédito'],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  className={tab === id ? 'active' : ''}
-                  onClick={() => setTab(id)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              label="Detalle del cliente"
+              value={tab}
+              onValueChange={setTab}
+              className="cli-detail-tabs"
+              items={[
+                { value: 'resumen', label: 'Resumen' },
+                { value: 'pedidos', label: 'Pedidos', count: selected.orders.length },
+                { value: 'cuenta', label: 'Estado de cuenta' },
+                { value: 'credito', label: 'Crédito' },
+              ]}
+            >
 
-            {tab === 'resumen' ? (
+            <TabPanel value="resumen">
               <div className="cli-detail-body">
                 <dl className="cli-info">
                   <div>
@@ -673,7 +615,11 @@ export function ClientsPage() {
                   </div>
                   <div>
                     <dt>Reposición</dt>
-                    <dd>{selected.client.reorderEveryDays ? `cada ${selected.client.reorderEveryDays} días` : 'Sin cadencia'}</dd>
+                    <dd>
+                      {selected.client.reorderEveryDays
+                        ? `cada ${selected.client.reorderEveryDays} días`
+                        : 'Sin cadencia'}
+                    </dd>
                   </div>
                   <div>
                     <dt>Por cobrar</dt>
@@ -685,10 +631,10 @@ export function ClientsPage() {
                   <div className="cli-credit-box-head">
                     <strong>Cupo de crédito</strong>
                     {isAdmin ? (
-<button type="button" onClick={() => openCredit(selected.client)}>
-                      Editar
-                    </button>
-) : null}
+                      <Button variant="link" onClick={() => openCredit(selected.client)}>
+                        Editar
+                      </Button>
+                    ) : null}
                   </div>
                   <div className="cli-credit-stats">
                     <div>
@@ -707,9 +653,9 @@ export function ClientsPage() {
                   <div className="cli-credit-bar">
                     <span style={{ width: `${selected.pct}%` }} />
                   </div>
-                  <button type="button" className="cli-text-link" onClick={() => setTab('pedidos')}>
+                  <Button variant="link" className="cli-text-link" onClick={() => setTab('pedidos')}>
                     Ver pedidos que usan el cupo
-                  </button>
+                  </Button>
                 </div>
 
                 <div className="cli-orders-summary">
@@ -719,9 +665,9 @@ export function ClientsPage() {
                   </span>
                 </div>
               </div>
-            ) : null}
+</TabPanel>
 
-            {tab === 'cuenta' ? (
+            <TabPanel value="cuenta">
               <div className="cli-detail-body">
                 <div className="cli-orders-summary">
                   <strong>Saldo por cobrar</strong>
@@ -729,7 +675,10 @@ export function ClientsPage() {
                 </div>
                 <ul className="cli-order-list">
                   {(state.invoices ?? [])
-                    .filter((invoice) => invoice.clientId === selected.client.id && invoice.status === 'Emitida')
+                    .filter(
+                      (invoice) =>
+                        invoice.clientId === selected.client.id && invoice.status === 'Emitida',
+                    )
                     .map((invoice) => (
                       <li key={invoice.id}>
                         <div>
@@ -745,7 +694,9 @@ export function ClientsPage() {
                       </li>
                     ))}
                   {(state.creditNotes ?? [])
-                    .filter((note) => note.clientId === selected.client.id && note.status === 'Emitida')
+                    .filter(
+                      (note) => note.clientId === selected.client.id && note.status === 'Emitida',
+                    )
                     .map((note) => (
                       <li key={note.id}>
                         <div>
@@ -769,13 +720,15 @@ export function ClientsPage() {
                       </li>
                     ))}
                 </ul>
-                {(state.invoices ?? []).some((invoice) => invoice.clientId === selected.client.id) ? null : (
+                {(state.invoices ?? []).some(
+                  (invoice) => invoice.clientId === selected.client.id,
+                ) ? null : (
                   <p className="cli-credit-note">Todavía no hay facturas para este cliente.</p>
                 )}
               </div>
-            ) : null}
+</TabPanel>
 
-            {tab === 'pedidos' ? (
+            <TabPanel value="pedidos">
               <div className="cli-detail-body">
                 {selected.orders.length ? (
                   <ul className="cli-order-list">
@@ -801,9 +754,9 @@ export function ClientsPage() {
                   <p className="cli-empty">Sin pedidos registrados.</p>
                 )}
               </div>
-            ) : null}
+</TabPanel>
 
-            {tab === 'credito' ? (
+            <TabPanel value="credito">
               <div className="cli-detail-body">
                 <div className="cli-credit-box">
                   <div className="cli-credit-stats">
@@ -836,12 +789,17 @@ export function ClientsPage() {
                     El cupo comprometido corresponde a pedidos abiertos (por preparar, en ruta,
                     etc.).
                   </p>
-                  <Btn variant="primary" disabled={!isAdmin} onClick={() => openCredit(selected.client)}>
+                  <Btn
+                    variant="primary"
+                    disabled={!isAdmin}
+                    onClick={() => openCredit(selected.client)}
+                  >
                     Ajustar límite
                   </Btn>
                 </div>
               </div>
-            ) : null}
+</TabPanel>
+            </Tabs>
 
             <footer className="cli-detail-foot">
               <Btn
@@ -853,16 +811,12 @@ export function ClientsPage() {
               >
                 Crear pedido
               </Btn>
-              <button
-                type="button"
-                className="cli-text-link"
-                onClick={() => {
+              <Button variant="link" className="cli-text-link" onClick={() => {
                   setProfileId(selected.client.id);
                   setError('');
-                }}
-              >
+                }}>
                 Editar cliente
-              </button>
+              </Button>
             </footer>
           </aside>
         ) : null}
@@ -883,7 +837,11 @@ export function ClientsPage() {
           }
         >
           <form id="client-form" onSubmit={submit}>
-            <ClientFields idPrefix="cl" isAdmin={isAdmin} creditDefault={rules.defaultCreditLimit} />
+            <ClientFields
+              idPrefix="cl"
+              isAdmin={isAdmin}
+              creditDefault={rules.defaultCreditLimit}
+            />
             {!isAdmin ? <small>El cupo y el plazo los asigna administración.</small> : null}
             {error ? <div className="form-error visible">{error}</div> : null}
           </form>
@@ -928,7 +886,7 @@ export function ClientsPage() {
           <div className="form-grid">
             <div className="field full">
               <label htmlFor="edit-credit">Límite de crédito (USD)</label>
-              <input
+              <Input
                 id="edit-credit"
                 type="number"
                 min={0}

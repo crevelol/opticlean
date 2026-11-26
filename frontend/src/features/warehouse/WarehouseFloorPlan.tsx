@@ -3,6 +3,7 @@ import { Select } from '../../shared/components/Select';
 import type { WarehouseLayout } from '../../shared/types';
 import { FLOOR_COLUMNS, FLOOR_ROWS, moveRack, rackPositions } from '../../shared/lib/rackPositioning';
 import { Icon } from '../../shared/components/Icon';
+import { Button } from '../../shared/components/ui';
 import '../../styles/warehouse-positioning.css';
 
 export type RackStats = Record<string, { occupied: number; total: number; units: number }>;
@@ -90,7 +91,7 @@ export function WarehouseFloorPlan({ layout, selectedRack, onSelectRack, onChang
       <div><strong>Rack {selected.rackId}</strong><span>Seleccionado · Alt + flechas para mover</span></div>
       <label>Columna<Select aria-label={`Columna del rack ${selected.rackId}`} value={selected.column} onChange={(event) => place(selected.rackId, Number(event.target.value), selected.row)}>{Array.from({ length: FLOOR_COLUMNS }, (_, index) => <option key={index} value={index}>{index + 1}</option>)}</Select></label>
       <label>Fila<Select aria-label={`Fila del rack ${selected.rackId}`} value={selected.row} onChange={(event) => place(selected.rackId, selected.column, Number(event.target.value))}>{Array.from({ length: FLOOR_ROWS }, (_, index) => <option key={index} value={index}>{index + 1}</option>)}</Select></label>
-      <button type="button" className={`btn ${moving ? 'primary' : ''}`} aria-pressed={moving} onClick={() => setMoving(!moving)}><Icon name={moving ? 'close' : 'swap'} />{moving ? 'Cancelar movimiento' : 'Mover rack'}</button>
+      <Button variant={moving ? 'primary' : 'secondary'} icon={moving ? 'close' : 'swap'} aria-pressed={moving} onClick={() => setMoving(!moving)}>{moving ? 'Cancelar movimiento' : 'Mover rack'}</Button>
     </div> : null}
     <p className="floor-plan-note">{moving ? `Elige el nuevo espacio del rack ${selected.rackId}.` : editable ? 'La distribución es referencial. Los espacios entre módulos representan los pasillos de circulación.' : 'Selecciona un rack para explorar sus niveles y ubicaciones.'}</p>
     <span className="floor-announcement" role="status">{announcement}</span>

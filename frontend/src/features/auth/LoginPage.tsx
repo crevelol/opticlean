@@ -8,6 +8,8 @@ import { useAuth } from '../../shared/hooks/AuthProvider';
 import { api } from '../../shared/api/client';
 import { homeForRole } from '../../app/navigation';
 import '../../styles/login.css';
+import { Tooltip } from '../../shared/components/Tooltip';
+import { Input } from '../../shared/components/Input';
 
 export function LoginPage() {
   const { user, loading, login } = useAuth();
@@ -88,7 +90,7 @@ export function LoginPage() {
 
           <label className="field">
             <span>Correo electrónico</span>
-            <input
+            <Input
               name="email"
               type="email"
               autoComplete="username"
@@ -100,7 +102,7 @@ export function LoginPage() {
           <label className="field">
             <span>Contraseña</span>
             <span className="login-password">
-              <input
+              <Input
                 name="password"
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
@@ -108,13 +110,12 @@ export function LoginPage() {
                 minLength={8}
                 placeholder="Tu contraseña"
               />
-              <button
+              <Tooltip content={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}><button
                 type="button"
                 className="icon-btn login-eye"
                 onClick={() => setShowPassword((v) => !v)}
                 aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                 aria-pressed={showPassword}
-                title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
               >
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.span
@@ -127,7 +128,7 @@ export function LoginPage() {
                     <Icon name={showPassword ? 'eye-off' : 'eye'} />
                   </motion.span>
                 </AnimatePresence>
-              </button>
+              </button></Tooltip>
             </span>
           </label>
 

@@ -90,15 +90,6 @@
 }
 .designer-dimension-head input {
   width: 72px;
-  min-height: 36px;
-  padding: 7px 8px;
-  border: 1px solid var(--slate-300);
-  border-radius: var(--radius-sm);
-  color: var(--slate-850);
-  background: var(--slate-0);
-  font: inherit;
-  font-size: var(--text-md);
-  font-weight: var(--weight-semibold);
 }
 .designer-dimension p {
   margin: 6px 0 5px;
@@ -124,7 +115,6 @@
 }
 .designer-workspace .designer-depth-toggle input {
   width: 16px;
-  height: 16px;
   flex-shrink: 0;
 }
 .designer-workspace .designer-depth-toggle small {

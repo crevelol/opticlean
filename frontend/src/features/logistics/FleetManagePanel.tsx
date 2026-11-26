@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Select } from '../../shared/components/Select';
 import { api } from '../../shared/api/client';
-import { Btn } from '../../shared/components/ui';
+import { Btn, Button } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { ensureShippingTemplates } from '../../shared/lib/businessRules';
@@ -15,6 +15,9 @@ import {
   sectorsOf as catalogSectors,
   zonePathOf,
 } from '../../shared/lib/zones';
+import { ChipGroup, RemovableChip } from '../../shared/components/Chip';
+import { Input } from '../../shared/components/Input';
+import { SearchInput } from '../../shared/components/SearchInput';
 
 type VehicleRow = {
   id: string;
@@ -303,15 +306,13 @@ export function FleetManagePanel({ onFleetChange }: { onFleetChange: (trucks: Tr
         <Btn variant="primary" icon="plus" onClick={openCreate}>
           Agregar vehículo
         </Btn>
-        <div className="fleet-manage-search">
-          <Icon name="search" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filtrar por placa, nombre o ciudad"
-            aria-label="Filtrar flota"
-          />
-        </div>
+        <SearchInput
+          className="fleet-manage-search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Filtrar por placa, nombre o ciudad"
+          aria-label="Filtrar flota"
+        />
       </div>
 
       <div className="table-scroll fleet-manage-table">
@@ -390,18 +391,18 @@ export function FleetManagePanel({ onFleetChange }: { onFleetChange: (trucks: Tr
                     </span>
                   </td>
                   <td className="fleet-config-actions">
-                    <button type="button" disabled={busy} onClick={() => void openKm(v)}>
+                    <Button size="small" disabled={busy} onClick={() => void openKm(v)}>
                       Km
-                    </button>
-                    <button type="button" disabled={busy || !v.active} onClick={() => setCostVehicleId(v.id)}>
+                    </Button>
+                    <Button size="small" disabled={busy || !v.active} onClick={() => setCostVehicleId(v.id)}>
                       Costo real
-                    </button>
-                    <button type="button" disabled={busy} onClick={() => void patch(v.id, { active: !v.active })}>
+                    </Button>
+                    <Button size="small" disabled={busy} onClick={() => void patch(v.id, { active: !v.active })}>
                       {v.active ? 'Desactivar' : 'Activar'}
-                    </button>
-                    <button type="button" disabled={busy} onClick={() => void remove(v)}>
+                    </Button>
+                    <Button variant="danger" size="small" disabled={busy} onClick={() => void remove(v)}>
                       Eliminar
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               );
@@ -455,7 +456,7 @@ export function FleetManagePanel({ onFleetChange }: { onFleetChange: (trucks: Tr
                 <div className="fleet-drawer-grid">
                   <label>
                     {kmMode === 'add' ? 'Km del viaje' : 'Odómetro (km)'}
-                    <input
+                    <Input
                       type="number"
                       min={0}
                       step="0.1"
@@ -466,7 +467,7 @@ export function FleetManagePanel({ onFleetChange }: { onFleetChange: (trucks: Tr
                   </label>
                   <label>
                     Nota
-                    <input
+                    <Input
                       value={kmNote}
                       onChange={(e) => setKmNote(e.target.value)}
                       placeholder="Opcional"
@@ -541,7 +542,7 @@ export function FleetManagePanel({ onFleetChange }: { onFleetChange: (trucks: Tr
                   </label>
                   <label>
                     Nombre
-                    <input
+                    <Input
                       value={form.label}
                       onChange={(e) => setForm({ ...form, label: e.target.value })}
                       placeholder="Camión 05"
@@ -550,7 +551,7 @@ export function FleetManagePanel({ onFleetChange }: { onFleetChange: (trucks: Tr
                   </label>
                   <label>
                     Placa
-                    <input
+                    <Input
                       value={form.plate}
                       onChange={(e) => setForm({ ...form, plate: e.target.value })}
                       placeholder="PBA-2048"
@@ -559,7 +560,7 @@ export function FleetManagePanel({ onFleetChange }: { onFleetChange: (trucks: Tr
                   </label>
                   <label>
                     Conductor
-                    <input
+                    <Input
                       value={form.driver}
                       onChange={(e) => setForm({ ...form, driver: e.target.value })}
                       placeholder="Carlos Pérez"
@@ -574,7 +575,7 @@ export function FleetManagePanel({ onFleetChange }: { onFleetChange: (trucks: Tr
                   <label>
                     Peso máximo
                     <div className="fleet-input-unit">
-                      <input
+                      <Input
                         type="number"
                         value={form.maxKg}
                         onChange={(e) => setForm({ ...form, maxKg: Number(e.target.value) })}
@@ -585,7 +586,7 @@ export function FleetManagePanel({ onFleetChange }: { onFleetChange: (trucks: Tr
                   <label>
                     Volumen máximo
                     <div className="fleet-input-unit">
-                      <input
+                      <Input
                         type="number"
                         step="0.1"
                         value={form.maxM3}
@@ -597,7 +598,7 @@ export function FleetManagePanel({ onFleetChange }: { onFleetChange: (trucks: Tr
                   <label>
                     Costo por kilómetro
                     <div className="fleet-input-unit">
-                      <input
+                      <Input
                         type="number"
                         step="0.01"
                         value={form.costPerKm}
@@ -689,19 +690,14 @@ export function FleetManagePanel({ onFleetChange }: { onFleetChange: (trucks: Tr
                   <>
                     <div className="fleet-sector-chips">
                       {form.allowedSectors.map((s) => (
-                        <button
+                        <RemovableChip
                           key={s}
-                          type="button"
-                          className="fleet-chip is-on"
-                          onClick={() =>
-                            setForm({
-                              ...form,
-                              allowedSectors: form.allowedSectors.filter((x) => x !== s),
-                            })
+                          onRemove={() =>
+                            setForm({ ...form, allowedSectors: form.allowedSectors.filter((x) => x !== s) })
                           }
                         >
-                          {s} ×
-                        </button>
+                          {s}
+                        </RemovableChip>
                       ))}
                     </div>
                     <div className="fleet-sector-add">
@@ -726,30 +722,26 @@ export function FleetManagePanel({ onFleetChange }: { onFleetChange: (trucks: Tr
                         ))}
                       </Select>
                     </div>
-                    <div className="fleet-sector-chips">
-                      {knownSectors.slice(0, 12).map((s) => {
-                        const on = form.allowedSectors.some((x) => x.toLowerCase() === s.toLowerCase());
-                        return (
-                          <button
-                            key={s}
-                            type="button"
-                            className={`fleet-chip ${on ? 'is-on' : ''}`}
-                            onClick={() =>
-                              setForm({
-                                ...form,
-                                allowedSectors: on
-                                  ? form.allowedSectors.filter((x) => x.toLowerCase() !== s.toLowerCase())
-                                  : addSector(s, form.allowedSectors),
-                              })
-                            }
-                          >
-                            {s}
-                          </button>
+                    <ChipGroup
+                      type="multiple"
+                      label="Sectores conocidos"
+                      className="fleet-sector-chips"
+                      value={knownSectors.filter((s) => form.allowedSectors.some((x) => x.toLowerCase() === s.toLowerCase()))}
+                      onValueChange={(next) => {
+                        const current = knownSectors
+                          .slice(0, 12)
+                          .filter((s) => form.allowedSectors.some((x) => x.toLowerCase() === s.toLowerCase()));
+                        const removed = current.filter((s) => !next.includes(s));
+                        let list = form.allowedSectors.filter(
+                          (x) => !removed.some((r) => r.toLowerCase() === x.toLowerCase()),
                         );
-                      })}
-                    </div>
+                        for (const s of next.filter((s) => !current.includes(s))) list = addSector(s, list);
+                        setForm({ ...form, allowedSectors: list });
+                      }}
+                      items={knownSectors.slice(0, 12).map((s) => ({ value: s, label: s }))}
+                    />
                     <div className="fleet-sector-add">
-                      <input
+                      <Input
                         value={sectorDraft}
                         onChange={(e) => setSectorDraft(e.target.value)}
                         placeholder="O escribe: Pichincha / Quito / Norte"
@@ -764,18 +756,15 @@ export function FleetManagePanel({ onFleetChange }: { onFleetChange: (trucks: Tr
                           }
                         }}
                       />
-                      <button
-                        type="button"
-                        onClick={() => {
+                      <Button size="small" onClick={() => {
                           setForm({
                             ...form,
                             allowedSectors: addSector(sectorDraft, form.allowedSectors),
                           });
                           setSectorDraft('');
-                        }}
-                      >
+                        }}>
                         Agregar
-                      </button>
+                      </Button>
                     </div>
                   </>
                 ) : null}

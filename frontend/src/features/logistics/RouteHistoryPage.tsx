@@ -15,6 +15,7 @@ import {
 } from './fleet';
 import type { Order } from '../../shared/types';
 import '../../styles/logistics.css';
+import { Input } from '../../shared/components/Input';
 
 function shiftDays(base: string, delta: number) {
   const d = new Date(`${base}T12:00:00`);
@@ -105,11 +106,11 @@ export function RouteHistoryPage() {
         <div className="log-filter-grid">
           <label>
             Desde
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           </label>
           <label>
             Hasta
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </label>
           <label>
             Vehículo

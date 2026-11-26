@@ -1,5 +1,6 @@
 import type { WarehouseLayout } from '../../shared/types';
 import { buildWarehouseGeometry, formatLocationId, layoutFaces } from '../../shared/lib/warehouseLayout';
+import { Tooltip } from '../../shared/components/Tooltip';
 
 export function WarehouseLayoutSchematic({ layout }: { layout: WarehouseLayout }) {
   const { racks } = buildWarehouseGeometry(layout);
@@ -28,7 +29,7 @@ export function WarehouseLayoutSchematic({ layout }: { layout: WarehouseLayout }
                         {Array.from({ length: layout.positionsPerLevel }, (_, pi) => {
                           const pos = pi + 1;
                           const id = formatLocationId(r.id, level, pos, face);
-                          return <span key={id} className="layout-cell" title={id} />;
+                          return <Tooltip key={id} content={id}><span className="layout-cell" /></Tooltip>;
                         })}
                       </div>
                     </div>

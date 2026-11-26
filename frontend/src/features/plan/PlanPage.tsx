@@ -80,7 +80,7 @@ export function PlanPage() {
   const late = (plan?.diagnostics ?? []).filter((row) => row.late).length;
 
   return (
-    <div className="page">
+    <div>
       <PageHead
         eyebrow="Abastecimiento"
         title="Plan de mañana"

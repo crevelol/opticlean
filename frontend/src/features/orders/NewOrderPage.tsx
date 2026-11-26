@@ -15,19 +15,29 @@ import {
   outstandingReceivable,
   product,
 } from '../../shared/lib/inventory';
-import { Btn, Empty, PageHead } from '../../shared/components/ui';
+import { Btn, Empty, PageHead, Button } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
+import { SegmentedControl } from '../../shared/components/Tabs';
 import { ImportDialog } from '../imports/ImportDialog';
 import '../../styles/new-order.css';
+import {
+  WizardFooter,
+  WizardSteps,
+  useDiscardGuard,
+  useStepFocus,
+} from '../../shared/components/Wizard';
+import { Checkbox } from '../../shared/components/Checkbox';
+import { Input, Textarea, NumberStepper } from '../../shared/components/Input';
+import { SearchInput } from '../../shared/components/SearchInput';
 
 type Line = { productId: string; qty: number };
 type KitLine = { bundleId: string; qty: number };
 
 const STEPS = [
-  { id: 1, title: 'Cliente', desc: 'Datos y entrega' },
-  { id: 2, title: 'Productos', desc: 'Artículos y cantidades' },
-  { id: 3, title: 'Confirmar', desc: 'Revisión final' },
-] as const;
+  { title: 'Cliente', subtitle: 'Datos y entrega' },
+  { title: 'Productos', subtitle: 'Artículos y cantidades' },
+  { title: 'Confirmar', subtitle: 'Revisión final' },
+];
 
 function initials(name: string) {
   return name
@@ -90,6 +100,17 @@ export function NewOrderPage() {
       (b) => !q || (b.name + b.id + b.description).toLowerCase().includes(q),
     );
   }, [search, meta, state]);
+
+  const stepRef = useStepFocus<HTMLDivElement>(step);
+  const discard = useDiscardGuard(
+    !busy &&
+      (clientId !== (routeClient ?? '') ||
+        lines.length > 0 ||
+        kits.length > 0 ||
+        !!notes.trim() ||
+        !!requestedDate),
+  );
+  const leaveTo = (to: string) => discard.guard(() => navigate(to));
 
   if (!state || !meta) return null;
 
@@ -221,6 +242,13 @@ export function NewOrderPage() {
     }
   };
 
+  const missing =
+    step === 1 && !clientId
+      ? 'Selecciona un cliente'
+      : step === 2 && !lines.length && !kits.length
+        ? 'Agrega al menos un producto'
+        : '';
+
   const stepTitle =
     step === 1
       ? 'Selecciona el cliente y el punto de entrega.'
@@ -236,7 +264,7 @@ export function NewOrderPage() {
         desc={stepTitle}
         actions={
           <>
-            <Btn icon="back" onClick={() => navigate('/pedidos')}>
+            <Btn icon="back" onClick={() => leaveTo('/pedidos')}>
               Volver a pedidos
             </Btn>
             <Btn icon="file" onClick={() => setImportOpen(true)}>
@@ -259,55 +287,32 @@ export function NewOrderPage() {
       ) : null}
       {error && step === 1 ? <div className="form-error visible">{error}</div> : null}
 
-      <nav className="no-steps" aria-label="Pasos del pedido">
-        {STEPS.map((s) => {
-          const done = step > s.id;
-          const current = step === s.id;
-          return (
-            <button
-              key={s.id}
-              type="button"
-              className={current ? 'is-current' : done ? 'is-done' : ''}
-              disabled={!done && !current}
-              onClick={() => done && setStep(s.id)}
-            >
-              <b>{done ? '✓' : s.id}</b>
-              <span>
-                <strong>{s.title}</strong>
-                <small>{s.desc}</small>
-              </span>
-            </button>
-          );
-        })}
-      </nav>
+      <WizardSteps
+        label="Pasos del pedido"
+        steps={STEPS}
+        current={step - 1}
+        onSelect={(index) => setStep(index + 1)}
+        disabled={busy}
+      />
 
       <div className="no-layout">
-        <div className="no-main">
+        <div className="no-main" ref={stepRef} tabIndex={-1}>
           {step === 1 ? (
             <>
               <section className="no-card">
                 <header className="no-card-head">
                   <h2>Cliente</h2>
-                  <button type="button" className="no-link" onClick={() => navigate('/clientes')}>
+                  <Button variant="link" className="no-link" onClick={() => leaveTo('/clientes')}>
                     <Icon name="plus" /> Nuevo cliente
-                  </button>
+                  </Button>
                 </header>
 
-                <label className="no-search-field">
-                  <Icon name="search" />
-                  <input
-                    value={clientQuery || selected?.name || ''}
-                    onChange={(e) => {
+                <SearchInput className="no-search-field" value={clientQuery || selected?.name || ''} onChange={(e) => {
                       setClientQuery(e.target.value);
                       if (clientId) setClientId('');
-                    }}
-                    onFocus={() => {
+                    }} onFocus={() => {
                       if (selected) setClientQuery(selected.name);
-                    }}
-                    placeholder="Buscar cliente por nombre o contacto…"
-                    aria-label="Buscar cliente"
-                  />
-                </label>
+                    }} placeholder="Buscar cliente por nombre o contacto…" aria-label="Buscar cliente" />
 
                 {!clientId && clientQuery ? (
                   <ul className="no-client-results">
@@ -361,9 +366,9 @@ export function NewOrderPage() {
                 <header className="no-card-head">
                   <h2>Entrega</h2>
                   {selected ? (
-                    <button type="button" className="no-link" onClick={() => navigate('/clientes')}>
+                    <Button variant="link" className="no-link" onClick={() => leaveTo('/clientes')}>
                       <Icon name="edit" /> Editar dirección
-                    </button>
+                    </Button>
                   ) : null}
                 </header>
 
@@ -407,27 +412,21 @@ export function NewOrderPage() {
                 </div>
                 <div className="field">
                   <span>Prioridad</span>
-                  <div className="no-priority" role="group" aria-label="Prioridad">
-                    <button
-                      type="button"
-                      className={priority === 'Normal' ? 'is-active' : ''}
-                      onClick={() => setPriority('Normal')}
-                    >
-                      Normal
-                    </button>
-                    <button
-                      type="button"
-                      className={`is-high ${priority === 'Alta' ? 'is-active' : ''}`}
-                      onClick={() => setPriority('Alta')}
-                    >
-                      Alta
-                    </button>
-                  </div>
+                  <SegmentedControl
+                    label="Prioridad"
+                    full
+                    value={priority}
+                    onValueChange={setPriority}
+                    items={[
+                      { value: 'Normal', label: 'Normal' },
+                      { value: 'Alta', label: 'Alta', tone: 'danger' },
+                    ]}
+                  />
                 </div>
 
                 <label className="field">
                   <span>Fecha solicitada (opcional)</span>
-                  <input
+                  <Input
                     type="date"
                     value={requestedDate}
                     onChange={(e) => setRequestedDate(e.target.value)}
@@ -436,7 +435,7 @@ export function NewOrderPage() {
 
                 <label className="field">
                   <span>Notas de entrega (opcional)</span>
-                  <textarea
+                  <Textarea
                     rows={3}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
@@ -453,41 +452,23 @@ export function NewOrderPage() {
                 <h2>Productos</h2>
               </header>
               <div className="no-toolbar">
-                <label className="no-search-field grow">
-                  <Icon name="search" />
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Buscar producto, código o categoría…"
-                    aria-label="Buscar productos"
-                  />
-                </label>
-                <div className="segmented">
-                  <button
-                    type="button"
-                    className={catalogMode === 'products' ? 'active' : ''}
-                    onClick={() => setCatalogMode('products')}
-                  >
-                    Productos
-                  </button>
-                  <button
-                    type="button"
-                    className={catalogMode === 'bundles' ? 'active' : ''}
-                    onClick={() => setCatalogMode('bundles')}
-                  >
-                    Paquetes
-                  </button>
-                </div>
+                <SearchInput className="no-search-field grow" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar producto, código o categoría…" aria-label="Buscar productos" />
+                <SegmentedControl
+                  label="Catálogo"
+                  size="small"
+                  value={catalogMode}
+                  onValueChange={setCatalogMode}
+                  items={[
+                    { value: 'products', label: 'Productos' },
+                    { value: 'bundles', label: 'Paquetes' },
+                  ]}
+                />
               </div>
 
               {catalogMode === 'products' ? (
                 <label className="no-backorder">
-                  <input
-                    id="no-backorder"
-                    type="checkbox"
-                    checked={backorder}
-                    onChange={(e) => {
-                      const on = e.target.checked;
+                  <Checkbox id="no-backorder" checked={backorder} onCheckedChange={(checked) => {
+                      const on = checked;
                       setBackorder(on);
                       if (!on) {
                         setLines((prev) =>
@@ -496,8 +477,7 @@ export function NewOrderPage() {
                             .filter((l) => l.qty > 0),
                         );
                       }
-                    }}
-                  />
+                    }} />
                   <span>
                     <strong>Pedir aunque falte stock</strong>
                     <small>El pedido queda «Esperando stock» y se crea la orden de compra por el faltante. Pasa a preparación solo cuando llega la mercadería.</small>
@@ -541,9 +521,9 @@ export function NewOrderPage() {
                             <Icon name="plus" />
                           </em>
                         </button>
-                        <button type="button" className="btn" onClick={() => setArming({ id: b.id, qty: 1, batch: '', expiry: '' })}>
+                        <Button type="button" onClick={() => setArming({ id: b.id, qty: 1, batch: '', expiry: '' })}>
                           Armar en bodega
-                        </button>
+                        </Button>
                       </div>
                     ))}
               </div>
@@ -558,18 +538,18 @@ export function NewOrderPage() {
                 >
                   <div className="field">
                     <label htmlFor="arm-qty">Cantidad a armar</label>
-                    <input id="arm-qty" type="number" min={1} value={arming.qty} onChange={(event) => setArming({ ...arming, qty: Number(event.target.value) })} />
+                    <Input id="arm-qty" type="number" min={1} value={arming.qty} onChange={(event) => setArming({ ...arming, qty: Number(event.target.value) })} />
                   </div>
                   <div className="field">
                     <label htmlFor="arm-batch">Lote del paquete</label>
-                    <input id="arm-batch" value={arming.batch} onChange={(event) => setArming({ ...arming, batch: event.target.value })} required />
+                    <Input id="arm-batch" value={arming.batch} onChange={(event) => setArming({ ...arming, batch: event.target.value })} required />
                   </div>
                   <div className="field">
                     <label htmlFor="arm-expiry">Caducidad</label>
-                    <input id="arm-expiry" type="date" value={arming.expiry} onChange={(event) => setArming({ ...arming, expiry: event.target.value })} required />
+                    <Input id="arm-expiry" type="date" value={arming.expiry} onChange={(event) => setArming({ ...arming, expiry: event.target.value })} required />
                   </div>
                   <div className="field">
-                    <button type="submit" className="btn primary" disabled={busy}>Armar</button>
+                    <Button variant="primary" type="submit" disabled={busy}>Armar</Button>
                   </div>
                 </form>
               ) : null}
@@ -727,29 +707,14 @@ export function NewOrderPage() {
                           </small>
                         </div>
                         {step === 2 ? (
-                          <div className="no-qty">
-                            <button
-                              type="button"
-                              aria-label="Menos"
-                              onClick={() => setQty(l.productId, l.qty - 1)}
-                            >
-                              −
-                            </button>
-                            <input
-                              type="number"
-                              min={1}
-                              max={backorder ? undefined : max}
-                              value={l.qty}
-                              onChange={(e) => setQty(l.productId, Number(e.target.value))}
-                            />
-                            <button
-                              type="button"
-                              aria-label="Más"
-                              onClick={() => setQty(l.productId, l.qty + 1)}
-                            >
-                              +
-                            </button>
-                          </div>
+                          <NumberStepper
+                            className="no-qty"
+                            label={`Cantidad de ${p?.name ?? l.productId}`}
+                            value={l.qty}
+                            min={0}
+                            max={backorder ? undefined : max}
+                            onChange={(qty) => setQty(l.productId, qty)}
+                          />
                         ) : (
                           <strong>× {l.qty}</strong>
                         )}
@@ -774,52 +739,38 @@ export function NewOrderPage() {
         </aside>
       </div>
 
-      <footer className="no-footer">
-        <span className="no-step-label">
-          Paso {step} de {STEPS.length}
-        </span>
-        <div className="no-footer-actions">
-          {step === 1 ? (
-            <>
-              <Btn
-                onClick={() =>
-                  toast('Borrador local: continúa cuando quieras. Aún no se guarda en servidor.')
+      <WizardFooter
+        step={step - 1}
+        total={STEPS.length}
+        onBack={() => setStep(step - 1)}
+        onCancel={() => leaveTo('/pedidos')}
+        info={`Paso ${step} de ${STEPS.length}${missing ? ` · ${missing}` : ''}`}
+        primary={
+          step === 1
+            ? {
+                label: 'Continuar a productos',
+                icon: 'arrow',
+                onClick: goProducts,
+                disabled: !!missing,
+              }
+            : step === 2
+              ? {
+                  label: 'Continuar a confirmar',
+                  icon: 'arrow',
+                  onClick: goConfirm,
+                  disabled: !!missing,
                 }
-              >
-                Guardar borrador
-              </Btn>
-              <Btn variant="primary" icon="arrow" onClick={goProducts}>
-                Continuar a productos
-              </Btn>
-            </>
-          ) : null}
-          {step === 2 ? (
-            <>
-              <Btn icon="back" onClick={() => setStep(1)}>
-                Atrás
-              </Btn>
-              <Btn variant="primary" icon="arrow" onClick={goConfirm}>
-                Continuar a confirmar
-              </Btn>
-            </>
-          ) : null}
-          {step === 3 ? (
-            <>
-              <Btn icon="back" onClick={() => setStep(2)}>
-                Atrás
-              </Btn>
-              <Btn
-                variant="primary"
-                icon="check"
-                disabled={busy || (!lines.length && !kits.length)}
-                onClick={() => void confirm()}
-              >
-                {busy ? 'Creando…' : 'Confirmar pedido'}
-              </Btn>
-            </>
-          ) : null}
-        </div>
-      </footer>
+              : {
+                  label: 'Confirmar pedido',
+                  icon: 'check',
+                  onClick: () => void confirm(),
+                  disabled: !lines.length && !kits.length,
+                  busy,
+                  busyLabel: 'Creando…',
+                }
+        }
+      />
+      {discard.dialog}
     </div>
   );
 }

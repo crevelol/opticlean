@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { api } from '../../shared/api/client';
-import { Btn, PageHead } from '../../shared/components/ui';
+import { Btn, PageHead, Button } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
 import { Modal } from '../../shared/components/Modal';
 import { FleetPanel } from './FleetPanel';
+import { Input } from '../../shared/components/Input';
 
 export function SettingsPage() {
   const { state, applyResponse, toast } = useAppState();
@@ -92,23 +93,23 @@ export function SettingsPage() {
             <div className="form-grid">
               <div className="field full">
                 <label htmlFor="set-company">Nombre comercial</label>
-                <input id="set-company" name="company" defaultValue={state.settings.company} required />
+                <Input id="set-company" name="company" defaultValue={state.settings.company} required />
               </div>
               <div className="field full">
                 <label htmlFor="set-warehouse">Nombre de bodega</label>
-                <input id="set-warehouse" name="warehouse" defaultValue={state.settings.warehouse} required />
+                <Input id="set-warehouse" name="warehouse" defaultValue={state.settings.warehouse} required />
               </div>
               <div className="field full">
                 <label htmlFor="set-operator">Responsable</label>
-                <input id="set-operator" name="operator" defaultValue={state.settings.operator} required />
+                <Input id="set-operator" name="operator" defaultValue={state.settings.operator} required />
               </div>
             </div>
           </div>
           <div className="form-footer">
-            <button type="submit" className="btn primary">
+            <Button variant="primary" type="submit">
               <Icon name="save" />
               Guardar cambios
-            </button>
+            </Button>
           </div>
         </form>
         <form className="panel" onSubmit={(e) => void changePassword(e)}>

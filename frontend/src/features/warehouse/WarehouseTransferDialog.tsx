@@ -6,8 +6,9 @@ import { product, qtyAt } from '../../shared/lib/inventory';
 import { faceLabel } from '../../shared/lib/warehouseLayout';
 import { useAppState } from '../../shared/hooks/AppStateProvider';
 import { Modal } from '../../shared/components/Modal';
-import { Btn } from '../../shared/components/ui';
+import { Btn, Button } from '../../shared/components/ui';
 import { Icon } from '../../shared/components/Icon';
+import { Input } from '../../shared/components/Input';
 
 export function WarehouseTransferDialog({ state, lot, onClose, onMoved }: { state: AppState; lot: Lot; onClose: () => void; onMoved: (destination: string) => void }) {
   const { applyResponse, toast } = useAppState();
@@ -54,12 +55,12 @@ export function WarehouseTransferDialog({ state, lot, onClose, onMoved }: { stat
       if (mounted.current) setError(message); else toast(message);
     } finally { locked.current = false; if (mounted.current) setSaving(false); }
   };
-  return <Modal title="Reubicar producto" subtitle={`${item?.name ?? lot.productId} · Lote ${lot.batch}`} onClose={close} footer={<><Btn onClick={close} disabled={saving}>Cancelar</Btn><button type="submit" form="warehouse-transfer" className="btn primary" disabled={saving || !ready || !destination || !!result.error}><Icon name="swap" />{saving ? 'Trasladando…' : 'Confirmar traslado'}</button></>}>
+  return <Modal title="Reubicar producto" subtitle={`${item?.name ?? lot.productId} · Lote ${lot.batch}`} onClose={close} footer={<><Btn onClick={close} disabled={saving}>Cancelar</Btn><Button variant="primary" type="submit" form="warehouse-transfer" disabled={saving || !ready || !destination || !!result.error}><Icon name="swap" />{saving ? 'Trasladando…' : 'Confirmar traslado'}</Button></>}>
     <form id="warehouse-transfer" onSubmit={(event) => void submit(event)} aria-busy={saving}>
       <div className="transfer-source"><span>ORIGEN</span><strong>{lot.loc}</strong><small>{lot.qty} unidades en este lote</small></div>
       <fieldset className="transfer-fields" disabled={saving}>
         <div className="form-grid">
-          <div className="field"><label htmlFor="transfer-quantity">Unidades a trasladar</label><input id="transfer-quantity" type="number" min={1} max={lot.qty} step={1} value={quantity} required onChange={(event) => { setQuantity(event.target.value); setError(''); }} aria-describedby="transfer-quantity-help" /><small id="transfer-quantity-help">{validQty ? `Máximo ${lot.qty} unidades de este lote.` : `Ingresa una cantidad entera entre 1 y ${lot.qty}.`}</small></div>
+          <div className="field"><label htmlFor="transfer-quantity">Unidades a trasladar</label><Input id="transfer-quantity" type="number" min={1} max={lot.qty} step={1} value={quantity} required onChange={(event) => { setQuantity(event.target.value); setError(''); }} aria-describedby="transfer-quantity-help" /><small id="transfer-quantity-help">{validQty ? `Máximo ${lot.qty} unidades de este lote.` : `Ingresa una cantidad entera entre 1 y ${lot.qty}.`}</small></div>
           <div className="field"><label htmlFor="transfer-rack">Filtrar destino por rack</label><Select id="transfer-rack" value={rackFilter} onChange={(event) => setRackFilter(event.target.value)}><option value="all">Todos los racks</option>{[...new Set([...racks, ...(rackFilter !== 'all' ? [rackFilter] : [])])].sort().map((id) => <option key={id} value={id}>Rack {id}</option>)}</Select></div>
           <div className="field full"><label htmlFor="transfer-destination">Ubicación de destino compatible</label><Select id="transfer-destination" required disabled={!ready || !filtered.length} value={destination?.id ?? ''} onChange={(event) => setSelectedId(event.target.value)}><option value="" disabled>{!validQty ? 'Primero indica la cantidad' : !ready ? 'Buscando ubicaciones…' : 'Sin destinos disponibles'}</option>{racks.filter((id) => rackFilter === 'all' || id === rackFilter).map((id) => <optgroup key={id} label={`Rack ${id}`}>{filtered.filter((location) => location.rack === id).map((location) => <option key={location.id} value={location.id}>{location.id} · Nivel {location.level} · Casilla {location.pos}{location.face ? ` · ${faceLabel(location.face)}` : ''} · {location.capacity - qtyAt(state, location.id)} u. libres</option>)}</optgroup>)}</Select><small>Solo se muestran ubicaciones con espacio suficiente y compatibles con este producto.</small></div>
         </div>
