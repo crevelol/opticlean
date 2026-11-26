@@ -53,13 +53,35 @@ igual, todo valor visual sale de [`tokens.css`](./tokens.css).
    | `Pagination` | `.ui-pagination` | «Mostrando a–b de n» + páginas (con «…» si son muchas). `page`, `pageCount`, `total`, `pageSize`, `onPageChange` |
    | `ChipGroup` | `.ui-chip-group` | **Radix Toggle Group.** Píldoras de filtro: `type="single"` (siempre una activa) o `type="multiple"`. Items con `count`, `icon`, `leading` y `tone` (color del contador). Para pocas opciones compactas usa `SegmentedControl` |
    | `RemovableChip` | `.ui-chip.is-static` | Etiqueta con ✕ para quitarla (`onRemove`) |
+   | `ActionBar` | `.ui-actionbar` | Barra de acciones fija al pie del contenido (documentos y formularios largos). `info` a la izquierda; botones como hijos, la acción principal al final |
+   | `WizardSteps` + `WizardFooter` | `.ui-wizard-*` | **Todo flujo por pasos.** Ver «Flujos por pasos» |
    | `Empty`      | `.empty-state` | Estado vacío                                                          |
 
    **No redefinas** altura, padding ni tamaño de letra de `.btn`, `.badge` o `.panel` dentro
    de un módulo: elige la variante/tamaño adecuado. Ajustes de layout (`width`, `flex`,
    márgenes) sí están bien.
 
-4. **Fuente:** Inter (cargada en `index.html`), con `--font-sans` y `--font-mono`.
+4. **No pongas la clase `page` dentro de una pantalla:** el shell ya aporta ese margen y
+   se duplicaría.
+
+5. **Fuente:** Inter (cargada en `index.html`), con `--font-sans` y `--font-mono`.
+
+## Flujos por pasos
+
+Todo formulario de creación por pasos usa [`Wizard.tsx`](../shared/components/Wizard.tsx):
+Recepción, Nuevo pedido, editor de bodega y ficha de producto son los ejemplos.
+
+| Pieza             | Para qué                                                                    |
+| ----------------- | --------------------------------------------------------------------------- |
+| `WizardSteps`     | Indicador. `steps` (`title`, `subtitle`), `current` (desde 0), `onSelect`. Por defecto solo se vuelve a pasos hechos; ajusta con `canSelect`, `isDone`, `hasError` |
+| `WizardFooter`    | «Paso x de n» · Cancelar o Atrás · `primary`. `info` sustituye el texto; los hijos son botones secundarios. Para enviar un formulario: `type: 'submit'` + `form` |
+| `useStepFocus`    | Devuelve la ref que recibe el foco al cambiar de paso: ponla en el título o en el contenedor del paso. Un formulario puede enfocar su primer campo en su lugar (ficha de producto) |
+| `useDiscardGuard` | `guard(salir)` pide confirmación si hay cambios; renderiza `dialog`. Pasa por él Cancelar, «Volver» y los enlaces que salen del flujo |
+
+- Dentro de un modal usa `variant="dialog"` en las dos piezas.
+- Cada paso valida antes de avanzar; si el botón queda deshabilitado, di por qué en `info`.
+- Un documento de una sola página (p. ej. la cotización) no es un wizard: usa `ActionBar`.
+- `useDiscardGuard` no intercepta el menú lateral (haría falta un data router).
 
 ## Layout
 
