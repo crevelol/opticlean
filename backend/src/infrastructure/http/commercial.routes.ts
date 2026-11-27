@@ -1,3 +1,5 @@
+import { companyIdOf } from './helpers.js';
+import { fleetForCompany } from '../../domain/admin.service.js';
 import express from 'express';
 import { readLabel } from '../../domain/outbound.service.js';
 import { renderReport } from '../../domain/report-file.js';
@@ -200,17 +202,112 @@ export function registerCommercialRoutes(app: express.Express, { ops, repo }: Ro
     }
   });
 
-  app.post('/api/packing', async (req, res, next) => {
+  app.post('/api/packing/parcels', async (req, res, next) => {
     try {
-      stateJson(res, await ops.pack(String(req.body?.orderId ?? ''), Number(req.body?.weightKg), Number(req.body?.volumeM3)));
+      stateJson(res, await ops.addParcel(req.body ?? {}));
     } catch (e) {
       next(e);
     }
   });
 
+  app.patch('/api/packing/parcels/:id', async (req, res, next) => {
+    try {
+      stateJson(res, await ops.editParcel(req.params.id, req.body ?? {}));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.delete('/api/packing/parcels/:id', async (req, res, next) => {
+    try {
+      stateJson(res, await ops.removeParcel(req.params.id));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.post('/api/packing/orders/:id/count', async (req, res, next) => {
+    try {
+      stateJson(res, await ops.countPackedUnits(req.params.id, req.body ?? {}));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.post('/api/packing/orders/:id/scan', async (req, res, next) => {
+    try {
+      const { state, scanned } = await ops.scanPackedUnit(req.params.id, String(req.body?.code ?? ''));
+      res.json({ state, metrics: ops.metricsSnapshot(state), scanned });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  for (const [file, kind] of [
+    ['labels.pdf', 'labels'],
+    ['list.pdf', 'list'],
+  ] as const) {
+    app.get(`/api/packing/orders/:id/${file}`, async (req, res, next) => {
+      try {
+        const doc = await ops.packingDocument(String(req.params.id), kind);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${doc.filename}"`);
+        res.end(doc.buffer);
+      } catch (e) {
+        next(e);
+      }
+    });
+  }
+
+  app.post('/api/packing/orders/:id/close', async (req, res, next) => {
+    try {
+      stateJson(res, await ops.closeOrderPacking(req.params.id));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.post('/api/packing/orders/:id/reopen', async (req, res, next) => {
+    try {
+      stateJson(res, await ops.reopenOrderPacking(req.params.id));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  const idList = (value: unknown) => (Array.isArray(value) ? value.map(String) : []);
+
   app.post('/api/loading/preview', async (req, res, next) => {
     try {
-      res.json(await ops.previewLoad(String(req.body?.plate ?? ''), Array.isArray(req.body?.orderIds) ? req.body.orderIds.map(String) : []));
+      res.json(
+        await ops.previewLoad(String(req.body?.plate ?? ''), idList(req.body?.orderIds), fleetForCompany(companyIdOf(req))),
+      );
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.post('/api/loading/confirm', async (req, res, next) => {
+    try {
+      stateJson(
+        res,
+        await ops.confirmTruckLoad(
+          {
+            plate: String(req.body?.plate ?? ''),
+            orderIds: idList(req.body?.orderIds),
+            reason: String(req.body?.reason ?? ''),
+          },
+          fleetForCompany(companyIdOf(req)),
+        ),
+      );
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.post('/api/loading/release', async (req, res, next) => {
+    try {
+      stateJson(res, await ops.releaseTruckLoad(String(req.body?.plate ?? '')));
     } catch (e) {
       next(e);
     }

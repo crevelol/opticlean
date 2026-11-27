@@ -63,7 +63,13 @@ DATABASE_URL=postgres://user:pass@host:5432/opticlean npm run migrate:pg -- --dr
 DATABASE_URL=… npm run migrate:pg                                                       # copia los JSON existentes
 ```
 
-Usuarios (`users.json`) y empresas/menú (`admin.db`) siguen en archivos de `OPTICLEAN_DATA_DIR`.
+Usuarios (`users.json`) y empresas/menú (`admin.db`) siguen en archivos de la carpeta `data/` de la raíz (se cambia con `OPTICLEAN_AUTH_DATA_DIR`, independiente de `OPTICLEAN_DATA_DIR`).
+
+## Empaque y carga
+
+En **Empaque** cada pedido preparado se reparte en bultos. El escáner (pistola USB/Bluetooth en la web; también la cámara en la app móvil, si el navegador la soporta) cuenta una unidad por lectura y reconoce el **código de barras** de la ficha del producto, el SKU o el código interno. Al cerrar el empaque se descargan las etiquetas (100×150 mm) y la lista de empaque en PDF, y la carga confirmada del camión es la que Logística despacha.
+
+En **Reglas de negocio** se configuran las cajas, la tolerancia de peso, el llenado mínimo y si el despacho exige empaque.
 
 ## Facturación: RUC
 

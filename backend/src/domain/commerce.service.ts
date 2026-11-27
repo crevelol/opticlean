@@ -1,4 +1,5 @@
 import { assertRuc } from './ruc.js';
+import { discardPacking } from './packing.service.js';
 import type { AppState, Client, Order, OrderPick, PurchaseLine } from './types.js';
 import {
   addEvent,
@@ -97,6 +98,7 @@ export function cancelOrder(s: AppState, orderId: string, reason: string) {
   o.cancelReason = why;
   o.cancelledAt = new Date().toISOString();
   o.stagedPlate = undefined;
+  discardPacking(s, o);
   return o;
 }
 

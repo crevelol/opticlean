@@ -8,6 +8,7 @@ import type { Server } from 'node:http';
 // Todo el estado (empresas, usuarios, datos) vive en una carpeta temporal.
 const dataDir = await mkdtemp(path.join(tmpdir(), 'opticlean-http-'));
 process.env.OPTICLEAN_DATA_DIR = dataDir;
+process.env.OPTICLEAN_AUTH_DATA_DIR = dataDir;
 process.env.OPTICLEAN_DEMO_PASSWORD = 'OptiClean2026!';
 delete process.env.AUTH_SERVICE_URL;
 delete process.env.OPTICLEAN_AUTH_SERVICE_URL;
@@ -171,4 +172,96 @@ test('API: editar una orden de compra abierta', async () => {
   const po = edited.json.state.purchases.find((p: Json) => p.id === id);
   assert.equal(po.lines[0].qty, 6);
   assert.equal((await call('PATCH', '/api/purchases/OC-9999', 'ops', { lines: [] })).status, 400);
+});
+
+test('API: empaque, carga y despacho de punta a punta con sus permisos', async () => {
+  const stateNow = async () => (await call('GET', '/api/state', 'admin')).json.state;
+  let state = await stateNow();
+  const client = state.clients.find((c: Json) => c.city === 'Quito') ?? state.clients[0];
+  await call('POST', '/api/orders', 'admin', { clientId: client.id, lines: [{ productId: 'P001', qty: 2 }] });
+  const id: string = (await stateNow()).orders[0].id;
+  assert.equal((await call('POST', `/api/orders/${id}/prepare`, 'admin')).status, 200);
+
+  const early = await call('POST', '/api/dispatch', 'dispatch', { orderIds: [id], vehicle: 'GBA-2041' });
+  assert.equal(early.status, 400);
+  assert.match(early.json.error, /Falta empacar/);
+
+  assert.equal((await call('POST', '/api/packing/parcels', 'driver', { orderId: id })).status, 403);
+  const created = await call('POST', '/api/packing/parcels', 'ops', { orderId: id, boxCode: 'M' });
+  assert.equal(created.status, 200, JSON.stringify(created.json));
+  const parcel = created.json.state.parcels.find((p: Json) => p.orderId === id);
+  state = await stateNow();
+  const order = state.orders.find((o: Json) => o.id === id);
+  const contents = order.picks.map((p: Json) => ({ productId: p.productId, batch: p.batch, qty: p.qty }));
+  const weight = state.products.find((p: Json) => p.id === 'P001').weight * 2 + 0.4;
+  const patched = await call('PATCH', `/api/packing/parcels/${parcel.id}`, 'ops', { contents, weightKg: weight });
+  assert.equal(patched.status, 200, JSON.stringify(patched.json));
+  assert.equal((await call('POST', `/api/packing/orders/${id}/close`, 'ops')).status, 200);
+
+  // Un camión creado en la gestión de flota de Logística sirve para cargar y despachar.
+  const truck = await call('POST', '/api/fleet', 'admin', {
+    plate: 'NEW-7001',
+    label: 'Camión nuevo',
+    city: client.city,
+    maxKg: 1000,
+    maxM3: 8,
+  });
+  assert.equal(truck.status, 201, JSON.stringify(truck.json));
+  const preview = await call('POST', '/api/loading/preview', 'ops', { plate: 'NEW-7001', orderIds: [id] });
+  assert.equal(preview.status, 200, JSON.stringify(preview.json));
+  const loaded = await call('POST', '/api/loading/confirm', 'ops', { plate: 'NEW-7001', orderIds: [id], reason: 'Prueba' });
+  assert.equal(loaded.status, 200, JSON.stringify(loaded.json));
+  assert.equal(loaded.json.state.orders.find((o: Json) => o.id === id).stagedPlate, 'NEW-7001');
+  assert.equal((await call('POST', `/api/packing/orders/${id}/reopen`, 'ops')).status, 400);
+  assert.equal((await call('POST', '/api/loading/release', 'driver', { plate: 'NEW-7001' })).status, 403);
+  const sent = await call('POST', '/api/dispatch', 'dispatch', { orderIds: [id], vehicle: 'NEW-7001' });
+  assert.equal(sent.status, 200, JSON.stringify(sent.json));
+  assert.equal(sent.json.state.orders.find((o: Json) => o.id === id).status, 'En ruta');
+});
+
+test('API: conteo, escaneo, cajas y documentos del empaque', async () => {
+  const stateNow = async () => (await call('GET', '/api/state', 'admin')).json.state;
+  const client = (await stateNow()).clients[0];
+  await call('POST', '/api/orders', 'admin', { clientId: client.id, lines: [{ productId: 'P001', qty: 1 }] });
+  const id: string = (await stateNow()).orders[0].id;
+  await call('POST', `/api/orders/${id}/prepare`, 'admin');
+
+  const boxes = [{ code: 'A', label: 'Caja azul', dims: { l: 50, w: 40, h: 30 }, tareKg: 0.6 }];
+  assert.equal((await call('PATCH', '/api/settings', 'ops', { packingBoxes: boxes })).status, 403);
+  assert.equal((await call('PATCH', '/api/settings', 'admin', { packingBoxes: [] })).status, 400);
+  assert.equal((await call('PATCH', '/api/settings', 'admin', { packingBoxes: boxes })).status, 200);
+
+  assert.equal((await call('POST', `/api/packing/orders/${id}/scan`, 'driver', { code: 'P001' })).status, 403);
+  const scan = await call('POST', `/api/packing/orders/${id}/scan`, 'ops', { code: 'P001' });
+  assert.equal(scan.status, 200, JSON.stringify(scan.json));
+  assert.ok(scan.json.scanned);
+  const pick = scan.json.state.orders.find((o: Json) => o.id === id).picks[0];
+  const reset = await call('POST', `/api/packing/orders/${id}/count`, 'ops', {
+    productId: pick.productId,
+    batch: pick.batch,
+    qty: 1,
+  });
+  assert.equal(reset.status, 200);
+
+  assert.equal((await call('GET', `/api/packing/orders/${id}/labels.pdf`, 'ops')).status, 400, 'sin cerrar');
+  const made = await call('POST', '/api/packing/parcels', 'ops', { orderId: id, boxCode: 'A' });
+  const parcel = made.json.state.parcels.find((p: Json) => p.orderId === id);
+  const unit = made.json.state.products.find((p: Json) => p.id === 'P001').weight;
+  await call('PATCH', `/api/packing/parcels/${parcel.id}`, 'ops', {
+    contents: [{ productId: 'P001', batch: pick.batch, qty: 1 }],
+    weightKg: Math.round((unit + 0.6) * 100) / 100,
+  });
+  const closed = await call('POST', `/api/packing/orders/${id}/close`, 'ops');
+  assert.equal(closed.status, 200, JSON.stringify(closed.json));
+
+  for (const file of ['labels.pdf', 'list.pdf']) {
+    const res = await fetch(`${base}/api/packing/orders/${id}/${file}`, {
+      headers: { Authorization: `Bearer ${tokens.ops}` },
+    });
+    assert.equal(res.status, 200, file);
+    assert.equal(res.headers.get('content-type'), 'application/pdf');
+    assert.ok((await res.text()).startsWith('%PDF'));
+    assert.equal((await call('GET', `/api/packing/orders/${id}/${file}`, 'driver')).status, 403);
+    assert.equal((await call('GET', `/api/packing/orders/${id}/${file}`)).status, 401);
+  }
 });

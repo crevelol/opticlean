@@ -243,6 +243,7 @@ export function registerOperationsRoutes(app: express.Express, { ops }: RouteCon
         ids,
         plate,
         truck ? { maxKg: truck.maxKg, maxM3: truck.maxM3 } : undefined,
+        fleetForCompany(companyId),
       );
       let kmLog = null;
       try {

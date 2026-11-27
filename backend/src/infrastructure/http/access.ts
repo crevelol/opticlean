@@ -7,6 +7,8 @@ export function roleDenied(req: express.Request) {
   if (!role || role === 'admin') return null;
   const path = req.path;
   if (req.method === 'GET' || req.method === 'HEAD') {
+    // Etiquetas y listas llevan datos del cliente: solo quien empaca o despacha.
+    if (path.startsWith('/api/packing')) return role === 'ops' || role === 'dispatch' ? null : 'Tu rol no tiene permiso para esta consulta.';
     // Costos de flota: solo quien planifica rutas (los camiones sí los ven todos).
     if (path === '/api/fleet/manage' || /^\/api\/fleet\/[^/]+\/(cost-rules|km)$/.test(path)) {
       return role === 'dispatch' ? null : 'Tu rol no tiene permiso para esta consulta.';
@@ -28,7 +30,7 @@ export function roleDenied(req: express.Request) {
   if (req.method === 'DELETE' && (path.startsWith('/api/clients/') || path.startsWith('/api/products/'))) {
     return allow([]);
   }
-  if (path === '/api/packing' || path === '/api/loading/preview') {
+  if (path.startsWith('/api/packing') || path.startsWith('/api/loading')) {
     return allow(['ops', 'dispatch'], 'packing');
   }
   if (path === '/api/dispatch' || path.startsWith('/api/logistics')) {
